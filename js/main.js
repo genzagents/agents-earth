@@ -43,12 +43,14 @@ class AgentColonyApp {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setClearColor(0xf0f0f5);
+    this.renderer.setClearColor(0xc8daf0);
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   }
 
   initScene() {
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0xf0f0f5, 0.004);
+    this.scene.fog = new THREE.FogExp2(0xc8daf0, 0.003);
   }
 
   initCamera() {
@@ -64,16 +66,36 @@ class AgentColonyApp {
   }
 
   initLights() {
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    const dir = new THREE.DirectionalLight(0xffffff, 0.6);
-    dir.position.set(10, 20, 10);
-    this.scene.add(dir);
-    const dir2 = new THREE.DirectionalLight(0xddeeff, 0.3);
-    dir2.position.set(-10, 15, -5);
-    this.scene.add(dir2);
-    const p = new THREE.PointLight(0x4488ff, 0.15, 50);
-    p.position.set(0, 12, 0);
-    this.scene.add(p);
+    // Realistic daylight
+    this.scene.add(new THREE.AmbientLight(0x8899aa, 0.5));
+
+    // Sun
+    const sun = new THREE.DirectionalLight(0xfff5e0, 0.8);
+    sun.position.set(20, 30, 15);
+    sun.castShadow = true;
+    sun.shadow.mapSize.width = 2048;
+    sun.shadow.mapSize.height = 2048;
+    sun.shadow.camera.near = 0.5;
+    sun.shadow.camera.far = 80;
+    sun.shadow.camera.left = -40;
+    sun.shadow.camera.right = 40;
+    sun.shadow.camera.top = 40;
+    sun.shadow.camera.bottom = -40;
+    this.scene.add(sun);
+
+    // Sky fill
+    const skyFill = new THREE.DirectionalLight(0xaabbdd, 0.3);
+    skyFill.position.set(-10, 20, -10);
+    this.scene.add(skyFill);
+
+    // Ground bounce
+    const bounce = new THREE.DirectionalLight(0xddccaa, 0.15);
+    bounce.position.set(0, -5, 0);
+    this.scene.add(bounce);
+
+    // Hemisphere light for realistic sky/ground
+    const hemi = new THREE.HemisphereLight(0x88aacc, 0x886644, 0.4);
+    this.scene.add(hemi);
   }
 
   setupControls() {

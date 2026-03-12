@@ -1,4 +1,4 @@
-/* === Globe View — Light Theme === */
+/* === Globe View — Realistic === */
 
 class GlobeView {
   constructor(scene, camera) {
@@ -13,60 +13,120 @@ class GlobeView {
   }
 
   init() {
-    // Earth sphere — soft blue-grey
-    const earthGeo = new THREE.SphereGeometry(5, 64, 64);
+    // Earth — realistic blue marble look
+    const earthGeo = new THREE.SphereGeometry(5, 128, 128);
     const earthMat = new THREE.MeshPhongMaterial({
-      color: 0xdde4ee, emissive: 0x889aaa,
-      specular: 0xffffff, shininess: 20,
-      transparent: true, opacity: 0.95,
+      color: 0x2244aa,
+      emissive: 0x112244,
+      specular: 0x446688,
+      shininess: 25,
+      transparent: false,
     });
     this.earth = new THREE.Mesh(earthGeo, earthMat);
     this.group.add(this.earth);
 
-    // Wireframe
-    const wireGeo = new THREE.SphereGeometry(5.02, 36, 36);
-    const wireMat = new THREE.MeshBasicMaterial({ color: 0x2563eb, wireframe: true, transparent: true, opacity: 0.05 });
-    this.group.add(new THREE.Mesh(wireGeo, wireMat));
+    // Ocean sheen layer
+    const sheenGeo = new THREE.SphereGeometry(5.005, 128, 128);
+    const sheenMat = new THREE.MeshPhongMaterial({
+      color: 0x3366cc,
+      transparent: true,
+      opacity: 0.3,
+      specular: 0xffffff,
+      shininess: 80,
+    });
+    this.group.add(new THREE.Mesh(sheenGeo, sheenMat));
 
-    // Atmosphere glow
-    const atmosGeo = new THREE.SphereGeometry(5.25, 64, 64);
-    const atmosMat = new THREE.MeshBasicMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.06, side: THREE.BackSide });
+    // Atmosphere — realistic blue haze
+    const atmosGeo = new THREE.SphereGeometry(5.15, 64, 64);
+    const atmosMat = new THREE.MeshBasicMaterial({
+      color: 0x88bbff,
+      transparent: true,
+      opacity: 0.08,
+      side: THREE.BackSide,
+    });
     this.group.add(new THREE.Mesh(atmosGeo, atmosMat));
 
+    // Second atmosphere layer for depth
+    const atmos2Geo = new THREE.SphereGeometry(5.3, 64, 64);
+    const atmos2Mat = new THREE.MeshBasicMaterial({
+      color: 0x6699dd,
+      transparent: true,
+      opacity: 0.04,
+      side: THREE.BackSide,
+    });
+    this.group.add(new THREE.Mesh(atmos2Geo, atmos2Mat));
+
     this.drawContinents();
+    this.addClouds();
     this.addMarker(51.5074, -0.1278);
     this.addStars();
   }
 
   drawContinents() {
     const clusters = [
-      { lat: 48, lng: 2, s: 8, n: 90 }, { lat: 52, lng: 10, s: 6, n: 70 },
-      { lat: 55, lng: -3, s: 4, n: 50 }, { lat: 46, lng: 15, s: 5, n: 45 },
-      { lat: 60, lng: 25, s: 6, n: 55 }, { lat: 40, lng: -4, s: 5, n: 45 },
-      { lat: 42, lng: 12, s: 3, n: 35 }, { lat: 10, lng: 20, s: 15, n: 110 },
-      { lat: -5, lng: 30, s: 10, n: 70 }, { lat: 30, lng: 10, s: 10, n: 70 },
-      { lat: -25, lng: 25, s: 8, n: 45 }, { lat: 35, lng: 105, s: 15, n: 130 },
-      { lat: 55, lng: 80, s: 20, n: 110 }, { lat: 25, lng: 80, s: 10, n: 90 },
-      { lat: 20, lng: 100, s: 8, n: 55 }, { lat: 36, lng: 140, s: 4, n: 45 },
-      { lat: 45, lng: -100, s: 15, n: 130 }, { lat: 55, lng: -110, s: 12, n: 70 },
-      { lat: 25, lng: -100, s: 8, n: 55 }, { lat: -10, lng: -55, s: 12, n: 90 },
-      { lat: -25, lng: -50, s: 8, n: 55 }, { lat: 5, lng: -70, s: 6, n: 35 },
-      { lat: -25, lng: 135, s: 10, n: 65 },
+      // Europe (dense)
+      { lat: 48, lng: 2, s: 6, n: 200 }, { lat: 52, lng: 10, s: 5, n: 180 },
+      { lat: 55, lng: -3, s: 3, n: 120 }, { lat: 46, lng: 15, s: 4, n: 140 },
+      { lat: 60, lng: 25, s: 5, n: 150 }, { lat: 40, lng: -4, s: 4, n: 120 },
+      { lat: 42, lng: 12, s: 3, n: 100 }, { lat: 56, lng: 10, s: 2, n: 60 },
+      { lat: 48, lng: 20, s: 4, n: 100 }, { lat: 65, lng: 15, s: 5, n: 80 },
+      // Africa
+      { lat: 10, lng: 20, s: 14, n: 250 }, { lat: -5, lng: 30, s: 10, n: 160 },
+      { lat: 30, lng: 10, s: 10, n: 180 }, { lat: -25, lng: 25, s: 8, n: 100 },
+      { lat: 0, lng: 10, s: 6, n: 100 }, { lat: -15, lng: 35, s: 5, n: 60 },
+      // Asia
+      { lat: 35, lng: 105, s: 14, n: 300 }, { lat: 55, lng: 80, s: 18, n: 250 },
+      { lat: 25, lng: 80, s: 10, n: 200 }, { lat: 20, lng: 100, s: 8, n: 120 },
+      { lat: 36, lng: 140, s: 4, n: 100 }, { lat: 30, lng: 50, s: 8, n: 120 },
+      { lat: 45, lng: 60, s: 8, n: 100 }, { lat: 15, lng: 105, s: 5, n: 80 },
+      // North America
+      { lat: 45, lng: -100, s: 14, n: 280 }, { lat: 55, lng: -110, s: 12, n: 160 },
+      { lat: 25, lng: -100, s: 8, n: 120 }, { lat: 65, lng: -100, s: 15, n: 100 },
+      { lat: 35, lng: -80, s: 6, n: 100 },
+      // South America
+      { lat: -10, lng: -55, s: 12, n: 200 }, { lat: -25, lng: -50, s: 8, n: 120 },
+      { lat: 5, lng: -70, s: 6, n: 80 }, { lat: -35, lng: -65, s: 5, n: 60 },
+      // Australia
+      { lat: -25, lng: 135, s: 10, n: 150 }, { lat: -35, lng: 145, s: 4, n: 50 },
     ];
+
     const positions = [];
+    const colors = [];
     clusters.forEach(c => {
       for (let i = 0; i < c.n; i++) {
         const lat = (c.lat + (Math.random() - 0.5) * c.s) * Math.PI / 180;
         const lng = (c.lng + (Math.random() - 0.5) * c.s) * Math.PI / 180;
-        const r = 5.03;
+        const r = 5.01 + Math.random() * 0.02;
         positions.push(r * Math.cos(lat) * Math.cos(lng), r * Math.sin(lat), -r * Math.cos(lat) * Math.sin(lng));
+        // Green-brown land colours
+        const g = 0.2 + Math.random() * 0.4;
+        const brown = Math.random() > 0.5;
+        colors.push(brown ? 0.4 + Math.random() * 0.2 : 0.1, g, brown ? 0.1 : 0.05);
       }
     });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     this.group.add(new THREE.Points(geo, new THREE.PointsMaterial({
-      color: 0x3b82f6, size: 0.05, transparent: true, opacity: 0.6
+      size: 0.06, transparent: true, opacity: 0.8, vertexColors: true,
     })));
+  }
+
+  addClouds() {
+    // Wispy cloud layer
+    const positions = [];
+    for (let i = 0; i < 400; i++) {
+      const lat = (Math.random() - 0.5) * Math.PI;
+      const lng = Math.random() * Math.PI * 2;
+      const r = 5.08 + Math.random() * 0.05;
+      positions.push(r * Math.cos(lat) * Math.cos(lng), r * Math.sin(lat), -r * Math.cos(lat) * Math.sin(lng));
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    this.clouds = new THREE.Points(geo, new THREE.PointsMaterial({
+      color: 0xffffff, size: 0.12, transparent: true, opacity: 0.25,
+    }));
+    this.group.add(this.clouds);
   }
 
   latLngToVec3(lat, lng, r) {
@@ -76,18 +136,26 @@ class GlobeView {
   }
 
   addMarker(lat, lng) {
-    const pos = this.latLngToVec3(lat, lng, 5.05);
+    const pos = this.latLngToVec3(lat, lng, 5.06);
 
-    const dotGeo = new THREE.SphereGeometry(0.12, 16, 16);
-    const dotMat = new THREE.MeshBasicMaterial({ color: 0xe85d26 });
+    // Glowing marker
+    const dotGeo = new THREE.SphereGeometry(0.1, 16, 16);
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0xff4422 });
     this.marker = new THREE.Mesh(dotGeo, dotMat);
     this.marker.position.copy(pos);
     this.marker.userData = { type: 'london-marker' };
     this.group.add(this.marker);
 
+    // Outer glow
+    const glowGeo = new THREE.SphereGeometry(0.18, 16, 16);
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xff6644, transparent: true, opacity: 0.3 });
+    const glow = new THREE.Mesh(glowGeo, glowMat);
+    glow.position.copy(pos);
+    this.group.add(glow);
+
     // Pulse ring
-    const ringGeo = new THREE.RingGeometry(0.15, 0.22, 32);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xe85d26, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+    const ringGeo = new THREE.RingGeometry(0.2, 0.28, 32);
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xff4422, transparent: true, opacity: 0.5, side: THREE.DoubleSide });
     this.markerPulse = new THREE.Mesh(ringGeo, ringMat);
     this.markerPulse.position.copy(pos);
     this.markerPulse.lookAt(0, 0, 0);
@@ -97,41 +165,50 @@ class GlobeView {
     const canvas = document.createElement('canvas');
     canvas.width = 512; canvas.height = 96;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#e85d26';
-    ctx.font = 'bold 32px Space Grotesk, sans-serif';
+    // Background pill
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.beginPath();
+    ctx.roundRect(80, 8, 352, 80, 12);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 30px Space Grotesk, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🇬🇧 London Colony', 256, 38);
-    ctx.font = '18px JetBrains Mono, monospace';
-    ctx.fillStyle = '#6b7280';
-    ctx.fillText('44 districts • click to enter', 256, 65);
+    ctx.fillText('🇬🇧 London Colony', 256, 42);
+    ctx.font = '16px JetBrains Mono, monospace';
+    ctx.fillStyle = '#cccccc';
+    ctx.fillText('44 districts · click to enter', 256, 68);
     const tex = new THREE.CanvasTexture(canvas);
     const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
-    label.position.copy(this.latLngToVec3(lat + 4.5, lng, 5.5));
-    label.scale.set(2.2, 0.5, 1);
+    label.position.copy(this.latLngToVec3(lat + 5, lng, 5.8));
+    label.scale.set(2.5, 0.5, 1);
     this.group.add(label);
   }
 
   addStars() {
-    // Subtle background dots instead of bright stars
     const positions = [];
-    for (let i = 0; i < 800; i++) {
-      positions.push((Math.random() - 0.5) * 200, (Math.random() - 0.5) * 200, (Math.random() - 0.5) * 200);
+    const sizes = [];
+    for (let i = 0; i < 3000; i++) {
+      const r = 80 + Math.random() * 120;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      positions.push(r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi));
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     this.stars = new THREE.Points(geo, new THREE.PointsMaterial({
-      color: 0x94a3b8, size: 0.1, transparent: true, opacity: 0.3
+      color: 0xffffff, size: 0.15, transparent: true, opacity: 0.6,
     }));
     this.scene.add(this.stars);
   }
 
   update(time) {
     if (!this.visible) return;
-    this.group.rotation.y += 0.0008;
+    this.group.rotation.y += 0.0006;
+    if (this.clouds) this.clouds.rotation.y += 0.0002;
     if (this.markerPulse) {
-      const s = 1 + 0.4 * Math.sin(time * 3);
+      const s = 1 + 0.5 * Math.sin(time * 2.5);
       this.markerPulse.scale.set(s, s, s);
-      this.markerPulse.material.opacity = 0.6 - 0.3 * Math.sin(time * 3);
+      this.markerPulse.material.opacity = 0.5 - 0.3 * Math.sin(time * 2.5);
     }
   }
 
