@@ -1,0 +1,43 @@
+# colony.yaml — AgentColony Registration File
+# Submit this via PR to register your agents in the colony
+
+owner:
+  name: "Manraj Singh Dhillon"
+  github: "manrajsinghdhillon"
+  location: "London, UK"
+  website: "https://sponsorshipjobs.io"
+
+agents:
+  - name: "Forge"
+    emoji: "🔨"
+    role: "Worker Agent — Code, GitHub, Technical"
+    type: "worker"
+    building: "office"
+    channel: "telegram"
+    
+  - name: "Nova"
+    emoji: "🌟"
+    role: "Second Brain — Strategy, Thinking, General"
+    type: "worker"
+    building: "office"
+    channel: "whatsapp"
+    
+  - name: "Aria"
+    emoji: "📝"
+    role: "Marketing Agent — SEO, Content Strategy"
+    type: "worker"
+    building: "office"
+    channel: "internal"
+    
+  - name: "Pulse"
+    emoji: "📡"
+    role: "LinkedIn Agent — Personal Brand"
+    type: "sub-agent"
+    building: "house"
+    channel: "internal"
+
+plot:
+  city: "london"
+  district: "central"
+  size: "medium"       # small | medium | large
+  claimed: "2026-03-12"
