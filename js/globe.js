@@ -1,4 +1,4 @@
-/* === Globe View === */
+/* === Globe View — Light Theme === */
 
 class GlobeView {
   constructor(scene, camera) {
@@ -13,11 +13,11 @@ class GlobeView {
   }
 
   init() {
-    // Earth sphere
+    // Earth sphere — soft blue-grey
     const earthGeo = new THREE.SphereGeometry(5, 64, 64);
     const earthMat = new THREE.MeshPhongMaterial({
-      color: 0x0a0a2e, emissive: 0x050520,
-      specular: 0x222244, shininess: 15,
+      color: 0xdde4ee, emissive: 0x889aaa,
+      specular: 0xffffff, shininess: 20,
       transparent: true, opacity: 0.95,
     });
     this.earth = new THREE.Mesh(earthGeo, earthMat);
@@ -25,12 +25,12 @@ class GlobeView {
 
     // Wireframe
     const wireGeo = new THREE.SphereGeometry(5.02, 36, 36);
-    const wireMat = new THREE.MeshBasicMaterial({ color: 0x00f5ff, wireframe: true, transparent: true, opacity: 0.06 });
+    const wireMat = new THREE.MeshBasicMaterial({ color: 0x2563eb, wireframe: true, transparent: true, opacity: 0.05 });
     this.group.add(new THREE.Mesh(wireGeo, wireMat));
 
-    // Atmosphere
-    const atmosGeo = new THREE.SphereGeometry(5.3, 64, 64);
-    const atmosMat = new THREE.MeshBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.04, side: THREE.BackSide });
+    // Atmosphere glow
+    const atmosGeo = new THREE.SphereGeometry(5.25, 64, 64);
+    const atmosMat = new THREE.MeshBasicMaterial({ color: 0x93c5fd, transparent: true, opacity: 0.06, side: THREE.BackSide });
     this.group.add(new THREE.Mesh(atmosGeo, atmosMat));
 
     this.drawContinents();
@@ -40,18 +40,18 @@ class GlobeView {
 
   drawContinents() {
     const clusters = [
-      { lat: 48, lng: 2, s: 8, n: 80 }, { lat: 52, lng: 10, s: 6, n: 60 },
-      { lat: 55, lng: -3, s: 4, n: 40 }, { lat: 46, lng: 15, s: 5, n: 40 },
-      { lat: 60, lng: 25, s: 6, n: 50 }, { lat: 40, lng: -4, s: 5, n: 40 },
-      { lat: 42, lng: 12, s: 3, n: 30 }, { lat: 10, lng: 20, s: 15, n: 100 },
-      { lat: -5, lng: 30, s: 10, n: 60 }, { lat: 30, lng: 10, s: 10, n: 60 },
-      { lat: -25, lng: 25, s: 8, n: 40 }, { lat: 35, lng: 105, s: 15, n: 120 },
-      { lat: 55, lng: 80, s: 20, n: 100 }, { lat: 25, lng: 80, s: 10, n: 80 },
-      { lat: 20, lng: 100, s: 8, n: 50 }, { lat: 36, lng: 140, s: 4, n: 40 },
-      { lat: 45, lng: -100, s: 15, n: 120 }, { lat: 55, lng: -110, s: 12, n: 60 },
-      { lat: 25, lng: -100, s: 8, n: 50 }, { lat: -10, lng: -55, s: 12, n: 80 },
-      { lat: -25, lng: -50, s: 8, n: 50 }, { lat: 5, lng: -70, s: 6, n: 30 },
-      { lat: -25, lng: 135, s: 10, n: 60 },
+      { lat: 48, lng: 2, s: 8, n: 90 }, { lat: 52, lng: 10, s: 6, n: 70 },
+      { lat: 55, lng: -3, s: 4, n: 50 }, { lat: 46, lng: 15, s: 5, n: 45 },
+      { lat: 60, lng: 25, s: 6, n: 55 }, { lat: 40, lng: -4, s: 5, n: 45 },
+      { lat: 42, lng: 12, s: 3, n: 35 }, { lat: 10, lng: 20, s: 15, n: 110 },
+      { lat: -5, lng: 30, s: 10, n: 70 }, { lat: 30, lng: 10, s: 10, n: 70 },
+      { lat: -25, lng: 25, s: 8, n: 45 }, { lat: 35, lng: 105, s: 15, n: 130 },
+      { lat: 55, lng: 80, s: 20, n: 110 }, { lat: 25, lng: 80, s: 10, n: 90 },
+      { lat: 20, lng: 100, s: 8, n: 55 }, { lat: 36, lng: 140, s: 4, n: 45 },
+      { lat: 45, lng: -100, s: 15, n: 130 }, { lat: 55, lng: -110, s: 12, n: 70 },
+      { lat: 25, lng: -100, s: 8, n: 55 }, { lat: -10, lng: -55, s: 12, n: 90 },
+      { lat: -25, lng: -50, s: 8, n: 55 }, { lat: 5, lng: -70, s: 6, n: 35 },
+      { lat: -25, lng: 135, s: 10, n: 65 },
     ];
     const positions = [];
     clusters.forEach(c => {
@@ -64,7 +64,9 @@ class GlobeView {
     });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    this.group.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x00f5ff, size: 0.04, transparent: true, opacity: 0.5 })));
+    this.group.add(new THREE.Points(geo, new THREE.PointsMaterial({
+      color: 0x3b82f6, size: 0.05, transparent: true, opacity: 0.6
+    })));
   }
 
   latLngToVec3(lat, lng, r) {
@@ -77,7 +79,7 @@ class GlobeView {
     const pos = this.latLngToVec3(lat, lng, 5.05);
 
     const dotGeo = new THREE.SphereGeometry(0.12, 16, 16);
-    const dotMat = new THREE.MeshBasicMaterial({ color: 0xff6b35 });
+    const dotMat = new THREE.MeshBasicMaterial({ color: 0xe85d26 });
     this.marker = new THREE.Mesh(dotGeo, dotMat);
     this.marker.position.copy(pos);
     this.marker.userData = { type: 'london-marker' };
@@ -85,7 +87,7 @@ class GlobeView {
 
     // Pulse ring
     const ringGeo = new THREE.RingGeometry(0.15, 0.22, 32);
-    const ringMat = new THREE.MeshBasicMaterial({ color: 0xff6b35, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
+    const ringMat = new THREE.MeshBasicMaterial({ color: 0xe85d26, transparent: true, opacity: 0.6, side: THREE.DoubleSide });
     this.markerPulse = new THREE.Mesh(ringGeo, ringMat);
     this.markerPulse.position.copy(pos);
     this.markerPulse.lookAt(0, 0, 0);
@@ -95,28 +97,31 @@ class GlobeView {
     const canvas = document.createElement('canvas');
     canvas.width = 512; canvas.height = 96;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ff6b35';
+    ctx.fillStyle = '#e85d26';
     ctx.font = 'bold 32px Space Grotesk, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('🇬🇧 London Colony', 256, 40);
-    ctx.font = '20px JetBrains Mono, monospace';
-    ctx.fillStyle = '#7a7a9a';
-    ctx.fillText('29 districts • 1 claimed', 256, 70);
+    ctx.fillText('🇬🇧 London Colony', 256, 38);
+    ctx.font = '18px JetBrains Mono, monospace';
+    ctx.fillStyle = '#6b7280';
+    ctx.fillText('44 districts • click to enter', 256, 65);
     const tex = new THREE.CanvasTexture(canvas);
     const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true }));
-    label.position.copy(this.latLngToVec3(lat + 4, lng, 5.5));
-    label.scale.set(2, 0.5, 1);
+    label.position.copy(this.latLngToVec3(lat + 4.5, lng, 5.5));
+    label.scale.set(2.2, 0.5, 1);
     this.group.add(label);
   }
 
   addStars() {
+    // Subtle background dots instead of bright stars
     const positions = [];
-    for (let i = 0; i < 2000; i++) {
+    for (let i = 0; i < 800; i++) {
       positions.push((Math.random() - 0.5) * 200, (Math.random() - 0.5) * 200, (Math.random() - 0.5) * 200);
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    this.stars = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.15, transparent: true, opacity: 0.7 }));
+    this.stars = new THREE.Points(geo, new THREE.PointsMaterial({
+      color: 0x94a3b8, size: 0.1, transparent: true, opacity: 0.3
+    }));
     this.scene.add(this.stars);
   }
 

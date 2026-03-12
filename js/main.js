@@ -43,12 +43,12 @@ class AgentColonyApp {
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setClearColor(0x0a0a1a);
+    this.renderer.setClearColor(0xf0f0f5);
   }
 
   initScene() {
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x0a0a1a, 0.005);
+    this.scene.fog = new THREE.FogExp2(0xf0f0f5, 0.004);
   }
 
   initCamera() {
@@ -64,11 +64,14 @@ class AgentColonyApp {
   }
 
   initLights() {
-    this.scene.add(new THREE.AmbientLight(0x444466, 0.6));
-    const dir = new THREE.DirectionalLight(0x8888bb, 0.5);
-    dir.position.set(10, 15, 10);
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+    dir.position.set(10, 20, 10);
     this.scene.add(dir);
-    const p = new THREE.PointLight(0x00f5ff, 0.2, 50);
+    const dir2 = new THREE.DirectionalLight(0xddeeff, 0.3);
+    dir2.position.set(-10, 15, -5);
+    this.scene.add(dir2);
+    const p = new THREE.PointLight(0x4488ff, 0.15, 50);
     p.position.set(0, 12, 0);
     this.scene.add(p);
   }

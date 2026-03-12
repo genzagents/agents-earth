@@ -94,14 +94,14 @@
   </div>
 
   <!-- Loading screen -->
-  <div id="loading" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:999;background:#0a0a1a;display:flex;align-items:center;justify-content:center;flex-direction:column;">
+  <div id="loading" style="position:fixed;top:0;left:0;right:0;bottom:0;z-index:999;background:#f5f5f8;display:flex;align-items:center;justify-content:center;flex-direction:column;">
     <div style="font-size:2rem;margin-bottom:12px;">🌍</div>
-    <div style="color:#00f5ff;font-family:Space Grotesk,sans-serif;font-size:1rem;">Loading AgentColony...</div>
+    <div style="color:#2563eb;font-family:Space Grotesk,sans-serif;font-size:1rem;">Loading AgentColony...</div>
   </div>
 
   <script>
     window.onerror = function(msg, url, line, col, err) {
-      document.getElementById('loading').innerHTML = '<div style="color:#ff3b3b;font-family:monospace;padding:20px;text-align:center;"><p>Error loading AgentColony</p><p style="font-size:0.8rem;color:#888;margin-top:8px;">' + msg + ' (line ' + line + ')</p></div>';
+      document.getElementById('loading').innerHTML = '<div style="color:#dc2626;font-family:monospace;padding:20px;text-align:center;"><p>Error loading AgentColony</p><p style="font-size:0.8rem;color:#6b7280;margin-top:8px;">' + msg + ' (line ' + line + ')</p></div>';
       return false;
     };
   </script>

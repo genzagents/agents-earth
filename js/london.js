@@ -276,22 +276,22 @@ const LANDMARKS = [
   { name: 'Camden Market', x: -8, z: -13, h: 1, icon: '🎪' },
 ];
 
-// District type colors — brighter for visibility
+// District type colors — light theme
 const DISTRICT_COLORS = {
-  financial:   { main: 0x1e2550, glow: 0x00f5ff, ground: 0x141830 },
-  government:  { main: 0x1e1e40, glow: 0x8888ff, ground: 0x141428 },
-  legal:       { main: 0x1e1e38, glow: 0x9999cc, ground: 0x141425 },
-  creative:    { main: 0x281e38, glow: 0xff3b8b, ground: 0x1a1428 },
-  tech:        { main: 0x142028, glow: 0x00ff88, ground: 0x0e1820 },
-  mixed:       { main: 0x1e1e30, glow: 0xbbbbdd, ground: 0x141425 },
-  transport:   { main: 0x1e1e30, glow: 0xff6b35, ground: 0x181420 },
-  luxury:      { main: 0x282020, glow: 0xffd700, ground: 0x1a1618 },
-  residential: { main: 0x181828, glow: 0x6699bb, ground: 0x121220 },
-  cultural:    { main: 0x201830, glow: 0xa855f7, ground: 0x181425 },
-  heritage:    { main: 0x201e20, glow: 0xccaa55, ground: 0x181818 },
-  industrial:  { main: 0x181820, glow: 0x999999, ground: 0x121218 },
-  olympic:     { main: 0x182028, glow: 0x44bbff, ground: 0x101820 },
-  academic:    { main: 0x181e28, glow: 0x55cc88, ground: 0x101820 },
+  financial:   { main: 0xc8d8f0, glow: 0x2563eb, ground: 0xdde5f0, accent: 0x1d4ed8 },
+  government:  { main: 0xd0d0e8, glow: 0x6366f1, ground: 0xddddf0, accent: 0x4f46e5 },
+  legal:       { main: 0xd0d0dd, glow: 0x6b7280, ground: 0xddddea, accent: 0x4b5563 },
+  creative:    { main: 0xe8d0e0, glow: 0xe11d72, ground: 0xf0dde8, accent: 0xbe185d },
+  tech:        { main: 0xc8e8d8, glow: 0x16a34a, ground: 0xddf0e5, accent: 0x15803d },
+  mixed:       { main: 0xd5d5e0, glow: 0x6b7280, ground: 0xe0e0ea, accent: 0x4b5563 },
+  transport:   { main: 0xe0d5c8, glow: 0xe85d26, ground: 0xeaddd0, accent: 0xc2410c },
+  luxury:      { main: 0xe0d8c0, glow: 0xd97706, ground: 0xeae0cc, accent: 0xb45309 },
+  residential: { main: 0xd0d8e0, glow: 0x3b82f6, ground: 0xdde2ea, accent: 0x2563eb },
+  cultural:    { main: 0xdcd0e8, glow: 0x7c3aed, ground: 0xe5ddf0, accent: 0x6d28d9 },
+  heritage:    { main: 0xddd8cc, glow: 0xb45309, ground: 0xe5e0d5, accent: 0x92400e },
+  industrial:  { main: 0xd5d5d5, glow: 0x6b7280, ground: 0xe0e0e0, accent: 0x4b5563 },
+  olympic:     { main: 0xc8dde8, glow: 0x0284c7, ground: 0xd5e5f0, accent: 0x0369a1 },
+  academic:    { main: 0xc8e0d5, glow: 0x059669, ground: 0xd5ead8, accent: 0x047857 },
 };
 
 // Agent status types

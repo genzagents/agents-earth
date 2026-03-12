@@ -20,18 +20,18 @@ class ColonyView {
   }
 
   init() {
-    // Ground
+    // Ground — light grey
     const groundGeo = new THREE.PlaneGeometry(100, 80);
-    const groundMat = new THREE.MeshPhongMaterial({ color: 0x0c0c1e, emissive: 0x060612 });
+    const groundMat = new THREE.MeshPhongMaterial({ color: 0xe8e8ee, emissive: 0xd8d8e0 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.02;
     this.group.add(ground);
 
-    // Grid
-    const grid = new THREE.GridHelper(100, 100, 0x111128, 0x111128);
+    // Grid — subtle
+    const grid = new THREE.GridHelper(100, 100, 0xd0d0dd, 0xd0d0dd);
     grid.material.transparent = true;
-    grid.material.opacity = 0.15;
+    grid.material.opacity = 0.3;
     this.group.add(grid);
 
     this.createThames();
@@ -64,26 +64,26 @@ class ColonyView {
       geo.setAttribute('position', new THREE.Float32BufferAttribute(v, 3));
       geo.setIndex([0, 1, 2, 1, 3, 2]);
       this.group.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-        color: 0x0e2a45, transparent: true, opacity: 0.8, side: THREE.DoubleSide,
+        color: 0x93c5fd, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
       })));
     }
 
-    // River edge glow
+    // River edge line
     const lineGeo = new THREE.BufferGeometry().setFromPoints(tubePoints);
     this.group.add(new THREE.Line(lineGeo, new THREE.LineBasicMaterial({
-      color: 0x2a5580, transparent: true, opacity: 0.4
+      color: 0x3b82f6, transparent: true, opacity: 0.3
     })));
 
     // Thames label
     const canvas = document.createElement('canvas');
     canvas.width = 300; canvas.height = 48;
     const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#2a6090';
+    ctx.fillStyle = '#3b82f6';
     ctx.font = 'italic 24px Space Grotesk, sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText('River Thames', 150, 32);
     const tex = new THREE.CanvasTexture(canvas);
-    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.6 }));
+    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.7 }));
     label.position.set(3, 0.6, 2);
     label.scale.set(4, 0.7, 1);
     this.group.add(label);
@@ -98,21 +98,21 @@ class ColonyView {
       const plateGeo = new THREE.PlaneGeometry(d.w - 0.3, d.d - 0.3);
       const plateMat = new THREE.MeshPhongMaterial({
         color: isClaimed ? colors.main : colors.ground,
-        emissive: isClaimed ? new THREE.Color(colors.main).multiplyScalar(0.4) : new THREE.Color(colors.ground).multiplyScalar(0.3),
+        emissive: new THREE.Color(isClaimed ? colors.main : colors.ground).multiplyScalar(0.8),
         transparent: true,
-        opacity: isClaimed ? 0.95 : 0.7,
+        opacity: isClaimed ? 0.95 : 0.85,
       });
       const plate = new THREE.Mesh(plateGeo, plateMat);
       plate.rotation.x = -Math.PI / 2;
       plate.position.set(d.x, 0.03, d.z);
       this.group.add(plate);
 
-      // District border — always visible, brighter for unclaimed to show boundaries
+      // District border — always clearly visible
       const borderGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(d.w - 0.15, 0.06, d.d - 0.15));
       const borderMat = new THREE.LineBasicMaterial({
-        color: isClaimed ? colors.glow : colors.glow,
+        color: colors.glow,
         transparent: true,
-        opacity: isClaimed ? 0.7 : 0.35,
+        opacity: isClaimed ? 0.8 : 0.5,
       });
       const border = new THREE.LineSegments(borderGeo, borderMat);
       border.position.set(d.x, 0.04, d.z);
@@ -128,7 +128,7 @@ class ColonyView {
         ];
         corners.forEach(([cx, cz]) => {
           const cGeo = new THREE.BoxGeometry(0.15, 0.3, 0.15);
-          const cMat = new THREE.MeshBasicMaterial({ color: colors.glow, transparent: true, opacity: 0.2 });
+          const cMat = new THREE.MeshBasicMaterial({ color: colors.glow, transparent: true, opacity: 0.35 });
           const corner = new THREE.Mesh(cGeo, cMat);
           corner.position.set(cx, 0.15, cz);
           this.group.add(corner);
@@ -140,23 +140,25 @@ class ColonyView {
       canvas.width = 512; canvas.height = 96;
       const ctx = canvas.getContext('2d');
 
-      // Name
-      ctx.fillStyle = '#' + colors.glow.toString(16).padStart(6, '0');
-      ctx.font = `${isClaimed ? 'bold ' : ''}${isClaimed ? '28' : '24'}px Space Grotesk, sans-serif`;
+      // Name — dark text for readability on light bg
+      const glowHex = '#' + colors.glow.toString(16).padStart(6, '0');
+      const accentHex = colors.accent ? '#' + colors.accent.toString(16).padStart(6, '0') : glowHex;
+      ctx.fillStyle = accentHex;
+      ctx.font = `${isClaimed ? 'bold ' : ''}${isClaimed ? '28' : '22'}px Space Grotesk, sans-serif`;
       ctx.textAlign = 'center';
       ctx.fillText(d.name, 256, 30);
 
       // Status + landmark
-      ctx.font = '15px JetBrains Mono, monospace';
+      ctx.font = '14px JetBrains Mono, monospace';
       if (isClaimed) {
-        ctx.fillStyle = '#00ff88';
-        ctx.fillText(`✅ ${d.owner}`, 256, 55);
+        ctx.fillStyle = '#16a34a';
+        ctx.fillText(`✅ ${d.owner}`, 256, 52);
       } else {
-        ctx.fillStyle = '#888899';
-        ctx.fillText(`📍 ${d.landmark}`, 256, 55);
-        ctx.fillStyle = '#666677';
-        ctx.font = '13px JetBrains Mono, monospace';
-        ctx.fillText('Unclaimed — available', 256, 75);
+        ctx.fillStyle = '#6b7280';
+        ctx.fillText(`📍 ${d.landmark}`, 256, 52);
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '12px JetBrains Mono, monospace';
+        ctx.fillText('Unclaimed — available', 256, 72);
       }
       const tex = new THREE.CanvasTexture(canvas);
       const labelSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: isClaimed ? 0.95 : 0.7 }));
@@ -209,7 +211,7 @@ class ColonyView {
 
     // Glow beam
     const pillarGeo = new THREE.CylinderGeometry(0.03, 0.2, 10, 8);
-    const pillarMat = new THREE.MeshBasicMaterial({ color: colors.glow, transparent: true, opacity: 0.06 });
+    const pillarMat = new THREE.MeshBasicMaterial({ color: colors.glow, transparent: true, opacity: 0.12 });
     const pillar = new THREE.Mesh(pillarGeo, pillarMat);
     pillar.position.set(d.x, 5, d.z);
     group.add(pillar);
@@ -233,12 +235,12 @@ class ColonyView {
       const bd = bw * (0.8 + Math.random() * 0.4);
       const geo = new THREE.BoxGeometry(bw, bh, bd);
 
-      // Semi-transparent fill
+      // Semi-transparent fill — visible on light background
       const mat = new THREE.MeshPhongMaterial({
         color: colors.ground,
-        emissive: new THREE.Color(colors.ground).multiplyScalar(0.3),
+        emissive: new THREE.Color(colors.ground).multiplyScalar(0.7),
         transparent: true,
-        opacity: 0.35,
+        opacity: 0.6,
       });
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(bx, bh / 2, bz);
@@ -247,7 +249,7 @@ class ColonyView {
       // Visible wireframe edges
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geo),
-        new THREE.LineBasicMaterial({ color: colors.glow, transparent: true, opacity: 0.2 })
+        new THREE.LineBasicMaterial({ color: colors.glow, transparent: true, opacity: 0.35 })
       );
       edges.position.copy(mesh.position);
       group.add(edges);
@@ -257,7 +259,7 @@ class ColonyView {
       for (let r = 0; r < rows; r++) {
         const winGeo = new THREE.PlaneGeometry(bw * 0.5, 0.15);
         const winMat = new THREE.MeshBasicMaterial({
-          color: colors.glow, transparent: true, opacity: 0.06
+          color: colors.glow, transparent: true, opacity: 0.12
         });
         const win = new THREE.Mesh(winGeo, winMat);
         win.position.set(bx, 0.3 + r * 0.7, bz + bd / 2 + 0.01);
@@ -271,7 +273,7 @@ class ColonyView {
       const sx = d.x - d.w / 2 + (i + 1) * (d.w / (streetCount + 1));
       const streetGeo = new THREE.PlaneGeometry(0.12, d.d - 0.8);
       const streetMat = new THREE.MeshBasicMaterial({
-        color: colors.glow, transparent: true, opacity: 0.06
+        color: colors.glow, transparent: true, opacity: 0.12
       });
       const street = new THREE.Mesh(streetGeo, streetMat);
       street.rotation.x = -Math.PI / 2;
@@ -284,7 +286,7 @@ class ColonyView {
       const sz = d.z - d.d / 2 + (i + 1) * (d.d / (crossCount + 1));
       const streetGeo = new THREE.PlaneGeometry(d.w - 0.8, 0.12);
       const streetMat = new THREE.MeshBasicMaterial({
-        color: colors.glow, transparent: true, opacity: 0.06
+        color: colors.glow, transparent: true, opacity: 0.12
       });
       const street = new THREE.Mesh(streetGeo, streetMat);
       street.rotation.x = -Math.PI / 2;
@@ -356,7 +358,7 @@ class ColonyView {
     LANDMARKS.forEach(lm => {
       // Landmark pin
       const pinGeo = new THREE.CylinderGeometry(0.02, 0.02, lm.h, 6);
-      const pinMat = new THREE.MeshBasicMaterial({ color: 0xffd700, transparent: true, opacity: 0.4 });
+      const pinMat = new THREE.MeshBasicMaterial({ color: 0xd97706, transparent: true, opacity: 0.5 });
       const pin = new THREE.Mesh(pinGeo, pinMat);
       pin.position.set(lm.x, lm.h / 2, lm.z);
       this.group.add(pin);
@@ -365,12 +367,12 @@ class ColonyView {
       const canvas = document.createElement('canvas');
       canvas.width = 256; canvas.height = 48;
       const ctx = canvas.getContext('2d');
-      ctx.fillStyle = '#ffd700';
-      ctx.font = '20px Space Grotesk, sans-serif';
+      ctx.fillStyle = '#92400e';
+      ctx.font = '18px Space Grotesk, sans-serif';
       ctx.textAlign = 'center';
       ctx.fillText(`${lm.icon} ${lm.name}`, 128, 32);
       const tex = new THREE.CanvasTexture(canvas);
-      const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.6 }));
+      const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0.7 }));
       label.position.set(lm.x, lm.h + 0.4, lm.z);
       label.scale.set(2.5, 0.5, 1);
       this.group.add(label);
@@ -415,7 +417,7 @@ class ColonyView {
         ], 3));
         geo.setIndex([0, 1, 2, 1, 3, 2]);
         this.group.add(new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
-          color: 0x1a1a35, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
+          color: 0xb0b0c0, transparent: true, opacity: 0.5, side: THREE.DoubleSide,
         })));
       }
     });
@@ -430,7 +432,7 @@ class ColonyView {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     this.particles = new THREE.Points(geo, new THREE.PointsMaterial({
-      color: 0x00f5ff, size: 0.03, transparent: true, opacity: 0.15,
+      color: 0x93c5fd, size: 0.03, transparent: true, opacity: 0.2,
     }));
     this.group.add(this.particles);
 
@@ -442,7 +444,7 @@ class ColonyView {
       const w = 0.2 + Math.random() * 0.4;
       const geo = new THREE.BoxGeometry(w, h, w);
       const mat = new THREE.MeshPhongMaterial({
-        color: 0x0a0a18, emissive: 0x050510, transparent: true, opacity: 0.25,
+        color: 0xc8c8d5, emissive: 0xb8b8c5, transparent: true, opacity: 0.4,
       });
       const m = new THREE.Mesh(geo, mat);
       m.position.set(Math.cos(angle) * dist, h / 2, Math.sin(angle) * dist);
@@ -455,14 +457,14 @@ class ColonyView {
         const lx = d.x + (Math.random() - 0.5) * d.w * 0.8;
         const lz = d.z + (Math.random() - 0.5) * d.d * 0.8;
         const poleGeo = new THREE.CylinderGeometry(0.015, 0.015, 1.2, 6);
-        const pole = new THREE.Mesh(poleGeo, new THREE.MeshPhongMaterial({ color: 0x333355 }));
+        const pole = new THREE.Mesh(poleGeo, new THREE.MeshPhongMaterial({ color: 0x888899 }));
         pole.position.set(lx, 0.6, lz);
         this.group.add(pole);
         const lGeo = new THREE.SphereGeometry(0.05, 6, 6);
-        const light = new THREE.Mesh(lGeo, new THREE.MeshBasicMaterial({ color: 0x00f5ff, transparent: true, opacity: 0.5 }));
+        const light = new THREE.Mesh(lGeo, new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.5 }));
         light.position.set(lx, 1.25, lz);
         this.group.add(light);
-        const pLight = new THREE.PointLight(0x00f5ff, 0.1, 2.5);
+        const pLight = new THREE.PointLight(0x3b82f6, 0.1, 2.5);
         pLight.position.set(lx, 1.25, lz);
         this.group.add(pLight);
       }
@@ -495,7 +497,7 @@ class ColonyView {
 
       // Head
       const headGeo = new THREE.SphereGeometry(0.1, 10, 10);
-      const headMat = new THREE.MeshPhongMaterial({ color: 0xe0c8a8, emissive: 0x201810 });
+      const headMat = new THREE.MeshPhongMaterial({ color: 0xd4a574, emissive: 0x8b6914 });
       const head = new THREE.Mesh(headGeo, headMat);
       head.position.y = 0.6;
       agentGroup.add(head);

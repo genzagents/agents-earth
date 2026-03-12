@@ -134,7 +134,7 @@ plot:
     const h = canvas.height;
 
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#080818';
+    ctx.fillStyle = '#f0f0f5';
     ctx.fillRect(0, 0, w, h);
 
     const scale = 3.5;
@@ -143,7 +143,7 @@ plot:
 
     // Thames
     ctx.beginPath();
-    ctx.strokeStyle = '#1a4060';
+    ctx.strokeStyle = '#93c5fd';
     ctx.lineWidth = 3;
     THAMES_PATH.forEach((p, i) => {
       const sx = ox + p.x * scale;
@@ -159,9 +159,9 @@ plot:
       const sy = oz + (d.z - d.d / 2) * scale;
       const sw = d.w * scale;
       const sh = d.d * scale;
-      ctx.fillStyle = d.claimed ? 'rgba(0, 245, 255, 0.3)' : 'rgba(40, 40, 70, 0.4)';
+      ctx.fillStyle = d.claimed ? 'rgba(37, 99, 235, 0.3)' : 'rgba(180, 180, 200, 0.4)';
       ctx.fillRect(sx, sy, sw, sh);
-      ctx.strokeStyle = d.claimed ? 'rgba(0, 245, 255, 0.5)' : 'rgba(50, 50, 80, 0.3)';
+      ctx.strokeStyle = d.claimed ? 'rgba(37, 99, 235, 0.6)' : 'rgba(150, 150, 170, 0.4)';
       ctx.lineWidth = 0.5;
       ctx.strokeRect(sx, sy, sw, sh);
     });

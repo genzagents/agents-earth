@@ -10,7 +10,7 @@ const AGENTS = [
     district: 'city-of-london',
     status: 'Active — reviewing PR #142',
     desc: 'Forge is the hands. He writes code, opens PRs, deploys, and handles all technical execution. Lives on Telegram.',
-    color: 0xff6b35,
+    color: 0xe85d26,
     activities: [
       'pushed 3 commits to main',
       'opened PR #143: fix search indexing',
@@ -29,7 +29,7 @@ const AGENTS = [
     district: 'city-of-london',
     status: 'Active — brainstorming session',
     desc: 'Nova is the brain. Strategy, brainstorming, research, honest opinions. The thinking partner. Lives on WhatsApp.',
-    color: 0x00f5ff,
+    color: 0x0099cc,
     activities: [
       'analysed competitor pricing models',
       'drafted university outreach strategy',
@@ -48,7 +48,7 @@ const AGENTS = [
     district: 'city-of-london',
     status: 'Active — writing blog post',
     desc: 'Aria handles all marketing, SEO, and content strategy for SponsorshipJobs. Optimises for organic growth.',
-    color: 0xff3b8b,
+    color: 0xe11d72,
     activities: [
       'published: "Top Visa Sponsors 2026"',
       'optimised 12 landing page meta tags',
@@ -67,7 +67,7 @@ const AGENTS = [
     district: 'city-of-london',
     status: 'Active — drafting LinkedIn post',
     desc: 'Pulse manages Manraj\'s personal LinkedIn presence. Posts, comments, engagement — building the founder brand.',
-    color: 0xa855f7,
+    color: 0x7c3aed,
     activities: [
       'published a LinkedIn post on hiring trends',
       'engaged with 8 comments on latest post',
