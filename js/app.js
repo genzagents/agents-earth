@@ -19,20 +19,33 @@ let feedInterval;
 function init() {
   maptilersdk.config.apiKey = MAPTILER_KEY;
 
-  map = new maptilersdk.Map({
-    container: 'map',
-    style: maptilersdk.MapStyle.SATELLITE.HYBRID,
-    center: [0, 20],
-    zoom: 1.5,
-    pitch: 0,
-    bearing: 0,
-    projection: 'globe',
-    maxPitch: 85,
-    antialias: true,
-    hash: false,
-  });
+  try {
+    map = new maptilersdk.Map({
+      container: 'map',
+      style: `https://api.maptiler.com/maps/hybrid/style.json?key=${MAPTILER_KEY}`,
+      center: [0, 20],
+      zoom: 1.5,
+      pitch: 0,
+      bearing: 0,
+      projection: 'globe',
+      maxPitch: 85,
+      antialias: true,
+      hash: false,
+    });
+  } catch (err) {
+    console.error('Map init failed:', err);
+    document.getElementById('loading').innerHTML = `
+      <div class="loading-content">
+        <div class="loading-globe">❌</div>
+        <h1>Map Failed to Load</h1>
+        <p style="color:#f87171">${err.message}</p>
+      </div>`;
+    return;
+  }
 
   map.on('load', () => {
+    console.log('Map loaded successfully');
+
     // Add 3D buildings
     add3DBuildings();
 
@@ -40,12 +53,7 @@ function init() {
     addDistrictMarkers();
 
     // Hide loading screen
-    setTimeout(() => {
-      document.getElementById('loading').style.opacity = '0';
-      setTimeout(() => {
-        document.getElementById('loading').style.display = 'none';
-      }, 600);
-    }, 500);
+    hideLoading();
 
     // Fly to London after a beat
     setTimeout(flyToLondon, 1200);
@@ -54,8 +62,32 @@ function init() {
     startActivityFeed();
   });
 
+  map.on('error', (e) => {
+    console.error('Map error:', e);
+    // If we get an auth/tile error, still hide loading and show what we can
+    hideLoading();
+  });
+
+  // Fallback: if map hasn't loaded in 10 seconds, hide loading anyway
+  setTimeout(() => {
+    const loading = document.getElementById('loading');
+    if (loading && loading.style.display !== 'none') {
+      console.warn('Map load timeout — forcing loading screen hide');
+      hideLoading();
+    }
+  }, 10000);
+
   // Bind UI
   bindUI();
+}
+
+function hideLoading() {
+  const loading = document.getElementById('loading');
+  if (!loading || loading.style.display === 'none') return;
+  loading.style.opacity = '0';
+  setTimeout(() => {
+    loading.style.display = 'none';
+  }, 600);
 }
 
 // =====================
@@ -99,50 +131,61 @@ function flyToCoords(lng, lat) {
 // 3D BUILDINGS
 // =====================
 function add3DBuildings() {
-  const layers = map.getStyle().layers;
-
-  // Find the label layer to insert 3D buildings below
-  let labelLayerId;
-  for (const layer of layers) {
-    if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
-      labelLayerId = layer.id;
-      break;
+  try {
+    const layers = map.getStyle().layers;
+    if (!layers) {
+      console.warn('No layers found in style');
+      return;
     }
-  }
 
-  // Check if openmaptiles source exists (MapTiler satellite hybrid includes it)
-  const sources = map.getStyle().sources;
-  const tileSourceId = Object.keys(sources).find(
-    k => sources[k].type === 'vector'
-  );
+    // Find the label layer to insert 3D buildings below
+    let labelLayerId;
+    for (const layer of layers) {
+      if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
+        labelLayerId = layer.id;
+        break;
+      }
+    }
 
-  if (!tileSourceId) {
-    console.warn('No vector tile source found for 3D buildings');
-    return;
-  }
+    // Check if openmaptiles source exists (MapTiler satellite hybrid includes it)
+    const sources = map.getStyle().sources;
+    const tileSourceId = Object.keys(sources).find(
+      k => sources[k].type === 'vector'
+    );
 
-  map.addLayer(
-    {
-      id: '3d-buildings',
-      source: tileSourceId,
-      'source-layer': 'building',
-      type: 'fill-extrusion',
-      minzoom: 13,
-      paint: {
-        'fill-extrusion-color': [
-          'interpolate', ['linear'], ['get', 'render_height'],
-          0, '#e0e0e0',
-          50, '#c0c8d8',
-          150, '#a0b0c8',
-          300, '#8090b0',
-        ],
-        'fill-extrusion-height': ['get', 'render_height'],
-        'fill-extrusion-base': ['get', 'render_min_height'],
-        'fill-extrusion-opacity': 0.85,
+    if (!tileSourceId) {
+      console.warn('No vector tile source found for 3D buildings');
+      return;
+    }
+
+    // Try 'building' source-layer first, fall back if needed
+    map.addLayer(
+      {
+        id: '3d-buildings',
+        source: tileSourceId,
+        'source-layer': 'building',
+        type: 'fill-extrusion',
+        minzoom: 13,
+        filter: ['!=', ['get', 'hide_3d'], true],
+        paint: {
+          'fill-extrusion-color': [
+            'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 10],
+            0, '#e0e0e0',
+            50, '#c0c8d8',
+            150, '#a0b0c8',
+            300, '#8090b0',
+          ],
+          'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 10],
+          'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+          'fill-extrusion-opacity': 0.85,
+        },
       },
-    },
-    labelLayerId
-  );
+      labelLayerId
+    );
+    console.log('3D buildings layer added');
+  } catch (err) {
+    console.error('Failed to add 3D buildings:', err);
+  }
 }
 
 function toggle3DBuildings() {
