@@ -197,40 +197,56 @@ body {
   pointer-events: none;
 }
 
-/* Agent Markers */
+/* Agent Markers — Human figures */
 .agent-marker-container {
   display: flex;
   flex-direction: column;
   align-items: center;
   cursor: pointer;
   transition: transform 0.2s;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.3));
 }
-.agent-marker-container:hover { transform: scale(1.15) translateY(-2px); }
+.agent-marker-container:hover { transform: scale(1.15) translateY(-4px); }
 
-.agent-marker {
-  width: 44px;
-  height: 44px;
-  background: white;
-  border-radius: 50%;
-  border: 3px solid;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+.agent-figure {
+  display: block;
 }
 
-.agent-emoji { font-size: 1.3rem; }
+/* Idle walking animation */
+.agent-leg-left, .agent-leg-right,
+.agent-arm-left, .agent-arm-right {
+  transform-origin: center top;
+}
 
-.agent-status-dot {
-  position: absolute;
-  bottom: -2px;
-  right: -2px;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid white;
-  animation: blink 1.5s infinite;
+.agent-marker-container .agent-leg-left {
+  animation: walk-left 1.2s ease-in-out infinite;
+}
+.agent-marker-container .agent-leg-right {
+  animation: walk-right 1.2s ease-in-out infinite;
+}
+.agent-marker-container .agent-arm-left {
+  animation: walk-right 1.2s ease-in-out infinite;
+}
+.agent-marker-container .agent-arm-right {
+  animation: walk-left 1.2s ease-in-out infinite;
+}
+
+@keyframes walk-left {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(6deg); }
+}
+@keyframes walk-right {
+  0%, 100% { transform: rotate(6deg); }
+  50% { transform: rotate(-6deg); }
+}
+
+/* Status pulse on head */
+.status-pulse {
+  animation: status-glow 2s ease-in-out infinite;
+}
+@keyframes status-glow {
+  0%, 100% { opacity: 1; r: 5; }
+  50% { opacity: 0.6; r: 6; }
 }
 
 @keyframes blink {
@@ -238,13 +254,14 @@ body {
   50% { opacity: 0.4; }
 }
 
-.agent-name-label {
-  margin-top: 4px;
-  font-size: 0.7rem;
-  font-weight: 600;
+.agent-name-tag {
+  margin-top: 2px;
+  font-size: 0.72rem;
+  font-weight: 700;
   color: white;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.7);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.4);
   white-space: nowrap;
+  letter-spacing: 0.3px;
 }
 
 /* Panels */
