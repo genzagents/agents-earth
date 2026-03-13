@@ -3,9 +3,9 @@ name: Deploy to Azure Container Apps
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
-    types: [closed]
+#   pull_request:
+#     branches: [main]
+#     types: [closed]
 
 # Only run deployment when PR is merged or direct push to main
 jobs:
