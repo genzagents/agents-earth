@@ -1,17 +1,15 @@
-/* === AgentColony — MapTiler App === */
+/* === AgentColony — MapTiler App v2 === */
 
 const MAPTILER_KEY = '1VCJ1EgPTE2txzvkUYAU';
-
-// London center
 const LONDON = { lng: -0.0918, lat: 51.5074 };
 
 // State
 let map;
-let agentsVisible = false;
+let agentsVisible = true;  // Agents visible by default now
 let buildings3D = true;
-let authorized = false;
-let authorizedAgents = [];
 let feedInterval;
+let agentMarkers = [];
+let agentAnimationFrame;
 
 // =====================
 // INIT
@@ -19,52 +17,94 @@ let feedInterval;
 function init() {
   maptilersdk.config.apiKey = MAPTILER_KEY;
 
-  map = new maptilersdk.Map({
-    container: 'map',
-    style: maptilersdk.MapStyle.SATELLITE.HYBRID,
-    center: [0, 20],
-    zoom: 1.5,
-    pitch: 0,
-    bearing: 0,
-    projection: 'globe',
-    maxPitch: 85,
-    antialias: true,
-    hash: false,
-  });
+  try {
+    map = new maptilersdk.Map({
+      container: 'map',
+      style: `https://api.maptiler.com/maps/satellite/style.json?key=${MAPTILER_KEY}`,
+      center: [0, 20],
+      zoom: 1.5,
+      pitch: 0,
+      bearing: 0,
+      projection: 'globe',
+      maxPitch: 85,
+      antialias: true,
+      hash: false,
+      dragRotate: true,
+      touchZoomRotate: true,
+      touchPitch: true,
+      keyboard: true,
+      scrollZoom: true,
+      boxZoom: true,
+      doubleClickZoom: true,
+      dragPan: true,
+    });
+  } catch (err) {
+    console.error('Map init failed:', err);
+    showLoadError(err.message);
+    return;
+  }
+
+  // Enable right-click drag to rotate/pitch
+  map.dragRotate.enable();
+  map.touchZoomRotate.enable();
+  map.touchPitch.enable();
 
   map.on('load', () => {
-    // Add 3D buildings
+    console.log('Map loaded');
+
     add3DBuildings();
-
-    // Add district markers
     addDistrictMarkers();
+    addAgentMarkers();
+    updateAgentSidebar();
+    hideLoading();
 
-    // Hide loading screen
-    setTimeout(() => {
-      document.getElementById('loading').style.opacity = '0';
-      setTimeout(() => {
-        document.getElementById('loading').style.display = 'none';
-      }, 600);
-    }, 500);
-
-    // Fly to London after a beat
+    // Globe → fly to London
     setTimeout(flyToLondon, 1200);
 
-    // Start activity feed
     startActivityFeed();
+    startAgentMovement();
   });
 
-  // Bind UI
+  map.on('error', (e) => {
+    console.error('Map error:', e);
+    hideLoading();
+  });
+
+  // Timeout fallback
+  setTimeout(() => {
+    const loading = document.getElementById('loading');
+    if (loading && loading.style.display !== 'none') {
+      console.warn('Map load timeout');
+      hideLoading();
+    }
+  }, 10000);
+
   bindUI();
 }
 
+function showLoadError(msg) {
+  document.getElementById('loading').innerHTML = `
+    <div class="loading-content">
+      <div class="loading-globe">❌</div>
+      <h1>Map Failed to Load</h1>
+      <p style="color:#f87171">${msg}</p>
+    </div>`;
+}
+
+function hideLoading() {
+  const el = document.getElementById('loading');
+  if (!el || el.style.display === 'none') return;
+  el.style.opacity = '0';
+  setTimeout(() => { el.style.display = 'none'; }, 600);
+}
+
 // =====================
-// CAMERA ANIMATION
+// CAMERA
 // =====================
 function flyToLondon() {
   map.flyTo({
     center: [LONDON.lng, LONDON.lat],
-    zoom: 15,
+    zoom: 16,
     pitch: 60,
     bearing: -20,
     duration: 5000,
@@ -74,14 +114,7 @@ function flyToLondon() {
 }
 
 function flyToGlobe() {
-  map.flyTo({
-    center: [0, 20],
-    zoom: 1.5,
-    pitch: 0,
-    bearing: 0,
-    duration: 3000,
-    essential: true,
-  });
+  map.flyTo({ center: [0, 20], zoom: 1.5, pitch: 0, bearing: 0, duration: 3000, essential: true });
 }
 
 function flyToCoords(lng, lat) {
@@ -99,50 +132,75 @@ function flyToCoords(lng, lat) {
 // 3D BUILDINGS
 // =====================
 function add3DBuildings() {
-  const layers = map.getStyle().layers;
+  try {
+    const style = map.getStyle();
+    if (!style || !style.layers) return;
 
-  // Find the label layer to insert 3D buildings below
-  let labelLayerId;
-  for (const layer of layers) {
-    if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
-      labelLayerId = layer.id;
-      break;
+    let labelLayerId;
+    for (const layer of style.layers) {
+      if (layer.type === 'symbol' && layer.layout && layer.layout['text-field']) {
+        labelLayerId = layer.id;
+        break;
+      }
     }
+
+    const sources = style.sources || {};
+    const tileSourceId = Object.keys(sources).find(k => sources[k].type === 'vector');
+
+    if (!tileSourceId) {
+      // For pure satellite, add OpenMapTiles as separate source
+      map.addSource('openmaptiles', {
+        type: 'vector',
+        url: `https://api.maptiler.com/tiles/v3/tiles.json?key=${MAPTILER_KEY}`,
+      });
+
+      map.addLayer({
+        id: '3d-buildings',
+        source: 'openmaptiles',
+        'source-layer': 'building',
+        type: 'fill-extrusion',
+        minzoom: 13,
+        paint: {
+          'fill-extrusion-color': [
+            'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 10],
+            0, '#d4d8e0',
+            50, '#b8c0d0',
+            150, '#9aa8c0',
+            300, '#7888a8',
+          ],
+          'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 10],
+          'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+          'fill-extrusion-opacity': 0.75,
+        },
+      });
+    } else {
+      map.addLayer(
+        {
+          id: '3d-buildings',
+          source: tileSourceId,
+          'source-layer': 'building',
+          type: 'fill-extrusion',
+          minzoom: 13,
+          paint: {
+            'fill-extrusion-color': [
+              'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 10],
+              0, '#d4d8e0',
+              50, '#b8c0d0',
+              150, '#9aa8c0',
+              300, '#7888a8',
+            ],
+            'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 10],
+            'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
+            'fill-extrusion-opacity': 0.75,
+          },
+        },
+        labelLayerId
+      );
+    }
+    console.log('3D buildings added');
+  } catch (err) {
+    console.error('3D buildings failed:', err);
   }
-
-  // Check if openmaptiles source exists (MapTiler satellite hybrid includes it)
-  const sources = map.getStyle().sources;
-  const tileSourceId = Object.keys(sources).find(
-    k => sources[k].type === 'vector'
-  );
-
-  if (!tileSourceId) {
-    console.warn('No vector tile source found for 3D buildings');
-    return;
-  }
-
-  map.addLayer(
-    {
-      id: '3d-buildings',
-      source: tileSourceId,
-      'source-layer': 'building',
-      type: 'fill-extrusion',
-      minzoom: 13,
-      paint: {
-        'fill-extrusion-color': [
-          'interpolate', ['linear'], ['get', 'render_height'],
-          0, '#e0e0e0',
-          50, '#c0c8d8',
-          150, '#a0b0c8',
-          300, '#8090b0',
-        ],
-        'fill-extrusion-height': ['get', 'render_height'],
-        'fill-extrusion-base': ['get', 'render_min_height'],
-        'fill-extrusion-opacity': 0.85,
-      },
-    },
-    labelLayerId
-  );
 }
 
 function toggle3DBuildings() {
@@ -159,62 +217,85 @@ function toggle3DBuildings() {
 function addDistrictMarkers() {
   DISTRICTS.forEach(district => {
     const color = DISTRICT_TYPE_COLORS[district.type] || '#6b7280';
-    
-    // Create marker element
+
     const el = document.createElement('div');
     el.className = 'district-marker';
     el.innerHTML = `
       <div class="marker-dot" style="background: ${color}; box-shadow: 0 0 8px ${color}40;"></div>
       <div class="marker-label">${district.name}</div>
     `;
-    
-    if (district.claimed) {
-      el.classList.add('claimed');
-      el.querySelector('.marker-dot').style.boxShadow = `0 0 12px ${color}80`;
-    }
+    if (district.claimed) el.classList.add('claimed');
 
-    const marker = new maptilersdk.Marker({ element: el, anchor: 'center' })
+    new maptilersdk.Marker({ element: el, anchor: 'center' })
       .setLngLat(district.center)
       .addTo(map);
 
-    // Click handler
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (district.claimed) {
-        showDistrictPanel(district);
-      } else {
-        showClaimModal(district);
-      }
+      district.claimed ? showDistrictPanel(district) : showClaimModal(district);
       flyToCoords(district.center[0], district.center[1]);
     });
   });
 }
 
 // =====================
-// AGENT MARKERS
+// AGENT MARKERS — Human-like SVG figures
 // =====================
+function createAgentSVG(agent) {
+  const statusInfo = STATUS_DISPLAY[agent.status] || STATUS_DISPLAY.offline;
+  const color = agent.color;
+
+  // Human-like figure as SVG
+  return `
+    <svg width="48" height="72" viewBox="0 0 48 72" xmlns="http://www.w3.org/2000/svg" class="agent-figure">
+      <!-- Shadow -->
+      <ellipse cx="24" cy="69" rx="12" ry="3" fill="rgba(0,0,0,0.2)" />
+
+      <!-- Legs -->
+      <rect x="16" y="48" width="5" height="16" rx="2" fill="${color}" opacity="0.85" class="agent-leg-left" />
+      <rect x="27" y="48" width="5" height="16" rx="2" fill="${color}" opacity="0.85" class="agent-leg-right" />
+
+      <!-- Body -->
+      <rect x="12" y="28" width="24" height="22" rx="5" fill="${color}" />
+
+      <!-- Arms -->
+      <rect x="4" y="30" width="5" height="16" rx="2.5" fill="${color}" opacity="0.85" class="agent-arm-left" />
+      <rect x="39" y="30" width="5" height="16" rx="2.5" fill="${color}" opacity="0.85" class="agent-arm-right" />
+
+      <!-- Head -->
+      <circle cx="24" cy="18" r="12" fill="${color}" />
+      <circle cx="24" cy="18" r="10" fill="white" opacity="0.15" />
+
+      <!-- Face -->
+      <circle cx="20" cy="16" r="1.5" fill="white" />
+      <circle cx="28" cy="16" r="1.5" fill="white" />
+      <path d="M20 22 Q24 25 28 22" stroke="white" stroke-width="1.2" fill="none" stroke-linecap="round" />
+
+      <!-- Emoji badge on chest -->
+      <text x="24" y="43" text-anchor="middle" font-size="11">${agent.emoji}</text>
+
+      <!-- Status indicator -->
+      <circle cx="38" cy="10" r="5" fill="${statusInfo.color}" stroke="white" stroke-width="2" class="status-pulse" />
+    </svg>
+  `;
+}
+
 function addAgentMarkers() {
-  // Remove existing agent markers
-  document.querySelectorAll('.agent-marker-container').forEach(el => el.remove());
+  removeAgentMarkers();
 
-  const visibleAgents = authorized ? AGENTS.filter(a => authorizedAgents.includes(a.name)) : [];
-
-  visibleAgents.forEach(agent => {
-    const statusInfo = STATUS_DISPLAY[agent.status] || STATUS_DISPLAY.offline;
-    
+  AGENTS.forEach(agent => {
     const el = document.createElement('div');
     el.className = 'agent-marker-container';
     el.innerHTML = `
-      <div class="agent-marker" style="border-color: ${agent.color}">
-        <span class="agent-emoji">${agent.emoji}</span>
-        <span class="agent-status-dot" style="background: ${statusInfo.color}"></span>
-      </div>
-      <div class="agent-name-label">${agent.name}</div>
+      ${createAgentSVG(agent)}
+      <div class="agent-name-tag">${agent.name}</div>
     `;
 
-    new maptilersdk.Marker({ element: el, anchor: 'bottom' })
+    const marker = new maptilersdk.Marker({ element: el, anchor: 'bottom' })
       .setLngLat(agent.coords)
       .addTo(map);
+
+    agentMarkers.push({ marker, agent, el });
 
     el.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -222,25 +303,36 @@ function addAgentMarkers() {
       flyToCoords(agent.coords[0], agent.coords[1]);
     });
   });
-
-  // Update agent sidebar
-  updateAgentSidebar(visibleAgents);
 }
 
 function removeAgentMarkers() {
-  document.querySelectorAll('.agent-marker-container').forEach(el => el.remove());
+  agentMarkers.forEach(({ marker }) => marker.remove());
+  agentMarkers = [];
 }
 
-function updateAgentSidebar(visibleAgents) {
+// Subtle idle movement — agents shift slightly to look alive
+function startAgentMovement() {
+  function animate() {
+    const now = Date.now();
+    agentMarkers.forEach(({ marker, agent }, i) => {
+      // Tiny oscillation around home position
+      const offset = Math.sin(now / 3000 + i * 1.5) * 0.00008;
+      const offset2 = Math.cos(now / 4000 + i * 2) * 0.00006;
+      marker.setLngLat([
+        agent.coords[0] + offset,
+        agent.coords[1] + offset2,
+      ]);
+    });
+    agentAnimationFrame = requestAnimationFrame(animate);
+  }
+  animate();
+}
+
+function updateAgentSidebar() {
   const list = document.getElementById('agent-list');
   list.innerHTML = '';
 
-  if (visibleAgents.length === 0) {
-    list.innerHTML = '<div class="sidebar-empty">No agents visible. Enter auth code to see agents.</div>';
-    return;
-  }
-
-  visibleAgents.forEach(agent => {
+  AGENTS.forEach(agent => {
     const statusInfo = STATUS_DISPLAY[agent.status] || STATUS_DISPLAY.offline;
     const item = document.createElement('div');
     item.className = 'agent-sidebar-item';
@@ -265,10 +357,7 @@ function updateAgentSidebar(visibleAgents) {
 function showDistrictPanel(district) {
   const panel = document.getElementById('district-panel');
   const content = document.getElementById('panel-content');
-
-  const agents = authorized
-    ? AGENTS.filter(a => a.district === district.id && authorizedAgents.includes(a.name))
-    : [];
+  const agents = AGENTS.filter(a => a.district === district.id);
 
   content.innerHTML = `
     <div class="panel-district-type" style="color: ${DISTRICT_TYPE_COLORS[district.type]}">${district.type.toUpperCase()}</div>
@@ -291,7 +380,6 @@ function showDistrictPanel(district) {
       </div>
     ` : ''}
   `;
-
   panel.classList.remove('hidden');
 }
 
@@ -321,7 +409,6 @@ function showAgentPanel(agent) {
       ${agent.activities.slice(0, 4).map(a => `<div class="activity-line">${a}</div>`).join('')}
     </div>
   `;
-
   panel.classList.remove('hidden');
 }
 
@@ -344,38 +431,10 @@ agents:
 
 auth:
   code: "YOUR-CODE-HERE"
-  viewers: ["*"]  # or specific GitHub usernames`;
+  viewers: ["*"]`;
 
   document.getElementById('claim-yaml').textContent = yaml;
   modal.classList.remove('hidden');
-}
-
-function showAuthModal() {
-  document.getElementById('auth-modal').classList.remove('hidden');
-  document.getElementById('auth-input').focus();
-}
-
-function handleAuth() {
-  const code = document.getElementById('auth-input').value.trim().toUpperCase();
-  const entry = AUTH_CODES[code];
-
-  if (entry) {
-    authorized = true;
-    authorizedAgents = entry.agents;
-    document.getElementById('auth-modal').classList.add('hidden');
-    document.getElementById('auth-input').value = '';
-    addAgentMarkers();
-    agentsVisible = true;
-    document.getElementById('agent-sidebar').classList.remove('hidden');
-  } else {
-    document.getElementById('auth-input').style.borderColor = '#dc2626';
-    document.getElementById('auth-input').value = '';
-    document.getElementById('auth-input').placeholder = 'Invalid code — try again';
-    setTimeout(() => {
-      document.getElementById('auth-input').style.borderColor = '';
-      document.getElementById('auth-input').placeholder = 'e.g. NOVA-2026';
-    }, 2000);
-  }
 }
 
 // =====================
@@ -383,13 +442,7 @@ function handleAuth() {
 // =====================
 function startActivityFeed() {
   const container = document.getElementById('feed-items');
-
-  // Initial items
-  for (let i = 0; i < 4; i++) {
-    addFeedItem(container);
-  }
-
-  // Add new items periodically
+  for (let i = 0; i < 4; i++) addFeedItem(container);
   feedInterval = setInterval(() => addFeedItem(container), 6000);
 }
 
@@ -399,29 +452,19 @@ function addFeedItem(container) {
   item.className = 'feed-item';
   item.innerHTML = `<span class="feed-time">${time}</span>${text}`;
   container.prepend(item);
-
-  // Keep max 10 items
-  while (container.children.length > 10) {
-    container.lastChild.remove();
-  }
+  while (container.children.length > 10) container.lastChild.remove();
 }
 
 // =====================
 // UI BINDINGS
 // =====================
 function bindUI() {
-  // Globe button
   document.getElementById('btn-globe').addEventListener('click', () => {
     flyToGlobe();
     setTimeout(flyToLondon, 4000);
   });
 
-  // Agents button
   document.getElementById('btn-agents').addEventListener('click', () => {
-    if (!authorized) {
-      showAuthModal();
-      return;
-    }
     agentsVisible = !agentsVisible;
     if (agentsVisible) {
       addAgentMarkers();
@@ -432,21 +475,18 @@ function bindUI() {
     }
   });
 
-  // 3D button
   document.getElementById('btn-3d').addEventListener('click', toggle3DBuildings);
 
-  // Panel close
   document.getElementById('panel-close').addEventListener('click', () => {
     document.getElementById('district-panel').classList.add('hidden');
   });
 
-  // Auth modal
-  document.getElementById('auth-submit').addEventListener('click', handleAuth);
-  document.getElementById('auth-cancel').addEventListener('click', () => {
+  // Auth modal (keep for future use)
+  document.getElementById('auth-submit')?.addEventListener('click', () => {
     document.getElementById('auth-modal').classList.add('hidden');
   });
-  document.getElementById('auth-input').addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') handleAuth();
+  document.getElementById('auth-cancel')?.addEventListener('click', () => {
+    document.getElementById('auth-modal').classList.add('hidden');
   });
 
   // Claim modal
@@ -454,9 +494,7 @@ function bindUI() {
     const yaml = document.getElementById('claim-yaml').textContent;
     navigator.clipboard.writeText(yaml).then(() => {
       document.getElementById('claim-copy').textContent = '✅ Copied!';
-      setTimeout(() => {
-        document.getElementById('claim-copy').textContent = '📋 Copy YAML';
-      }, 2000);
+      setTimeout(() => { document.getElementById('claim-copy').textContent = '📋 Copy YAML'; }, 2000);
     });
   });
   document.getElementById('claim-close').addEventListener('click', () => {
