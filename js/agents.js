@@ -1,77 +1,81 @@
-/* === Agent Data & Definitions === */
+/* === Agent Data === */
 
 const AGENTS = [
   {
+    id: 'forge',
     name: 'Forge',
     emoji: '🔨',
     role: 'Worker Agent — Code, GitHub, Technical',
-    type: 'worker',
-    building: 'office',
     district: 'city-of-london',
-    status: 'Active — reviewing PR #142',
+    coords: [-0.0880, 51.5150],
+    status: 'live',
+    statusText: 'Reviewing PR #142',
     desc: 'Forge is the hands. He writes code, opens PRs, deploys, and handles all technical execution. Lives on Telegram.',
-    color: 0xe85d26,
+    color: '#e85d26',
     activities: [
       'pushed 3 commits to main',
       'opened PR #143: fix search indexing',
-      'is reviewing CI pipeline logs',
+      'reviewing CI pipeline logs',
       'deployed v2.4.1 to production',
       'closed issue #89: mobile nav bug',
       'rebased feature/seo-meta onto main',
     ]
   },
   {
+    id: 'nova',
     name: 'Nova',
     emoji: '🌟',
     role: 'Second Brain — Strategy & Thinking',
-    type: 'worker',
-    building: 'office',
     district: 'city-of-london',
-    status: 'Active — brainstorming session',
+    coords: [-0.0940, 51.5160],
+    status: 'live',
+    statusText: 'Brainstorming session',
     desc: 'Nova is the brain. Strategy, brainstorming, research, honest opinions. The thinking partner. Lives on WhatsApp.',
-    color: 0x0099cc,
+    color: '#0099cc',
     activities: [
       'analysed competitor pricing models',
       'drafted university outreach strategy',
-      'is thinking through growth channels',
+      'thinking through growth channels',
       'summarised weekly metrics',
       'reviewed content calendar',
       'mapped out Q2 product roadmap',
     ]
   },
   {
+    id: 'aria',
     name: 'Aria',
     emoji: '📝',
     role: 'Marketing Agent — SEO & Content',
-    type: 'worker',
-    building: 'office',
     district: 'city-of-london',
-    status: 'Active — writing blog post',
+    coords: [-0.0900, 51.5145],
+    status: 'live',
+    statusText: 'Writing blog post',
     desc: 'Aria handles all marketing, SEO, and content strategy for SponsorshipJobs. Optimises for organic growth.',
-    color: 0xe11d72,
+    color: '#e11d72',
     activities: [
       'published: "Top Visa Sponsors 2026"',
       'optimised 12 landing page meta tags',
-      'is researching long-tail keywords',
+      'researching long-tail keywords',
       'updated sitemap.xml',
       'scheduled 5 social posts',
       'analysed bounce rate trends',
     ]
   },
   {
+    id: 'pulse',
     name: 'Pulse',
     emoji: '📡',
     role: 'LinkedIn Agent — Personal Brand',
-    type: 'sub-agent',
-    building: 'house',
     district: 'city-of-london',
-    status: 'Active — drafting LinkedIn post',
+    coords: [-0.0920, 51.5170],
+    status: 'live',
+    statusText: 'Drafting LinkedIn post',
     desc: 'Pulse manages Manraj\'s personal LinkedIn presence. Posts, comments, engagement — building the founder brand.',
-    color: 0x7c3aed,
+    color: '#7c3aed',
     activities: [
       'published a LinkedIn post on hiring trends',
       'engaged with 8 comments on latest post',
-      'is drafting a thread on visa sponsorship',
+      'drafting a thread on visa sponsorship',
       'analysed post performance metrics',
       'scheduled tomorrow\'s post',
       'replied to 3 DMs',
@@ -79,7 +83,15 @@ const AGENTS = [
   }
 ];
 
-function generateActivity() {
+// Status type → display info
+const STATUS_DISPLAY = {
+  live:    { label: 'Live', color: '#16a34a', dot: '🟢' },
+  idle:    { label: 'Idle', color: '#d97706', dot: '🟡' },
+  stuck:   { label: 'Stuck', color: '#dc2626', dot: '🔴' },
+  offline: { label: 'Offline', color: '#6b7280', dot: '⚪' },
+};
+
+function getRandomActivity() {
   const agent = AGENTS[Math.floor(Math.random() * AGENTS.length)];
   const activity = agent.activities[Math.floor(Math.random() * agent.activities.length)];
   const now = new Date();
