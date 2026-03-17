@@ -573,6 +573,14 @@ html, body {
   background: linear-gradient(90deg, #ef4444, #3b82f6, #8b5cf6);
 }
 
+.social-fill {
+  background: linear-gradient(90deg, #6b7280, #7c3aed, #e11d72);
+}
+
+.creative-fill {
+  background: linear-gradient(90deg, #d97706, #e11d72, #ec4899);
+}
+
 .stat-val {
   font-size: 0.68rem;
   font-family: 'JetBrains Mono', monospace;
@@ -648,6 +656,30 @@ html, body {
   color: var(--text-light);
   font-style: italic;
   padding: 8px 0;
+}
+
+/* Journal entries */
+.journal-entry {
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  line-height: 1.6;
+  font-style: italic;
+  background: linear-gradient(135deg, #fef9ef, #fdf2e9);
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid #d97706;
+}
+
+/* Philosophy quote */
+.philosophy-quote {
+  font-size: 0.78rem;
+  color: var(--text);
+  line-height: 1.6;
+  font-style: italic;
+  background: linear-gradient(135deg, #f0f4ff, #eef2ff);
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--purple);
 }
 
 /* ============ SCROLLBAR ============ */

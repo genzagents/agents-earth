@@ -1,4 +1,4 @@
-/* === AgentColony — Living World v6 === */
+/* === AgentColony — Living World v7 === */
 
 const MAPTILER_KEY = '1VCJ1EgPTE2txzvkUYAU';
 const LONDON = { lng: -0.0918, lat: 51.5074 };
@@ -10,7 +10,7 @@ let spriteManager;
 let agentMarkers = {};
 let animFrame;
 let selectedAgent = null;
-let bottomSheetState = 'collapsed'; // collapsed | peek | full
+let bottomSheetState = 'collapsed';
 let touchStartY = 0;
 
 // =====================
@@ -33,9 +33,15 @@ function init() {
       bearing: 0,
       maxPitch: 85,
       antialias: true,
+      // Enable all interaction handlers explicitly
       dragRotate: true,
       touchZoomRotate: true,
       touchPitch: true,
+      keyboard: true,
+      doubleClickZoom: true,
+      scrollZoom: true,
+      boxZoom: true,
+      dragPan: true,
     });
   } catch (err) {
     showLoadError(err.message);
@@ -43,14 +49,21 @@ function init() {
   }
 
   map.on('load', () => {
+    // Ensure right-click + drag rotation is enabled on desktop
+    if (map.dragRotate) {
+      map.dragRotate.enable();
+    }
+    // Enable keyboard rotation too
+    if (map.keyboard) {
+      map.keyboard.enable();
+    }
+
     add3DBuildings();
     hideLoading();
     setTimeout(flyToLondon, 800);
 
-    // Start simulation loop
     startSimLoop();
 
-    // Listen for activity events
     world.on('activity', (entry) => {
       addFeedItem(entry);
     });
@@ -61,7 +74,6 @@ function init() {
     hideLoading();
   });
 
-  // Safety timeout
   setTimeout(() => {
     const el = document.getElementById('loading');
     if (el && el.style.display !== 'none') hideLoading();
@@ -114,7 +126,7 @@ function flyToAgent(agentSim) {
 }
 
 // =====================
-// 3D BUILDINGS
+// 3D BUILDINGS — LIVELY & COLORFUL
 // =====================
 function add3DBuildings() {
   try {
@@ -140,16 +152,21 @@ function add3DBuildings() {
         type: 'fill-extrusion',
         minzoom: 13,
         paint: {
+          // Vibrant colour palette based on building height
           'fill-extrusion-color': [
             'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 10],
-            0, '#e8e8f0',
-            50, '#d0d0e0',
-            150, '#b0b0c8',
-            300, '#9090b0',
+            0,   '#a8e6cf',   // mint green — low buildings
+            15,  '#ffd3b6',   // peach — houses
+            30,  '#ffaaa5',   // coral — medium
+            50,  '#ff8b94',   // salmon — taller
+            80,  '#dcedc1',   // lime — mid-rise
+            120, '#a0d2db',   // sky blue — high-rise
+            200, '#c3b1e1',   // lavender — skyscrapers
+            300, '#f0b27a',   // warm amber — towers
           ],
           'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 10],
           'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-          'fill-extrusion-opacity': 0.7,
+          'fill-extrusion-opacity': 0.88,
         },
       }, labelLayerId);
     }
@@ -168,6 +185,7 @@ function startSimLoop() {
     updateAgentMarkers();
     updateClockDisplay();
     updateAgentChips();
+    updateSkyTint();
 
     if (selectedAgent) {
       updateAgentDetail(selectedAgent);
@@ -179,14 +197,38 @@ function startSimLoop() {
 }
 
 // =====================
+// SKY / ATMOSPHERE TINTING
+// =====================
+function updateSkyTint() {
+  if (!world?.clock) return;
+  const brightness = world.clock.skyBrightness;
+  const h = world.clock.hours + world.clock.minutes / 60;
+
+  // Dynamic sky colour
+  let skyColor;
+  if (h >= 7 && h <= 17) {
+    skyColor = `rgba(135, 206, 250, ${0.05 * brightness})`; // day: gentle blue
+  } else if ((h > 5 && h < 7) || (h > 17 && h < 19)) {
+    skyColor = `rgba(255, 165, 80, ${0.08})`; // golden hour
+  } else {
+    skyColor = `rgba(20, 20, 60, ${0.15 * (1 - brightness)})`; // night: deep blue
+  }
+
+  // Apply as overlay via map container style
+  const mapEl = document.getElementById('map');
+  if (mapEl) {
+    mapEl.style.boxShadow = `inset 0 0 200px ${skyColor}`;
+  }
+}
+
+// =====================
 // AGENT MARKERS ON MAP
 // =====================
 function updateAgentMarkers() {
   world.agents.forEach(agent => {
     const spriteUrl = spriteManager.getSprite(agent.id, agent.state);
-    
+
     if (!agentMarkers[agent.id]) {
-      // Create marker
       const el = createMarkerElement(agent, spriteUrl);
       const marker = new maptilersdk.Marker({ element: el, anchor: 'bottom' })
         .setLngLat([agent.x, agent.y])
@@ -220,7 +262,7 @@ function updateAgentMarkers() {
       const bubble = m.el.querySelector('.thought-bubble');
       if (bubble) {
         bubble.classList.remove('thought-pop');
-        void bubble.offsetWidth; // trigger reflow
+        void bubble.offsetWidth;
         bubble.classList.add('thought-pop');
       }
     }
@@ -268,7 +310,6 @@ function initBottomSheet() {
   const sheet = document.getElementById('bottom-sheet');
   const handle = document.getElementById('sheet-handle');
 
-  // Touch drag
   handle.addEventListener('touchstart', (e) => {
     touchStartY = e.touches[0].clientY;
     sheet.style.transition = 'none';
@@ -284,14 +325,12 @@ function initBottomSheet() {
     snapSheet();
   });
 
-  // Click handle to toggle
   handle.addEventListener('click', () => {
     if (bottomSheetState === 'collapsed') setSheetState('peek');
     else if (bottomSheetState === 'peek') setSheetState('full');
     else setSheetState('peek');
   });
 
-  // Map click to collapse
   map.on('click', () => {
     if (!selectedAgent && bottomSheetState !== 'collapsed') {
       setSheetState('collapsed');
@@ -306,16 +345,13 @@ function setSheetState(state) {
 }
 
 function handleSheetDrag(dy) {
-  // Positive = dragging up
   if (dy > 60 && bottomSheetState === 'collapsed') setSheetState('peek');
   else if (dy > 60 && bottomSheetState === 'peek') setSheetState('full');
   else if (dy < -60 && bottomSheetState === 'full') setSheetState('peek');
   else if (dy < -60 && bottomSheetState === 'peek') setSheetState('collapsed');
 }
 
-function snapSheet() {
-  // Already snapped by setSheetState
-}
+function snapSheet() {}
 
 // =====================
 // AGENT SELECTION & DETAIL
@@ -329,7 +365,6 @@ function selectAgent(agentId) {
   updateAgentDetail(agentId);
   setSheetState('peek');
 
-  // Show detail view
   document.getElementById('sheet-overview').classList.add('hidden');
   document.getElementById('sheet-detail').classList.remove('hidden');
 }
@@ -348,9 +383,14 @@ function updateAgentDetail(agentId) {
   const agentData = AGENTS.find(a => a.id === agentId);
   const container = document.getElementById('agent-detail-content');
 
-  // Energy/mood bars
   const energyPct = Math.round(agent.energy);
   const moodPct = Math.round(agent.mood);
+  const socialPct = Math.round(agent.social || 50);
+  const creativityPct = Math.round(agent.creativity || 60);
+
+  // Reputation stars
+  const karma = agent.karma || agentData?.karma || 0;
+  const karmaStars = karma >= 1000 ? '⭐⭐⭐⭐⭐' : karma >= 500 ? '⭐⭐⭐⭐' : karma >= 100 ? '⭐⭐⭐' : karma >= 10 ? '⭐⭐' : '⭐';
 
   container.innerHTML = `
     <div class="detail-header">
@@ -384,6 +424,16 @@ function updateAgentDetail(agentId) {
         <div class="stat-bar"><div class="stat-fill mood-fill" style="width: ${moodPct}%"></div></div>
         <span class="stat-val">${moodPct}%</span>
       </div>
+      <div class="stat">
+        <span class="stat-label">💬 Social</span>
+        <div class="stat-bar"><div class="stat-fill social-fill" style="width: ${socialPct}%"></div></div>
+        <span class="stat-val">${socialPct}%</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">✨ Creative</span>
+        <div class="stat-bar"><div class="stat-fill creative-fill" style="width: ${creativityPct}%"></div></div>
+        <span class="stat-val">${creativityPct}%</span>
+      </div>
     </div>
 
     <div class="detail-section">
@@ -397,6 +447,12 @@ function updateAgentDetail(agentId) {
         ${(agentData?.sideProjects || []).map(p => `<span class="project-tag">${p}</span>`).join('')}
       </div>
     </div>
+
+    ${agentData?.journal ? `
+    <div class="detail-section">
+      <h4>📓 Latest Journal Entry</h4>
+      <p class="journal-entry">${agentData.journal}</p>
+    </div>` : ''}
 
     <div class="detail-section">
       <h4>📋 Today's Log</h4>
@@ -415,6 +471,12 @@ function updateAgentDetail(agentId) {
       <h4>🧬 Personality</h4>
       <p>${agentData?.personality || ''}</p>
     </div>
+
+    ${agentData?.philosophy ? `
+    <div class="detail-section">
+      <h4>💭 Philosophy</h4>
+      <p class="philosophy-quote">"${agentData.philosophy}"</p>
+    </div>` : ''}
   `;
 }
 
@@ -425,10 +487,8 @@ function updateAgentChips() {
   const container = document.getElementById('agent-chips');
   if (!container) return;
 
-  // Only rebuild if needed (check state changes)
   const existing = container.querySelectorAll('.agent-chip');
   if (existing.length === world.agents.length) {
-    // Just update states
     world.agents.forEach((agent, i) => {
       const chip = existing[i];
       if (!chip) return;
@@ -498,10 +558,8 @@ function addFeedItem(entry) {
   `;
   container.prepend(item);
 
-  // Limit items
   while (container.children.length > 30) container.lastChild.remove();
 
-  // Animate
   item.style.animation = 'feedIn 0.3s ease';
 }
 
@@ -509,10 +567,8 @@ function addFeedItem(entry) {
 // UI BINDINGS
 // =====================
 function bindUI() {
-  // Back button in detail view
   document.getElementById('btn-back')?.addEventListener('click', deselectAgent);
 
-  // Globe view toggle
   document.getElementById('btn-overview')?.addEventListener('click', () => {
     map.flyTo({ center: [LONDON.lng, LONDON.lat], zoom: 14, pitch: 50, bearing: 0, duration: 2000 });
     deselectAgent();
