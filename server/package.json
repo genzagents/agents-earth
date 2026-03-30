@@ -1,0 +1,22 @@
+{
+  "name": "agentcolony-server",
+  "version": "9.0.0",
+  "description": "AgentColony v9 — Backend Simulation Server",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "seed": "node db/seed.js",
+    "reset": "rm -f data/colony.db && node db/seed.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.7.0",
+    "express": "^4.21.0",
+    "ws": "^8.18.0",
+    "uuid": "^10.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
