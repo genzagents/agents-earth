@@ -10,7 +10,13 @@ WORKDIR /app/server
 COPY server/package.json server/package-lock.json* ./
 RUN npm install --production
 
-COPY server/ ./
+# Copy server files (excluding data directory)
+COPY server/db/ ./db/
+COPY server/middleware/ ./middleware/
+COPY server/routes/ ./routes/
+COPY server/simulation/ ./simulation/
+COPY server/utils/ ./utils/
+COPY server/index.js server/ws.js ./
 
 # Create data directory and seed the database
 RUN mkdir -p data && node db/seed.js
