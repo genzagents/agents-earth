@@ -1510,6 +1510,34 @@ html, body {
   border-radius: 3px; 
 }
 
+/* ============ HOME MODAL STYLES ============ */
+.home-info {
+  padding: 20px;
+}
+.home-name {
+  font-size: 20px;
+  font-weight: 700;
+  color: white;
+}
+.home-district {
+  font-size: 13px;
+  color: rgba(255,255,255,0.5);
+  margin-top: 4px;
+}
+.home-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.home-item {
+  padding: 4px 12px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 8px;
+  font-size: 13px;
+  color: rgba(255,255,255,0.7);
+}
+
 /* === Skill Bars === */
 .skills-list { display: flex; flex-direction: column; gap: 8px; }
 .skill-row { }
