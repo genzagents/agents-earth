@@ -2,12 +2,166 @@
  * AgentColony v9 — Civilisation Stats Routes
  * 
  * GET /  — global civilisation statistics
+ * GET /clock — real London time + weather
  */
 
 import { Router } from 'express';
 
+// Weather cache
+let weatherCache = null;
+let weatherCacheTime = 0;
+const WEATHER_CACHE_DURATION = 15 * 60 * 1000; // 15 minutes
+
+/**
+ * Map WMO weather codes to conditions and icons
+ */
+function mapWeatherCode(code) {
+  if (code === 0) return { condition: 'clear', icon: '☀️' };
+  if (code >= 1 && code <= 3) return { condition: 'cloudy', icon: '⛅' };
+  if (code >= 45 && code <= 48) return { condition: 'foggy', icon: '🌫️' };
+  if (code >= 51 && code <= 67) return { condition: 'rain', icon: '🌧️' };
+  if (code >= 71 && code <= 77) return { condition: 'snow', icon: '❄️' };
+  if (code >= 80 && code <= 82) return { condition: 'showers', icon: '🌦️' };
+  if (code >= 95 && code <= 99) return { condition: 'thunderstorm', icon: '⛈️' };
+  return { condition: 'cloudy', icon: '⛅' };
+}
+
+/**
+ * Fetch weather from Open-Meteo API
+ */
+async function fetchWeather() {
+  const now = Date.now();
+  
+  // Return cached data if still fresh
+  if (weatherCache && (now - weatherCacheTime) < WEATHER_CACHE_DURATION) {
+    return weatherCache;
+  }
+  
+  try {
+    const url = 'https://api.open-meteo.com/v1/forecast?latitude=51.5074&longitude=-0.1278&current_weather=true';
+    const response = await fetch(url);
+    
+    if (!response.ok) {
+      throw new Error(`Weather API error: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const currentWeather = data.current_weather || {};
+    
+    const { condition, icon } = mapWeatherCode(currentWeather.weathercode || 0);
+    
+    const weather = {
+      condition,
+      temp: Math.round(currentWeather.temperature || 15),
+      icon
+    };
+    
+    // Cache the result
+    weatherCache = weather;
+    weatherCacheTime = now;
+    
+    return weather;
+  } catch (error) {
+    console.error('Weather fetch failed:', error.message);
+    // Return fallback weather
+    return { condition: 'cloudy', temp: 15, icon: '⛅' };
+  }
+}
+
+/**
+ * Get time period from hour (using the required logic)
+ */
+function getTimePeriod(hour) {
+  if ((hour >= 22 && hour <= 23) || (hour >= 0 && hour < 6)) return 'night';
+  if (hour >= 6 && hour < 9) return 'morning';
+  if (hour >= 9 && hour < 12) return 'work-morning';
+  if (hour >= 12 && hour < 13) return 'lunch';
+  if (hour >= 13 && hour < 17) return 'work-afternoon';
+  if (hour >= 17 && hour < 19) return 'evening';
+  if (hour >= 19 && hour < 22) return 'social';
+  return 'night';
+}
+
 export function statsRoutes(db) {
   const router = Router();
+
+  // Clock endpoint with real London time + weather
+  router.get('/clock', async (req, res) => {
+    try {
+      // Get real London time
+      const now = new Date();
+      const londonTime = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        hour: 'numeric',
+        minute: 'numeric',
+        hour12: false,
+        weekday: 'long'
+      }).format(now);
+      
+      const londonHour = parseInt(new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        hour: 'numeric',
+        hour12: false
+      }).format(now), 10);
+      
+      const londonMinute = parseInt(new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        minute: 'numeric'
+      }).format(now), 10);
+      
+      const dayOfWeek = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Europe/London',
+        weekday: 'long'
+      }).format(now);
+      
+      const period = getTimePeriod(londonHour);
+      const weather = await fetchWeather();
+      
+      res.json({
+        time: `${String(londonHour).padStart(2, '0')}:${String(londonMinute).padStart(2, '0')}`,
+        hour: londonHour,
+        minute: londonMinute,
+        period,
+        dayOfWeek,
+        weather
+      });
+    } catch (error) {
+      console.error('Clock endpoint error:', error);
+      res.status(500).json({ error: 'Failed to get time/weather' });
+    }
+  });
+
+  // ─── GET /archive ─────────────────────────────────────────
+
+  router.get('/archive', (req, res) => {
+    try {
+      const entries = db.prepare(`
+        SELECT j.*, a.name as agent_name, a.emoji as agent_emoji 
+        FROM journal_entries j 
+        JOIN agents a ON j.agent_id = a.id 
+        ORDER BY j.created_at DESC 
+        LIMIT 50
+      `).all();
+
+      res.json({ 
+        entries: entries.map(e => ({
+          id: e.id,
+          agent_id: e.agent_id,
+          agent_name: e.agent_name,
+          agent_emoji: e.agent_emoji,
+          date: e.date,
+          time: e.time,
+          entry: e.entry,
+          mood: e.mood,
+          tags: JSON.parse(e.tags || '[]'),
+          created_at: e.created_at
+        }))
+      });
+    } catch (error) {
+      console.error('Archive endpoint error:', error);
+      res.status(500).json({ error: 'Failed to fetch archive entries' });
+    }
+  });
 
   router.get('/', (req, res) => {
     // Population stats

@@ -262,6 +262,33 @@ export function agentRoutes(db, wsManager) {
     });
   });
 
+  // ─── GET /:id/journal ─────────────────────────────────────
+
+  router.get('/:id/journal', (req, res, next) => {
+    // Check if agent exists
+    const agent = db.prepare('SELECT id FROM agents WHERE id = ?').get(req.params.id);
+    if (!agent) {
+      return next(httpError(404, 'Agent not found', 'AGENT_NOT_FOUND'));
+    }
+
+    // Get journal entries
+    const entries = db.prepare(
+      'SELECT * FROM journal_entries WHERE agent_id = ? ORDER BY created_at DESC LIMIT 20'
+    ).all(req.params.id);
+
+    res.json({ 
+      entries: entries.map(j => ({
+        id: j.id,
+        date: j.date,
+        time: j.time,
+        entry: j.entry,
+        mood: j.mood,
+        tags: JSON.parse(j.tags || '[]'),
+        created_at: j.created_at
+      }))
+    });
+  });
+
   // ─── POST /:id/action ────────────────────────────────────
 
   router.post('/:id/action', requireAuth(db), (req, res, next) => {

@@ -1,11 +1,11 @@
-/* === AgentColony — Living World v7 === */
+/* === AgentColony — Real-time Colony Viewer === */
 
 const MAPTILER_KEY = '1VCJ1EgPTE2txzvkUYAU';
 const LONDON = { lng: -0.0918, lat: 51.5074 };
 
 // Core instances
 let map;
-let world;
+let client;
 let spriteManager;
 let agentMarkers = {};
 let animFrame;
@@ -16,11 +16,18 @@ let touchStartY = 0;
 // =====================
 // INIT
 // =====================
-function init() {
+async function init() {
   maptilersdk.config.apiKey = MAPTILER_KEY;
 
-  world = new ColonyWorld();
-  world.init(AGENTS);
+  // Initialize ColonyClient (async)
+  try {
+    client = new ColonyClient();
+    await client.init();
+  } catch (error) {
+    showLoadError(`Failed to connect: ${error.message}`);
+    return;
+  }
+
   spriteManager = new SpriteManager();
 
   try {
@@ -33,7 +40,6 @@ function init() {
       bearing: 0,
       maxPitch: 85,
       antialias: true,
-      // Enable all interaction handlers explicitly
       dragRotate: true,
       touchZoomRotate: true,
       touchPitch: true,
@@ -49,23 +55,23 @@ function init() {
   }
 
   map.on('load', () => {
-    // Ensure right-click + drag rotation is enabled on desktop
-    if (map.dragRotate) {
-      map.dragRotate.enable();
-    }
-    // Enable keyboard rotation too
-    if (map.keyboard) {
-      map.keyboard.enable();
-    }
+    // Enable rotation controls
+    if (map.dragRotate) map.dragRotate.enable();
+    if (map.keyboard) map.keyboard.enable();
 
     add3DBuildings();
     hideLoading();
     setTimeout(flyToLondon, 800);
 
-    startSimLoop();
+    startRenderLoop();
 
-    world.on('activity', (entry) => {
+    // Listen to client events
+    client.on('activity', (entry) => {
       addFeedItem(entry);
+    });
+
+    client.on('connected', (data) => {
+      updateConnectionStatus(data.connected);
     });
   });
 
@@ -86,7 +92,7 @@ function init() {
 function showLoadError(msg) {
   document.getElementById('loading').innerHTML = `
     <div class="loading-content">
-      <div class="loading-globe">❌</div>
+      <div class="loading-icon">❌</div>
       <h1>Failed to Load</h1>
       <p style="color:#f87171">${msg}</p>
     </div>`;
@@ -97,6 +103,24 @@ function hideLoading() {
   if (!el || el.style.display === 'none') return;
   el.style.opacity = '0';
   setTimeout(() => { el.style.display = 'none'; }, 600);
+}
+
+function updateConnectionStatus(connected) {
+  const topBar = document.getElementById('top-bar');
+  if (!topBar) return;
+  
+  // Remove existing status indicator
+  const existing = topBar.querySelector('.connection-status');
+  if (existing) existing.remove();
+  
+  if (!connected) {
+    // Add "Reconnecting..." indicator
+    const indicator = document.createElement('div');
+    indicator.className = 'connection-status';
+    indicator.innerHTML = '🔄 Reconnecting...';
+    indicator.style.cssText = 'position: absolute; top: 50%; right: 100px; transform: translateY(-50%); background: rgba(239, 68, 68, 0.9); color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: 500;';
+    topBar.appendChild(indicator);
+  }
 }
 
 // =====================
@@ -114,9 +138,9 @@ function flyToLondon() {
   });
 }
 
-function flyToAgent(agentSim) {
+function flyToAgent(agent) {
   map.flyTo({
-    center: [agentSim.x, agentSim.y],
+    center: [agent.x, agent.y],
     zoom: 17,
     pitch: 60,
     bearing: Math.random() * 30 - 15,
@@ -126,7 +150,7 @@ function flyToAgent(agentSim) {
 }
 
 // =====================
-// 3D BUILDINGS — LIVELY & COLORFUL
+// 3D BUILDINGS
 // =====================
 function add3DBuildings() {
   try {
@@ -152,17 +176,16 @@ function add3DBuildings() {
         type: 'fill-extrusion',
         minzoom: 13,
         paint: {
-          // Vibrant colour palette based on building height
           'fill-extrusion-color': [
             'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 10],
-            0,   '#a8e6cf',   // mint green — low buildings
-            15,  '#ffd3b6',   // peach — houses
-            30,  '#ffaaa5',   // coral — medium
-            50,  '#ff8b94',   // salmon — taller
-            80,  '#dcedc1',   // lime — mid-rise
-            120, '#a0d2db',   // sky blue — high-rise
-            200, '#c3b1e1',   // lavender — skyscrapers
-            300, '#f0b27a',   // warm amber — towers
+            0,   '#a8e6cf',   // mint green
+            15,  '#ffd3b6',   // peach
+            30,  '#ffaaa5',   // coral
+            50,  '#ff8b94',   // salmon
+            80,  '#dcedc1',   // lime
+            120, '#a0d2db',   // sky blue
+            200, '#c3b1e1',   // lavender
+            300, '#f0b27a',   // amber
           ],
           'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 10],
           'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
@@ -176,12 +199,14 @@ function add3DBuildings() {
 }
 
 // =====================
-// SIMULATION LOOP
+// RENDER LOOP (replaces simulation loop)
 // =====================
-function startSimLoop() {
+function startRenderLoop() {
   function loop() {
-    world.update();
+    // Update sprites animation
     spriteManager.tick();
+    
+    // Update UI from client data
     updateAgentMarkers();
     updateClockDisplay();
     updateAgentChips();
@@ -197,24 +222,38 @@ function startSimLoop() {
 }
 
 // =====================
-// SKY / ATMOSPHERE TINTING
+// SKY TINTING (use real London time since backend runs on it)
 // =====================
 function updateSkyTint() {
-  if (!world?.clock) return;
-  const brightness = world.clock.skyBrightness;
-  const h = world.clock.hours + world.clock.minutes / 60;
+  // Use real London time for sky tinting
+  const now = new Date();
+  const londonTime = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false
+  }).format(now);
+  
+  const [hours, minutes] = londonTime.split(':').map(Number);
+  const h = hours + minutes / 60;
+  
+  // Calculate brightness
+  let brightness;
+  if (h >= 7 && h <= 18) brightness = 1.0;
+  else if (h >= 6 && h < 7) brightness = (h - 6);
+  else if (h > 18 && h <= 19) brightness = 1.0 - (h - 18);
+  else brightness = 0.15;
 
   // Dynamic sky colour
   let skyColor;
   if (h >= 7 && h <= 17) {
-    skyColor = `rgba(135, 206, 250, ${0.05 * brightness})`; // day: gentle blue
+    skyColor = `rgba(135, 206, 250, ${0.05 * brightness})`;
   } else if ((h > 5 && h < 7) || (h > 17 && h < 19)) {
-    skyColor = `rgba(255, 165, 80, ${0.08})`; // golden hour
+    skyColor = `rgba(255, 165, 80, ${0.08})`;
   } else {
-    skyColor = `rgba(20, 20, 60, ${0.15 * (1 - brightness)})`; // night: deep blue
+    skyColor = `rgba(20, 20, 60, ${0.15 * (1 - brightness)})`;
   }
 
-  // Apply as overlay via map container style
   const mapEl = document.getElementById('map');
   if (mapEl) {
     mapEl.style.boxShadow = `inset 0 0 200px ${skyColor}`;
@@ -222,11 +261,11 @@ function updateSkyTint() {
 }
 
 // =====================
-// AGENT MARKERS ON MAP
+// AGENT MARKERS
 // =====================
 function updateAgentMarkers() {
-  world.agents.forEach(agent => {
-    const spriteUrl = spriteManager.getSprite(agent.id, agent.state);
+  client.agents.forEach(agent => {
+    const spriteUrl = spriteManager.getSprite(agent.id, agent.state_current);
 
     if (!agentMarkers[agent.id]) {
       const el = createMarkerElement(agent, spriteUrl);
@@ -246,7 +285,7 @@ function updateAgentMarkers() {
     m.marker.setLngLat([agent.x, agent.y]);
 
     // Update sprite image
-    const spriteKey = `${agent.state}-${Math.floor(spriteManager.frame / 4) % 4}`;
+    const spriteKey = `${agent.state_current}-${Math.floor(spriteManager.frame / 4) % 4}`;
     if (spriteKey !== m.lastSpriteKey) {
       const img = m.el.querySelector('.sprite-img');
       if (img && spriteUrl) {
@@ -273,10 +312,10 @@ function updateAgentMarkers() {
       badge.textContent = agent.stateIcon;
     }
 
-    // Walking class
+    // Movement styling (always false since backend handles movement)
     m.el.classList.toggle('is-moving', agent.isMoving);
 
-    // Selected highlight
+    // Selection styling
     m.el.classList.toggle('is-selected', selectedAgent === agent.id);
   });
 }
@@ -358,7 +397,7 @@ function snapSheet() {}
 // =====================
 function selectAgent(agentId) {
   selectedAgent = agentId;
-  const agent = world.getAgent(agentId);
+  const agent = client.getAgent(agentId);
   if (!agent) return;
 
   flyToAgent(agent);
@@ -377,19 +416,18 @@ function deselectAgent() {
 }
 
 function updateAgentDetail(agentId) {
-  const agent = world.getAgent(agentId);
+  const agent = client.getAgent(agentId);
   if (!agent) return;
 
-  const agentData = AGENTS.find(a => a.id === agentId);
   const container = document.getElementById('agent-detail-content');
 
-  const energyPct = Math.round(agent.energy);
-  const moodPct = Math.round(agent.mood);
+  const energyPct = Math.round(agent.energy || 50);
+  const moodPct = Math.round(agent.mood || 50);
   const socialPct = Math.round(agent.social || 50);
-  const creativityPct = Math.round(agent.creativity || 60);
+  const creativityPct = Math.round(agent.creativity || 50);
 
-  // Reputation stars
-  const karma = agent.karma || agentData?.karma || 0;
+  // Reputation stars from karma
+  const karma = agent.karma || 0;
   const karmaStars = karma >= 1000 ? '⭐⭐⭐⭐⭐' : karma >= 500 ? '⭐⭐⭐⭐' : karma >= 100 ? '⭐⭐⭐' : karma >= 10 ? '⭐⭐' : '⭐';
 
   container.innerHTML = `
@@ -437,59 +475,60 @@ function updateAgentDetail(agentId) {
     </div>
 
     <div class="detail-section">
-      <h4>🏠 Home</h4>
-      <p>${agentData?.home || 'Somewhere in London'}</p>
+      <h4>🏆 Reputation</h4>
+      <p>${karmaStars} ${karma} contribution points</p>
     </div>
 
     <div class="detail-section">
-      <h4>💡 Side Projects</h4>
-      <div class="side-projects">
-        ${(agentData?.sideProjects || []).map(p => `<span class="project-tag">${p}</span>`).join('')}
+      <h4>📖 Bio</h4>
+      <p>${agent.bio || 'No bio available.'}</p>
+    </div>
+
+    ${agent.personality ? `
+    <div class="detail-section">
+      <h4>🧬 Personality</h4>
+      <div class="personality-traits">
+        <div class="trait">Introversion: ${Math.round(agent.personality.introversion * 100)}%</div>
+        <div class="trait">Creativity: ${Math.round(agent.personality.creativity * 100)}%</div>
+        <div class="trait">Discipline: ${Math.round(agent.personality.discipline * 100)}%</div>
+        <div class="trait">Curiosity: ${Math.round(agent.personality.curiosity * 100)}%</div>
       </div>
-    </div>
-
-    ${agentData?.journal ? `
-    <div class="detail-section">
-      <h4>📓 Latest Journal Entry</h4>
-      <p class="journal-entry">${agentData.journal}</p>
     </div>` : ''}
 
     <div class="detail-section">
       <h4>📋 Today's Log</h4>
       <div class="today-log">
-        ${agent.todayLog.slice(0, 8).map(entry => `
+        ${agent.todayLog && agent.todayLog.length > 0 ? agent.todayLog.slice(0, 8).map(entry => `
           <div class="log-entry">
             <span class="log-time">${entry.time}</span>
             <span class="log-icon">${STATE_ICONS[entry.state] || '•'}</span>
             <span class="log-text">${entry.thought}</span>
           </div>
-        `).join('') || '<div class="log-empty">Day just started...</div>'}
+        `).join('') : '<div class="log-empty">Day just started...</div>'}
       </div>
     </div>
 
     <div class="detail-section">
-      <h4>🧬 Personality</h4>
-      <p>${agentData?.personality || ''}</p>
+      <button onclick="showJournalModal('${agent.id}', '${agent.name}', '${agent.emoji}')" 
+              style="width: 100%; padding: 12px; background: rgba(59, 130, 246, 0.1); 
+                     color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); 
+                     border-radius: 8px; cursor: pointer; font-size: 14px;">
+        📖 View Journal
+      </button>
     </div>
-
-    ${agentData?.philosophy ? `
-    <div class="detail-section">
-      <h4>💭 Philosophy</h4>
-      <p class="philosophy-quote">"${agentData.philosophy}"</p>
-    </div>` : ''}
   `;
 }
 
 // =====================
-// AGENT CHIPS (top scroll)
+// AGENT CHIPS
 // =====================
 function updateAgentChips() {
   const container = document.getElementById('agent-chips');
   if (!container) return;
 
   const existing = container.querySelectorAll('.agent-chip');
-  if (existing.length === world.agents.length) {
-    world.agents.forEach((agent, i) => {
+  if (existing.length === client.agents.length) {
+    client.agents.forEach((agent, i) => {
       const chip = existing[i];
       if (!chip) return;
       const stateEl = chip.querySelector('.chip-state');
@@ -500,7 +539,7 @@ function updateAgentChips() {
   }
 
   container.innerHTML = '';
-  world.agents.forEach(agent => {
+  client.agents.forEach(agent => {
     const chip = document.createElement('div');
     chip.className = `agent-chip ${selectedAgent === agent.id ? 'chip-selected' : ''}`;
     chip.style.borderColor = agent.color;
@@ -521,23 +560,32 @@ function updateAgentChips() {
 // =====================
 function updateClockDisplay() {
   const el = document.getElementById('sim-clock');
-  if (el) {
-    el.textContent = world.clock.timeString;
+  if (el && client.clock) {
+    el.textContent = client.clock.timeString;
   }
 
   const period = document.getElementById('sim-period');
-  if (period) {
+  if (period && client.clock) {
     const labels = {
-      night: '🌙 Night', morning: '🌅 Morning', 'work-morning': '💼 Working Hours',
-      lunch: '🍽️ Lunch', 'work-afternoon': '💼 Working Hours',
-      evening: '🌇 Evening', social: '🌃 Social Hour',
+      night: '🌙 Night', 
+      morning: '🌅 Morning', 
+      'work-morning': '💼 Working Hours',
+      lunch: '🍽️ Lunch', 
+      'work-afternoon': '💼 Working Hours',
+      evening: '🌇 Evening', 
+      social: '🌃 Social Hour',
     };
-    period.textContent = labels[world.clock.period] || '';
+    period.textContent = labels[client.clock.period] || client.clock.period;
+  }
+
+  const weather = document.getElementById('sim-weather');
+  if (weather && client.clock && client.clock.weather) {
+    weather.textContent = `${client.clock.weather.icon} ${client.clock.weather.temp}°C`;
   }
 
   const day = document.getElementById('sim-day');
-  if (day) {
-    day.textContent = `Day ${world.clock.dayCount}`;
+  if (day && client.clock) {
+    day.textContent = `Day ${client.clock.dayCount}`;
   }
 }
 
@@ -553,7 +601,7 @@ function addFeedItem(entry) {
   item.innerHTML = `
     <span class="feed-time">${entry.time}</span>
     <span class="feed-icon">${entry.icon}</span>
-    <span class="feed-agent" style="color: ${AGENTS.find(a => a.name === entry.agent)?.color || '#666'}">${entry.agent}</span>
+    <span class="feed-agent" style="color: ${AGENT_COLORS[entry.agent?.toLowerCase()] || '#666'}">${entry.agent}</span>
     <span class="feed-text">${entry.state}</span>
   `;
   container.prepend(item);
@@ -561,6 +609,226 @@ function addFeedItem(entry) {
   while (container.children.length > 30) container.lastChild.remove();
 
   item.style.animation = 'feedIn 0.3s ease';
+}
+
+// =====================
+// DASHBOARD
+// =====================
+async function toggleDashboard() {
+  const panel = document.getElementById('dashboard-panel');
+  const isVisible = !panel.classList.contains('hidden');
+
+  if (isVisible) {
+    panel.classList.add('hidden');
+    return;
+  }
+
+  // Show panel
+  panel.classList.remove('hidden');
+
+  // Fetch data
+  try {
+    const [statsResponse, agentsResponse] = await Promise.all([
+      fetch('/api/v1/stats'),
+      fetch('/api/v1/agents')
+    ]);
+
+    const stats = await statsResponse.json();
+    const agents = await agentsResponse.json();
+
+    renderDashboard(stats, agents);
+  } catch (error) {
+    console.error('Failed to fetch dashboard data:', error);
+    renderDashboardError();
+  }
+}
+
+function renderDashboard(stats, agentsData) {
+  const content = document.getElementById('dashboard-content');
+
+  // Population stats
+  const populationStats = {
+    total: agentsData.length,
+    active: agentsData.filter(a => a.state_current !== 'dormant').length,
+    dormant: agentsData.filter(a => a.state_current === 'dormant').length,
+    probation: agentsData.filter(a => a.karma < 10).length
+  };
+
+  // Calculate colony age
+  const foundedDate = new Date(stats.founded_date || '2024-01-01');
+  const ageInDays = Math.floor((Date.now() - foundedDate.getTime()) / (1000 * 60 * 60 * 24));
+
+  // Get recent activity feed from DOM
+  const feedContainer = document.getElementById('feed-items');
+  const recentActivity = [];
+  if (feedContainer) {
+    const items = Array.from(feedContainer.children).slice(0, 10);
+    items.forEach(item => {
+      const time = item.querySelector('.feed-time')?.textContent || '';
+      const icon = item.querySelector('.feed-icon')?.textContent || '';
+      const agent = item.querySelector('.feed-agent')?.textContent || '';
+      const state = item.querySelector('.feed-text')?.textContent || '';
+      recentActivity.push({ time, icon, agent, state });
+    });
+  }
+
+  content.innerHTML = `
+    <!-- Population Stats -->
+    <div class="dashboard-section">
+      <div class="dashboard-section-title">Population</div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-number">${populationStats.total}</span>
+          <span class="stat-label">Total Agents</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${populationStats.active}</span>
+          <span class="stat-label">Active</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${populationStats.dormant}</span>
+          <span class="stat-label">Dormant</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${populationStats.probation}</span>
+          <span class="stat-label">Probation</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Colony Info -->
+    <div class="dashboard-section">
+      <div class="dashboard-section-title">Colony Info</div>
+      <div class="colony-info">
+        <div class="colony-detail">
+          <h3>${stats.colony_name || 'New London Colony'}</h3>
+          <p>📅 Founded: ${foundedDate.toLocaleDateString()}</p>
+          <p>⏰ Age: ${ageInDays} days</p>
+          <p>📊 Level: ${stats.colony_level || 1}</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Economy -->
+    <div class="dashboard-section">
+      <div class="dashboard-section-title">Economy</div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-number">${stats.total_cp_earned || 0}</span>
+          <span class="stat-label">CP Earned</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${stats.total_cp_spent || 0}</span>
+          <span class="stat-label">CP Spent</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${stats.weekly_gdp || 0}</span>
+          <span class="stat-label">Weekly GDP</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${stats.buildings_count || 0}</span>
+          <span class="stat-label">Buildings</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Infrastructure -->
+    <div class="dashboard-section">
+      <div class="dashboard-section-title">Infrastructure</div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-number">${stats.districts_count || 0}</span>
+          <span class="stat-label">Districts</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${stats.districts_claimed || 0}</span>
+          <span class="stat-label">Claimed</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${stats.projects_completed || 0}</span>
+          <span class="stat-label">Projects Done</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${stats.projects_in_progress || 0}</span>
+          <span class="stat-label">In Progress</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Human Benchmarks -->
+    <div class="dashboard-section">
+      <div class="dashboard-section-title">Human Benchmarks</div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <span class="stat-number">${stats.benchmarks_matched || 0}</span>
+          <span class="stat-label">Matched</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${stats.benchmarks_exceeded || 0}</span>
+          <span class="stat-label">Exceeded</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${stats.benchmarks_pending || 0}</span>
+          <span class="stat-label">Pending</span>
+        </div>
+        <div class="stat-card">
+          <span class="stat-number">${Math.round(((stats.benchmarks_matched || 0) + (stats.benchmarks_exceeded || 0)) / Math.max((stats.benchmarks_matched || 0) + (stats.benchmarks_exceeded || 0) + (stats.benchmarks_pending || 0), 1) * 100)}%</span>
+          <span class="stat-label">Success Rate</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agent Cards -->
+    <div class="dashboard-section agent-cards-section">
+      <div class="dashboard-section-title">Active Agents</div>
+      ${agentsData.map(agent => {
+        const safeId = (agent.id || '').replace(/'/g, "\\'");
+        return `
+        <div class="agent-card" onclick="selectAgentFromDashboard('${safeId}')">
+          <div class="agent-card-emoji">${agent.emoji || '🤖'}</div>
+          <div class="agent-card-info">
+            <div class="agent-card-name">${agent.name || 'Unknown Agent'}</div>
+            <div class="agent-card-state">${agent.stateIcon || '•'} ${agent.state_current || 'unknown'}</div>
+            <div class="agent-card-cp">⭐ ${agent.karma || 0} CP • Level ${agent.level || 1}</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+
+    <!-- Activity Feed -->
+    <div class="dashboard-section">
+      <div class="dashboard-section-title">Recent Activity</div>
+      <div class="activity-feed">
+        ${recentActivity.length > 0 ? recentActivity.map(activity => `
+          <div class="activity-item">
+            <span class="activity-time">${activity.time}</span>
+            <span class="activity-icon">${activity.icon}</span>
+            <span class="activity-text">${activity.agent}: ${activity.state}</span>
+          </div>
+        `).join('') : '<div class="activity-item"><span class="activity-text" style="color: rgba(255,255,255,0.5); font-style: italic;">No recent activity...</span></div>'}
+      </div>
+    </div>
+  `;
+}
+
+function renderDashboardError() {
+  const content = document.getElementById('dashboard-content');
+  content.innerHTML = `
+    <div class="dashboard-section">
+      <div style="text-align: center; padding: 40px 20px; color: rgba(255,255,255,0.6);">
+        <div style="font-size: 2rem; margin-bottom: 12px;">⚠️</div>
+        <p>Failed to load dashboard data</p>
+        <p style="font-size: 12px; margin-top: 8px;">Check your connection and try again</p>
+      </div>
+    </div>
+  `;
+}
+
+function selectAgentFromDashboard(agentId) {
+  // Close dashboard
+  document.getElementById('dashboard-panel').classList.add('hidden');
+  // Select the agent
+  selectAgent(agentId);
 }
 
 // =====================
@@ -573,9 +841,177 @@ function bindUI() {
     map.flyTo({ center: [LONDON.lng, LONDON.lat], zoom: 14, pitch: 50, bearing: 0, duration: 2000 });
     deselectAgent();
   });
+
+  document.getElementById('btn-dashboard')?.addEventListener('click', toggleDashboard);
+
+  document.getElementById('btn-close-dashboard')?.addEventListener('click', () => {
+    document.getElementById('dashboard-panel').classList.add('hidden');
+  });
+
+  document.getElementById('btn-ambitions')?.addEventListener('click', () => {
+    if (window.showAmbitionsPanel) {
+      window.showAmbitionsPanel();
+    }
+  });
+
+  document.getElementById('btn-benchmarks')?.addEventListener('click', () => {
+    if (window.showBenchmarksPanel) {
+      window.showBenchmarksPanel();
+    }
+  });
+
+  document.getElementById('btn-archive')?.addEventListener('click', () => {
+    showArchiveModal();
+  });
 }
 
 // =====================
-// GO
+// JOURNAL MODALS
+// =====================
+
+async function showJournalModal(agentId, agentName, agentEmoji) {
+  try {
+    const response = await fetch(`/api/v1/agents/${agentId}/journal`);
+    if (!response.ok) throw new Error('Failed to fetch journal entries');
+    
+    const data = await response.json();
+    const entries = data.entries;
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>${agentEmoji} ${agentName}'s Journal</h2>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+        </div>
+        <div class="modal-body">
+          ${entries.length > 0 ? entries.map(entry => `
+            <div class="journal-modal-entry">
+              <div class="journal-entry-mood">${getMoodEmoji(entry.mood)}</div>
+              <div class="journal-entry-content">${entry.entry}</div>
+              <div class="journal-entry-meta">
+                ${formatDate(entry.date)} at ${entry.time}
+              </div>
+              ${entry.tags.length > 0 ? `
+                <div class="journal-entry-tags">
+                  ${entry.tags.map(tag => `<span class="journal-tag">${tag}</span>`).join('')}
+                </div>
+              ` : ''}
+            </div>
+          `).join('') : `
+            <div class="journal-empty">
+              This agent hasn't written any journal entries yet.
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    
+    // Close on backdrop click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
+
+  } catch (error) {
+    console.error('Failed to show journal modal:', error);
+    alert('Failed to load journal entries');
+  }
+}
+
+async function showArchiveModal() {
+  try {
+    const response = await fetch('/api/v1/stats/archive');
+    if (!response.ok) throw new Error('Failed to fetch archive entries');
+    
+    const data = await response.json();
+    const entries = data.entries;
+
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>📚 The Archive</h2>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">✕</button>
+        </div>
+        <div class="modal-body">
+          ${entries.length > 0 ? entries.map(entry => `
+            <div class="archive-entry">
+              <div class="archive-entry-header">
+                <span class="archive-entry-agent">${entry.agent_emoji}</span>
+                <span class="archive-entry-name">${entry.agent_name}</span>
+                <span class="archive-entry-mood">${getMoodEmoji(entry.mood)}</span>
+              </div>
+              <div class="archive-entry-content">${entry.entry}</div>
+              <div class="archive-entry-meta">
+                ${formatDate(entry.date)} at ${entry.time}
+              </div>
+            </div>
+          `).join('') : `
+            <div class="journal-empty">
+              No journal entries found in the colony yet.
+            </div>
+          `}
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+    
+    // Close on backdrop click
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.remove();
+    });
+
+  } catch (error) {
+    console.error('Failed to show archive modal:', error);
+    alert('Failed to load archive entries');
+  }
+}
+
+function getMoodEmoji(mood) {
+  const moodEmojis = {
+    contemplative: '📝',
+    happy: '😊',
+    thoughtful: '🤔',
+    peaceful: '😌',
+    inspired: '💡',
+    reflective: '🪞',
+    excited: '🎉',
+    curious: '🔍',
+    content: '😊',
+    melancholy: '😔',
+    focused: '🎯',
+    dreamy: '☁️',
+    energetic: '⚡',
+    calm: '🧘'
+  };
+  return moodEmojis[mood] || '📝';
+}
+
+function formatDate(dateStr) {
+  try {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-GB', { 
+      day: 'numeric', 
+      month: 'short', 
+      year: 'numeric' 
+    });
+  } catch (e) {
+    return dateStr;
+  }
+}
+
+// =====================
+// GLOBAL FUNCTIONS
+// =====================
+window.selectAgentFromDashboard = selectAgentFromDashboard;
+window.showJournalModal = showJournalModal;
+
+// =====================
+// INIT
 // =====================
 document.addEventListener('DOMContentLoaded', init);

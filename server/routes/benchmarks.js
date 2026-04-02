@@ -11,7 +11,7 @@ export function benchmarkRoutes(db) {
 
   router.get('/', (req, res) => {
     const benchmarks = db.prepare(
-      'SELECT * FROM human_benchmarks ORDER BY CASE agent_status WHEN "achieved" THEN 0 WHEN "in-progress" THEN 1 WHEN "pending" THEN 2 ELSE 3 END'
+      `SELECT * FROM human_benchmarks ORDER BY CASE agent_status WHEN 'achieved' THEN 0 WHEN 'in-progress' THEN 1 WHEN 'pending' THEN 2 ELSE 3 END`
     ).all();
 
     // Summary counts

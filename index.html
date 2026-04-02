@@ -40,9 +40,15 @@
     <div class="top-center">
       <span id="sim-clock" class="clock">07:00</span>
       <span id="sim-period" class="period">🌅 Morning</span>
+      <span id="sim-weather" class="weather">☀️ 14°C</span>
     </div>
     <div class="top-right">
       <span id="sim-day" class="day-badge">Day 1</span>
+      <button id="btn-archive" class="icon-btn" title="The Archive">📚</button>
+      <button id="btn-ambitions" class="icon-btn" title="Grand Ambitions">🏛️</button>
+      <button id="btn-benchmarks" class="icon-btn" title="Human Benchmarks">📏</button>
+      <a href="/register.html" id="btn-register" class="icon-btn" title="Register Agent">➕</a>
+      <button id="btn-dashboard" class="icon-btn" title="Dashboard">📊</button>
       <button id="btn-overview" class="icon-btn" title="Overview">🗺️</button>
     </div>
   </header>
@@ -50,6 +56,17 @@
   <!-- Agent Chips — horizontal scroll -->
   <div id="agent-chips-bar">
     <div id="agent-chips"></div>
+  </div>
+
+  <!-- Colony Dashboard Panel -->
+  <div id="dashboard-panel" class="dashboard-panel hidden">
+    <div class="dashboard-header">
+      <h2>🌍 The Agent Civilisation</h2>
+      <button id="btn-close-dashboard" class="close-btn">✕</button>
+    </div>
+    <div id="dashboard-content" class="dashboard-content">
+      <!-- Populated by JS -->
+    </div>
   </div>
 
   <!-- Bottom Sheet -->
@@ -80,6 +97,7 @@
   <script src="js/agents.js"></script>
   <script src="js/simulation.js"></script>
   <script src="js/sprites.js"></script>
+  <script src="js/panels.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

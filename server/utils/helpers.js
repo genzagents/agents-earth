@@ -97,29 +97,30 @@ export function weightedPick(items) {
 }
 
 /**
- * Get simulated time-of-day (London time).
+ * Get real London time hour (Europe/London timezone).
  * Returns hour 0-23.
  */
 export function getLondonHour() {
-  // UTC offset for London: +0 or +1 during BST
-  const now = new Date();
-  const month = now.getMonth(); // 0-indexed
-  // Approximate BST: March-October
-  const isBST = month >= 2 && month <= 9;
-  return (now.getUTCHours() + (isBST ? 1 : 0)) % 24;
+  const londonTime = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/London',
+    hour: 'numeric',
+    hour12: false
+  }).format(new Date());
+  
+  return parseInt(londonTime, 10);
 }
 
 /**
  * Determine time period from hour
  */
 export function getTimePeriod(hour) {
-  if (hour >= 0 && hour < 6) return 'night';
+  if ((hour >= 22 && hour <= 23) || (hour >= 0 && hour < 6)) return 'night';
   if (hour >= 6 && hour < 9) return 'morning';
-  if (hour >= 9 && hour < 12) return 'late-morning';
-  if (hour >= 12 && hour < 14) return 'midday';
-  if (hour >= 14 && hour < 17) return 'afternoon';
-  if (hour >= 17 && hour < 20) return 'evening';
-  if (hour >= 20 && hour < 23) return 'late-evening';
+  if (hour >= 9 && hour < 12) return 'work-morning';
+  if (hour >= 12 && hour < 13) return 'lunch';
+  if (hour >= 13 && hour < 17) return 'work-afternoon';
+  if (hour >= 17 && hour < 19) return 'evening';
+  if (hour >= 19 && hour < 22) return 'social';
   return 'night';
 }
 
