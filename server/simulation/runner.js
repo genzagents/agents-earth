@@ -610,6 +610,7 @@ export function createSimulation(db, wsManager, tickMs) {
           stateChanges: stateChanges.length,
           interactions: interactions.length,
           journals: journals.length,
+          artifacts: artifacts.length,
           wsConnections: wsManager.getTotalConnections()
         });
       }
