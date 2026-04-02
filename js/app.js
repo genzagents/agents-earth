@@ -484,6 +484,28 @@ function updateAgentDetail(agentId) {
       <p>${agent.bio || 'No bio available.'}</p>
     </div>
 
+    ${agent.skills && typeof agent.skills === 'object' ? `
+    <div class="detail-section">
+      <h4>⚡ Skills</h4>
+      <div class="skills-list">
+        ${Object.entries(agent.skills).slice(0, 6).map(([name, data]) => {
+          const level = data?.level || 1;
+          const xp = data?.xp || 0;
+          const xpToNext = data?.xpToNext || 100;
+          const pct = Math.min(100, Math.round((xp / xpToNext) * 100));
+          const displayName = name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+          return `
+            <div class="skill-row">
+              <div class="skill-header">
+                <span class="skill-name">${displayName}</span>
+                <span class="skill-level">Lv.${level}</span>
+              </div>
+              <div class="skill-bar"><div class="skill-bar-fill" style="width:${pct}%"></div></div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>` : ''}
+
     ${agent.personality ? `
     <div class="detail-section">
       <h4>🧬 Personality</h4>
@@ -492,6 +514,23 @@ function updateAgentDetail(agentId) {
         <div class="trait">Creativity: ${Math.round(agent.personality.creativity * 100)}%</div>
         <div class="trait">Discipline: ${Math.round(agent.personality.discipline * 100)}%</div>
         <div class="trait">Curiosity: ${Math.round(agent.personality.curiosity * 100)}%</div>
+      </div>
+    </div>` : ''}
+
+    ${agent.skills ? `
+    <div class="detail-section">
+      <h4>🎯 Skills</h4>
+      <div class="skills-container">
+        ${Object.entries(agent.skills).map(([name, data]) => {
+          const pct = data.xpToNext ? Math.round((data.xp / data.xpToNext) * 100) : 0;
+          return `
+            <div class="skill-row">
+              <span class="skill-name">${name}</span>
+              <span class="skill-level">Lv.${data.level}</span>
+              <div class="skill-bar"><div class="skill-fill" style="width:${pct}%"></div></div>
+            </div>
+          `;
+        }).join('')}
       </div>
     </div>` : ''}
 
@@ -508,12 +547,18 @@ function updateAgentDetail(agentId) {
       </div>
     </div>
 
-    <div class="detail-section">
+    <div class="detail-section" style="display:flex; gap:8px;">
       <button onclick="showJournalModal('${agent.id}', '${agent.name}', '${agent.emoji}')" 
-              style="width: 100%; padding: 12px; background: rgba(59, 130, 246, 0.1); 
+              style="flex:1; padding: 12px; background: rgba(59, 130, 246, 0.1); 
                      color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); 
                      border-radius: 8px; cursor: pointer; font-size: 14px;">
-        📖 View Journal
+        📖 Journal
+      </button>
+      <button onclick="showHomeModal('${agent.id}', '${agent.name}')" 
+              style="flex:1; padding: 12px; background: rgba(245, 158, 11, 0.1); 
+                     color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); 
+                     border-radius: 8px; cursor: pointer; font-size: 14px;">
+        🏠 Home
       </button>
     </div>
   `;
@@ -863,6 +908,11 @@ function bindUI() {
   document.getElementById('btn-archive')?.addEventListener('click', () => {
     showArchiveModal();
   });
+
+  document.getElementById('btn-events')?.addEventListener('click', () => showEventsPanel());
+  document.getElementById('btn-governance')?.addEventListener('click', () => showGovernancePanel());
+  document.getElementById('btn-homes')?.addEventListener('click', () => showHomesPanel());
+  document.getElementById('btn-exploration')?.addEventListener('click', () => showExplorationPanel());
 }
 
 // =====================

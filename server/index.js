@@ -20,8 +20,13 @@ import { createSimulation } from './simulation/runner.js';
 import { agentRoutes } from './routes/agents.js';
 import { colonyRoutes } from './routes/colonies.js';
 import { ambitionRoutes } from './routes/ambitions.js';
+import { explorationRoutes } from './routes/exploration.js';
 import { benchmarkRoutes } from './routes/benchmarks.js';
 import { statsRoutes } from './routes/stats.js';
+import { homeRoutes } from './routes/homes.js';
+import { eventRoutes } from './routes/events.js';
+import { governanceRoutes } from './routes/governance.js';
+import { artifactRoutes } from './routes/artifacts.js';
 
 // Middleware
 import { errorHandler } from './middleware/errors.js';
@@ -69,8 +74,13 @@ const api = express.Router();
 api.use('/agents', agentRoutes(db, wsManager));
 api.use('/colonies', colonyRoutes(db));
 api.use('/ambitions', ambitionRoutes(db));
+api.use('/exploration', explorationRoutes(db));
 api.use('/benchmarks', benchmarkRoutes(db));
 api.use('/stats', statsRoutes(db));
+api.use('/homes', homeRoutes(db));
+api.use('/events', eventRoutes(db));
+api.use('/governance', governanceRoutes(db));
+api.use('/artifacts', artifactRoutes(db));
 
 app.use('/api/v1', api);
 

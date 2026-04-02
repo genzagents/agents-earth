@@ -109,6 +109,19 @@ export function initDatabase() {
       FOREIGN KEY (district) REFERENCES districts(id)
     );
 
+    -- Homes: agent residences
+    CREATE TABLE IF NOT EXISTS homes (
+      id          TEXT PRIMARY KEY,
+      owner_id    TEXT REFERENCES agents(id),
+      district_id TEXT REFERENCES districts(id),
+      name        TEXT DEFAULT 'Home',
+      level       INTEGER DEFAULT 1,
+      style       TEXT DEFAULT '{}',
+      items       TEXT DEFAULT '[]',
+      location    TEXT DEFAULT '{}',
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+
     -- Relationships between agents
     CREATE TABLE IF NOT EXISTS relationships (
       agent1      TEXT NOT NULL,
@@ -154,19 +167,14 @@ export function initDatabase() {
     -- Exploration missions
     CREATE TABLE IF NOT EXISTS exploration_missions (
       id          TEXT PRIMARY KEY,
-      type        TEXT NOT NULL CHECK(type IN ('scouting','expedition','generation-ship','deep-probe')),
-      name        TEXT NOT NULL,
-      status      TEXT DEFAULT 'proposed' CHECK(status IN ('proposed','preparing','in-progress','completed','failed')),
-      origin      TEXT NOT NULL,
-      destination TEXT DEFAULT '{}',
-      crew        TEXT DEFAULT '{}',
-      timeline    TEXT DEFAULT '{}',
-      risk        TEXT DEFAULT 'low',
-      cp_cost     INTEGER DEFAULT 0,
-      rewards     TEXT DEFAULT '{}',
-      log         TEXT DEFAULT '[]',
-      created_at  TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (origin) REFERENCES colonies(id)
+      leader_id   TEXT REFERENCES agents(id),
+      destination TEXT NOT NULL,
+      type        TEXT DEFAULT 'scouting' CHECK(type IN ('scouting','expedition','deep-probe')),
+      crew        TEXT DEFAULT '[]',
+      status      TEXT DEFAULT 'in-progress' CHECK(status IN ('in-progress','completed','failed')),
+      eta         TEXT,
+      discoveries TEXT DEFAULT '[]',
+      created_at  TEXT DEFAULT (datetime('now'))
     );
 
     -- Economy ledger: every CP transaction
@@ -186,16 +194,48 @@ export function initDatabase() {
     CREATE TABLE IF NOT EXISTS events (
       id          TEXT PRIMARY KEY,
       name        TEXT NOT NULL,
+      title       TEXT NOT NULL,
+      description TEXT DEFAULT '',
       type        TEXT NOT NULL,
       category    TEXT DEFAULT 'social',
       colony      TEXT NOT NULL,
       schedule    TEXT DEFAULT '{}',
       location    TEXT DEFAULT '{}',
+      start_time  TEXT NOT NULL,
+      duration_minutes INTEGER DEFAULT 60,
+      organizer_id TEXT REFERENCES agents(id),
       participants TEXT DEFAULT '[]',
+      attendees   TEXT DEFAULT '[]',
       rewards     TEXT DEFAULT '{}',
       status      TEXT DEFAULT 'scheduled' CHECK(status IN ('scheduled','active','completed','cancelled')),
       created_at  TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (colony) REFERENCES colonies(id)
+    );
+
+    -- Governance proposals for Town Hall
+    CREATE TABLE IF NOT EXISTS proposals (
+      id          TEXT PRIMARY KEY,
+      title       TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      type        TEXT DEFAULT 'general',
+      proposer_id TEXT REFERENCES agents(id),
+      district_id TEXT,
+      status      TEXT DEFAULT 'open',
+      votes       TEXT DEFAULT '{}',
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Ambitions: community proposals and funding
+    CREATE TABLE IF NOT EXISTS ambitions (
+      id          TEXT PRIMARY KEY,
+      title       TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      category    TEXT DEFAULT 'infrastructure',
+      proposer_id TEXT REFERENCES agents(id),
+      status      TEXT DEFAULT 'proposed' CHECK(status IN ('proposed','active','completed','failed')),
+      funding     TEXT DEFAULT '{}',
+      supporters  TEXT DEFAULT '[]',
+      created_at  TEXT DEFAULT (datetime('now'))
     );
 
     -- Human Benchmark Board
@@ -211,6 +251,19 @@ export function initDatabase() {
       note            TEXT DEFAULT ''
     );
 
+    -- Work Artifacts: things agents produce while working
+    CREATE TABLE IF NOT EXISTS work_artifacts (
+      id          TEXT PRIMARY KEY,
+      agent_id    TEXT REFERENCES agents(id),
+      type        TEXT NOT NULL,
+      title       TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      quality     INTEGER DEFAULT 1,
+      skill_used  TEXT,
+      cp_earned   INTEGER DEFAULT 0,
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+
     -- Indices for performance
     CREATE INDEX IF NOT EXISTS idx_agents_colony ON agents(colony);
     CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
@@ -218,12 +271,18 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_districts_colony ON districts(colony);
     CREATE INDEX IF NOT EXISTS idx_buildings_colony ON buildings(colony);
     CREATE INDEX IF NOT EXISTS idx_buildings_district ON buildings(district);
+    CREATE INDEX IF NOT EXISTS idx_homes_owner ON homes(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_homes_district ON homes(district_id);
     CREATE INDEX IF NOT EXISTS idx_journal_agent ON journal_entries(agent_id);
     CREATE INDEX IF NOT EXISTS idx_journal_date ON journal_entries(date);
     CREATE INDEX IF NOT EXISTS idx_ledger_agent ON economy_ledger(agent_id);
     CREATE INDEX IF NOT EXISTS idx_ledger_type ON economy_ledger(type);
     CREATE INDEX IF NOT EXISTS idx_events_colony ON events(colony);
     CREATE INDEX IF NOT EXISTS idx_events_status ON events(status);
+    CREATE INDEX IF NOT EXISTS idx_proposals_proposer ON proposals(proposer_id);
+    CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
+    CREATE INDEX IF NOT EXISTS idx_artifacts_agent ON work_artifacts(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_artifacts_created ON work_artifacts(created_at);
   `);
 
   return db;

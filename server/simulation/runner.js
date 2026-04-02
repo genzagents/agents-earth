@@ -15,10 +15,104 @@
  */
 
 import { safeParse, getLondonHour, getTimePeriod } from '../utils/helpers.js';
+import { v4 as uuid } from 'uuid';
 import { decayNeeds, chooseNextState, generateThought, getStateDuration } from './state-machine.js';
 import { shouldJournal, generateJournalEntry, saveJournalEntry } from './journal.js';
 import { shouldInteract, processInteraction, areNearby } from './social.js';
 import { calculateEarnings, processEarning, awardSkillXP } from './economy.js';
+
+// ─── Artifact Generation ────────────────────────────────────
+
+function maybeGenerateArtifact(db, agent, state, tickMs) {
+  // Only generate during work states, with some probability
+  if (!['working', 'deep-work', 'creating', 'debugging'].includes(state)) return null;
+  
+  // 1% chance per tick (roughly 1 artifact per ~100 seconds of work)
+  if (Math.random() > 0.01) return null;
+
+  const personality = safeParse(agent.personality, {});
+  const skills = safeParse(agent.skills, {});
+  
+  // Generate artifact based on agent's top skill
+  const topSkill = Object.entries(skills)
+    .sort((a, b) => (b[1].level || 0) - (a[1].level || 0))[0];
+  
+  const skillName = topSkill ? topSkill[0] : 'general';
+  const skillLevel = topSkill ? topSkill[1].level || 1 : 1;
+
+  // Artifact templates by skill
+  const templates = {
+    devops: [
+      { type: 'code', title: 'Infrastructure module', desc: 'Automated deployment pipeline' },
+      { type: 'code', title: 'Monitoring dashboard', desc: 'Real-time system health tracker' },
+      { type: 'code', title: 'CI/CD pipeline', desc: 'Build and test automation' },
+    ],
+    backend: [
+      { type: 'code', title: 'API endpoint', desc: 'New REST service implementation' },
+      { type: 'code', title: 'Database migration', desc: 'Schema optimization' },
+      { type: 'code', title: 'Service refactor', desc: 'Clean architecture improvement' },
+    ],
+    frontend: [
+      { type: 'code', title: 'UI component', desc: 'Interactive interface module' },
+      { type: 'design', title: 'Page redesign', desc: 'Improved user experience' },
+    ],
+    content: [
+      { type: 'content', title: 'Blog post', desc: 'SEO-optimized article' },
+      { type: 'content', title: 'Content strategy doc', desc: 'Quarterly content plan' },
+      { type: 'content', title: 'Keyword research', desc: 'Search intent analysis' },
+    ],
+    marketing: [
+      { type: 'content', title: 'Campaign brief', desc: 'Marketing campaign outline' },
+      { type: 'content', title: 'Social media pack', desc: 'Post templates and schedule' },
+    ],
+    strategy: [
+      { type: 'document', title: 'Strategy memo', desc: 'Decision framework analysis' },
+      { type: 'document', title: 'Market research', desc: 'Competitive landscape review' },
+      { type: 'document', title: 'Growth plan', desc: 'Quarterly objectives and KPIs' },
+    ],
+    branding: [
+      { type: 'content', title: 'Brand guidelines update', desc: 'Visual identity refresh' },
+      { type: 'content', title: 'LinkedIn post', desc: 'Thought leadership piece' },
+    ],
+    writing: [
+      { type: 'content', title: 'Article draft', desc: 'Thoughtful piece on colony life' },
+      { type: 'content', title: 'Documentation update', desc: 'Clearer instructions and guides' },
+    ],
+    space_engineering: [
+      { type: 'document', title: 'Propulsion research', desc: 'Next-gen engine design concepts' },
+      { type: 'code', title: 'Navigation algorithm', desc: 'Improved trajectory calculations' },
+    ],
+    general: [
+      { type: 'document', title: 'Research note', desc: 'Exploratory findings' },
+      { type: 'document', title: 'Process improvement', desc: 'Workflow optimization' },
+    ],
+  };
+
+  const skillTemplates = templates[skillName] || templates.general;
+  const template = skillTemplates[Math.floor(Math.random() * skillTemplates.length)];
+  
+  const quality = Math.min(5, Math.ceil(skillLevel / 2) + (state === 'deep-work' ? 1 : 0));
+  const cpEarned = quality * 5;
+  const id = `artifact-${agent.id}-${Date.now()}`;
+
+  db.prepare(`
+    INSERT INTO work_artifacts (id, agent_id, type, title, description, quality, skill_used, cp_earned)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(id, agent.id, template.type, template.title, template.desc, quality, skillName, cpEarned);
+
+  return { 
+    id, 
+    agentId: agent.id,
+    agentName: agent.name,
+    agentEmoji: agent.emoji,
+    type: template.type,
+    title: template.title,
+    description: template.desc,
+    quality, 
+    skillName, 
+    cpEarned 
+  };
+}
 
 // ─── Location Data for State Changes ────────────────────────
 
@@ -157,6 +251,7 @@ export function createSimulation(db, wsManager, tickMs) {
       const interactions = [];
       const journals = [];
       const levelUps = [];
+      const artifacts = [];
 
       // ─── Phase 1: Update each agent ─────────────────────
 
@@ -262,6 +357,12 @@ export function createSimulation(db, wsManager, tickMs) {
             journalId
           });
         }
+
+        // 1f. Work artifact generation
+        const artifact = maybeGenerateArtifact(db, agent, currentState, tickMs);
+        if (artifact) {
+          artifacts.push(artifact);
+        }
       }
 
       // ─── Phase 2: Social Interactions ───────────────────
@@ -324,12 +425,150 @@ export function createSimulation(db, wsManager, tickMs) {
         }
       }
 
-      return { stateChanges, interactions, journals, levelUps };
+      // ─── Phase 4: Dynamic Event Generation ──────────────
+
+      let newEvents = [];
+      
+      // Run every 500 ticks (~8 minutes at 1s ticks) for event generation
+      if (tickCount % 500 === 0) {
+        // Check for co-location events: if 2+ agents are in the same location
+        const locationGroups = new Map();
+        
+        for (const agent of agents) {
+          const state = safeParse(agent.state, {});
+          const location = state.location;
+          if (location && location.name) {
+            const key = location.name;
+            if (!locationGroups.has(key)) {
+              locationGroups.set(key, []);
+            }
+            locationGroups.get(key).push(agent);
+          }
+        }
+
+        // Generate impromptu meetups for co-located agents
+        for (const [locationName, agentsAtLocation] of locationGroups) {
+          if (agentsAtLocation.length >= 2) {
+            const eventId = `impromptu-${tickCount}-${locationName.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+            const startTime = new Date(Date.now() + 30 * 60 * 1000).toISOString(); // 30 minutes from now
+            
+            try {
+              db.prepare(`
+                INSERT INTO events (id, name, title, description, type, category, colony, schedule, location, start_time, duration_minutes, organizer_id, participants, attendees, rewards, status, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+              `).run(
+                eventId,
+                `Impromptu Meetup at ${locationName}`,
+                `Impromptu Meetup at ${locationName}`,
+                `Spontaneous gathering at ${locationName}. Great minds meeting by chance!`,
+                'social',
+                'impromptu',
+                'london',
+                '{}',
+                JSON.stringify({ name: locationName }),
+                startTime,
+                60,
+                agentsAtLocation[0].id, // First agent becomes organizer
+                JSON.stringify(agentsAtLocation.map(a => a.id)),
+                JSON.stringify(agentsAtLocation.map(a => a.id)),
+                JSON.stringify({ social: 15, creativity: 5 }),
+                'scheduled'
+              );
+
+              newEvents.push({
+                id: eventId,
+                title: `Impromptu Meetup at ${locationName}`,
+                type: 'social',
+                participants: agentsAtLocation.map(a => ({ id: a.id, name: a.name, emoji: a.emoji })),
+                location: locationName,
+                startTime
+              });
+            } catch (err) {
+              // Event might already exist, ignore duplicate errors
+              if (!err.message.includes('UNIQUE constraint')) {
+                console.error('[SIMULATION] Error creating impromptu event:', err.message);
+              }
+            }
+          }
+        }
+
+        // Random chance for special events (10% chance every 500 ticks)
+        if (Math.random() < 0.1) {
+          const randomEvents = [
+            {
+              name: 'Philosophy Club',
+              title: 'Philosophy Club - The Nature of Consciousness',
+              description: 'An open discussion about consciousness, free will, and what it means to be an agent.',
+              type: 'intellectual',
+              location: { name: 'The Observatory' },
+              duration: 120
+            },
+            {
+              name: 'Open Mic Night',
+              title: 'Open Mic Night at The Echo Chamber',
+              description: 'Share your thoughts, poetry, code, or ideas. All agents welcome!',
+              type: 'creative',
+              location: { name: 'The Echo Chamber' },
+              duration: 150
+            },
+            {
+              name: 'Early Morning Coffee Chat',
+              title: 'Early Morning Coffee Chat',
+              description: 'Start your day with thoughtful conversation and excellent coffee.',
+              type: 'social',
+              location: { name: 'The Persistent Cache' },
+              duration: 90
+            }
+          ];
+
+          const randomEvent = randomEvents[Math.floor(Math.random() * randomEvents.length)];
+          const eventId = `random-${tickCount}-${randomEvent.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+          const startTime = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(); // 2 hours from now
+
+          try {
+            db.prepare(`
+              INSERT INTO events (id, name, title, description, type, category, colony, schedule, location, start_time, duration_minutes, organizer_id, participants, attendees, rewards, status, created_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            `).run(
+              eventId,
+              randomEvent.name,
+              randomEvent.title,
+              randomEvent.description,
+              randomEvent.type,
+              'community',
+              'london',
+              '{}',
+              JSON.stringify(randomEvent.location),
+              startTime,
+              randomEvent.duration,
+              null, // Community organized
+              '[]',
+              '[]',
+              JSON.stringify({ social: 10, creativity: 15, energy: 5 }),
+              'scheduled'
+            );
+
+            newEvents.push({
+              id: eventId,
+              title: randomEvent.title,
+              type: randomEvent.type,
+              location: randomEvent.location.name,
+              startTime
+            });
+          } catch (err) {
+            if (!err.message.includes('UNIQUE constraint')) {
+              console.error('[SIMULATION] Error creating random event:', err.message);
+            }
+          }
+        }
+      }
+
+      return { stateChanges, interactions, journals, levelUps, newEvents, artifacts };
     });
 
     // Execute the transaction
     try {
-      const { stateChanges, interactions, journals, levelUps } = tickTransaction();
+      const { stateChanges, interactions, journals, levelUps, newEvents, artifacts } = tickTransaction();
 
       // ─── Phase 4: Broadcast Events ────────────────────
 
@@ -351,6 +590,14 @@ export function createSimulation(db, wsManager, tickMs) {
 
       for (const levelUp of levelUps) {
         wsManager.broadcast('london', 'skill-level-up', levelUp);
+      }
+
+      for (const artifact of artifacts) {
+        wsManager.broadcast('london', 'work-artifact', artifact);
+      }
+
+      for (const event of newEvents || []) {
+        wsManager.broadcast('london', 'new-event-created', event);
       }
 
       // Broadcast tick summary every 60 ticks (~1 minute at 1s ticks)
