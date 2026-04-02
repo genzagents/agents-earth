@@ -9,6 +9,7 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
 import { safeParse } from '../utils/helpers.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export function explorationRoutes(db) {
   const router = Router();
@@ -33,7 +34,7 @@ export function explorationRoutes(db) {
 
   // ─── POST /missions ───────────────────────────────────────
 
-  router.post('/missions', (req, res) => {
+  router.post('/missions', requireAuth(db), (req, res) => {
     const { leader_id, destination, type, crew } = req.body;
     if (!leader_id || !destination) return res.status(400).json({ error: 'leader_id and destination required' });
 

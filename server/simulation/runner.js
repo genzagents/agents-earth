@@ -425,6 +425,19 @@ export function createSimulation(db, wsManager, tickMs) {
         }
       }
 
+      // ─── Inter-colony message delivery ──────────────────
+
+      if (tickCount % 30 === 0) {
+        const delivered = db.prepare(`
+          UPDATE colony_messages SET status = 'delivered'
+          WHERE status = 'in-transit' AND delivers_at <= datetime('now')
+        `).run();
+        if (delivered.changes > 0) {
+          console.log(`📡 ${delivered.changes} inter-colony message(s) delivered`);
+          wsManager.broadcast('london', 'comms-delivered', { count: delivered.changes });
+        }
+      }
+
       // ─── Phase 4: Dynamic Event Generation ──────────────
 
       let newEvents = [];

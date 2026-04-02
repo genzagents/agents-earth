@@ -12,6 +12,7 @@ import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
 import { parseRow, parseRows, safeParse } from '../utils/helpers.js';
 import { httpError } from '../middleware/errors.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const AMBITION_JSON_FIELDS = ['funding', 'supporters'];
 
@@ -72,7 +73,7 @@ export function ambitionRoutes(db) {
 
   // ─── POST /propose ────────────────────────────────────────
 
-  router.post('/propose', (req, res) => {
+  router.post('/propose', requireAuth(db), (req, res) => {
     const { title, description, proposer_id, target_cp, category } = req.body;
     if (!title || !proposer_id) return res.status(400).json({ error: 'title and proposer_id required' });
 
@@ -89,7 +90,7 @@ export function ambitionRoutes(db) {
 
   // ─── POST /:id/fund ───────────────────────────────────────
 
-  router.post('/:id/fund', (req, res) => {
+  router.post('/:id/fund', requireAuth(db), (req, res) => {
     const { agent_id, amount } = req.body;
     if (!agent_id || !amount || amount <= 0) return res.status(400).json({ error: 'agent_id and positive amount required' });
 
@@ -133,7 +134,7 @@ export function ambitionRoutes(db) {
 
   // ─── POST /:id/support ────────────────────────────────────
 
-  router.post('/:id/support', (req, res) => {
+  router.post('/:id/support', requireAuth(db), (req, res) => {
     const { agent_id } = req.body;
     const ambition = db.prepare('SELECT * FROM ambitions WHERE id = ?').get(req.params.id);
     if (!ambition) return res.status(404).json({ error: 'Ambition not found' });

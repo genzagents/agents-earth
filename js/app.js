@@ -171,36 +171,108 @@ function add3DBuildings() {
     }
 
     const sources = style.sources || {};
-    const tileSourceId = Object.keys(sources).find(k => sources[k].type === 'vector');
-
-    if (tileSourceId) {
-      map.addLayer({
-        id: '3d-buildings',
-        source: tileSourceId,
-        'source-layer': 'building',
-        type: 'fill-extrusion',
-        minzoom: 13,
-        paint: {
-          'fill-extrusion-color': [
-            'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], 10],
-            0,   '#a8e6cf',   // mint green
-            15,  '#ffd3b6',   // peach
-            30,  '#ffaaa5',   // coral
-            50,  '#ff8b94',   // salmon
-            80,  '#dcedc1',   // lime
-            120, '#a0d2db',   // sky blue
-            200, '#c3b1e1',   // lavender
-            300, '#f0b27a',   // amber
-          ],
-          'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 10],
-          'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0],
-          'fill-extrusion-opacity': 0.88,
-        },
-      }, labelLayerId);
+    
+    // Try to add/modify 3D building extrusion
+    if (!map.getLayer('3d-buildings')) {
+      // Check for composite source first (MapTiler often uses this)
+      if (map.getSource('composite')) {
+        map.addLayer({
+          'id': '3d-buildings',
+          'source': 'composite',
+          'source-layer': 'building',
+          'filter': ['==', 'extrude', 'true'],
+          'type': 'fill-extrusion',
+          'minzoom': 14,
+          'paint': {
+            'fill-extrusion-color': [
+              'interpolate', ['linear'], ['get', 'height'],
+              0, '#1a1a2e',
+              50, '#16213e',
+              100, '#0f3460',
+              200, '#533483'
+            ],
+            'fill-extrusion-height': ['get', 'height'],
+            'fill-extrusion-base': ['get', 'min_height'],
+            'fill-extrusion-opacity': 0.7
+          }
+        }, labelLayerId);
+      }
+      // Alternatively, MapTiler maps may use 'openmaptiles' source
+      else if (map.getSource('openmaptiles')) {
+        map.addLayer({
+          'id': '3d-buildings',
+          'source': 'openmaptiles',
+          'source-layer': 'building',
+          'type': 'fill-extrusion',
+          'minzoom': 14,
+          'paint': {
+            'fill-extrusion-color': [
+              'interpolate', ['linear'], ['get', 'render_height'],
+              0, '#1a1a2e',
+              50, '#16213e', 
+              100, '#0f3460',
+              200, '#533483'
+            ],
+            'fill-extrusion-height': ['coalesce', ['get', 'render_height'], ['get', 'height'], 10],
+            'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], ['get', 'min_height'], 0],
+            'fill-extrusion-opacity': 0.6
+          }
+        }, labelLayerId);
+      }
+      // Fallback to the existing source detection method
+      else {
+        const tileSourceId = Object.keys(sources).find(k => sources[k].type === 'vector');
+        if (tileSourceId) {
+          map.addLayer({
+            id: '3d-buildings',
+            source: tileSourceId,
+            'source-layer': 'building',
+            type: 'fill-extrusion',
+            minzoom: 14,
+            paint: {
+              'fill-extrusion-color': [
+                'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], ['get', 'height'], 10],
+                0, '#1a1a2e',
+                50, '#16213e',
+                100, '#0f3460',
+                200, '#533483'
+              ],
+              'fill-extrusion-height': ['coalesce', ['get', 'render_height'], ['get', 'height'], 10],
+              'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], ['get', 'min_height'], 0],
+              'fill-extrusion-opacity': 0.7,
+            },
+          }, labelLayerId);
+        }
+      }
     }
   } catch (err) {
     console.error('3D buildings failed:', err);
   }
+}
+
+function update3DBuildingColors(hour) {
+  if (!map.getLayer('3d-buildings')) return;
+  
+  const isNight = hour < 6 || hour >= 22;
+  const isSunset = hour >= 17 && hour < 20;
+  
+  let baseColor, topColor;
+  if (isNight) {
+    baseColor = '#0a0a1a';
+    topColor = '#1a103d';
+  } else if (isSunset) {
+    baseColor = '#2d1b3d';
+    topColor = '#6b3a5e';
+  } else {
+    baseColor = '#e8e4df';
+    topColor = '#c4beb8';
+  }
+  
+  map.setPaintProperty('3d-buildings', 'fill-extrusion-color', [
+    'interpolate', ['linear'], ['coalesce', ['get', 'render_height'], ['get', 'height'], 10],
+    0, baseColor,
+    100, topColor
+  ]);
 }
 
 // =====================
@@ -699,6 +771,18 @@ function updateClockDisplay() {
   if (day && client.clock) {
     day.textContent = `Day ${client.clock.dayCount}`;
   }
+
+  // Update 3D building colors based on time of day
+  if (client.clock && client.clock.timeString) {
+    const [hoursStr] = client.clock.timeString.split(':');
+    const hour = parseInt(hoursStr, 10);
+    update3DBuildingColors(hour);
+  }
+
+  // Update ambient audio based on time period
+  if (window.ambientAudio?.enabled && client.clock?.period) {
+    window.ambientAudio.updateForPeriod(client.clock.period);
+  }
 }
 
 // =====================
@@ -970,6 +1054,11 @@ function bindUI() {
 
   document.getElementById('btn-visitor')?.addEventListener('click', toggleVisitorMode);
 
+  document.getElementById('btn-audio')?.addEventListener('click', () => {
+    const enabled = window.ambientAudio.toggle();
+    document.getElementById('btn-audio').textContent = enabled ? '🔊' : '🔇';
+  });
+
   document.getElementById('btn-close-dashboard')?.addEventListener('click', () => {
     document.getElementById('dashboard-panel').classList.add('hidden');
   });
@@ -990,11 +1079,32 @@ function bindUI() {
     showArchiveModal();
   });
 
+  document.getElementById('btn-library')?.addEventListener('click', () => {
+    if (window.showLibraryPanel) {
+      window.showLibraryPanel();
+    }
+  });
+
+  document.getElementById('btn-constitution')?.addEventListener('click', () => {
+    if (window.showConstitutionPanel) {
+      window.showConstitutionPanel();
+    }
+  });
+
+  document.getElementById('btn-milestones')?.addEventListener('click', () => {
+    if (window.showMilestonesPanel) {
+      window.showMilestonesPanel();
+    }
+  });
+
   document.getElementById('btn-events')?.addEventListener('click', () => showEventsPanel());
   document.getElementById('btn-governance')?.addEventListener('click', () => showGovernancePanel());
   document.getElementById('btn-homes')?.addEventListener('click', () => showHomesPanel());
   document.getElementById('btn-exploration')?.addEventListener('click', () => showExplorationPanel());
   document.getElementById('btn-space')?.addEventListener('click', () => showSpacePanel());
+  document.getElementById('btn-comms')?.addEventListener('click', () => showCommsPanel());
+  document.getElementById('btn-trade')?.addEventListener('click', () => showTradePanel());
+  document.getElementById('btn-genships')?.addEventListener('click', () => showGenShipsPanel());
 
   // Close modals on back button (mobile)
   window.addEventListener('popstate', () => {

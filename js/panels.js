@@ -1095,6 +1095,334 @@ function handleSpaceEscape(event) {
   }
 }
 
+// =====================
+// LIBRARY PANEL
+// =====================
+async function showLibraryPanel() {
+  try {
+    const data = await cachedFetch('/api/v1/library');
+    const entries = data.entries || [];
+    const categories = data.categories || [];
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'library-modal';
+    
+    // Create modal panel
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel large-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>📚 Great Library</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content with category tabs
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    // Category emojis
+    const categoryEmojis = {
+      'science': '🔬',
+      'philosophy': '💭', 
+      'engineering': '⚙️',
+      'culture': '🎭',
+      'history': '📜',
+      'exploration': '🔭',
+      'governance': '🏛️',
+      'general': '📄'
+    };
+    
+    // Category tabs
+    const tabsHtml = categories.map(cat => `
+      <button class="library-tab ${cat === 'general' ? 'active' : ''}" data-category="${cat}">
+        ${categoryEmojis[cat]} ${cat}
+      </button>
+    `).join('');
+    
+    // Entries display
+    const entriesHtml = entries.map(entry => {
+      const excerpt = entry.content.length > 150 ? entry.content.substring(0, 150) + '...' : entry.content;
+      return `
+        <div class="library-entry" data-category="${entry.category}">
+          <div class="library-title">${entry.title}</div>
+          <div class="library-author">
+            ${entry.author_emoji || '🤖'} ${entry.author_name || 'Anonymous'}
+            <span class="library-category-tag">${categoryEmojis[entry.category]} ${entry.category}</span>
+          </div>
+          <div class="library-excerpt">${excerpt}</div>
+          <div class="library-upvotes">👍 ${entry.upvotes} upvotes</div>
+        </div>
+      `;
+    }).join('');
+    
+    content.innerHTML = `
+      <div class="library-tabs">
+        ${tabsHtml}
+      </div>
+      <div class="library-entries">
+        ${entriesHtml || '<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.6);">No entries yet. Be the first to contribute!</div>'}
+      </div>
+    `;
+    
+    // Assemble modal
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    
+    // Add event listeners
+    const closeBtn = header.querySelector('.modal-close');
+    closeBtn.addEventListener('click', closeLibraryPanel);
+    
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeLibraryPanel();
+    });
+    
+    // Category tab filtering
+    overlay.querySelectorAll('.library-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const category = tab.dataset.category;
+        
+        // Update active tab
+        overlay.querySelectorAll('.library-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Filter entries
+        overlay.querySelectorAll('.library-entry').forEach(entry => {
+          if (category === 'general' || entry.dataset.category === category) {
+            entry.style.display = 'block';
+          } else {
+            entry.style.display = 'none';
+          }
+        });
+      });
+    });
+    
+    // Add to DOM
+    document.body.appendChild(overlay);
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+    });
+    
+  } catch (error) {
+    console.error('Failed to load library:', error);
+    showErrorModal('📚 Great Library', 'Failed to load library data');
+  }
+}
+
+function closeLibraryPanel() {
+  const modal = document.getElementById('library-modal');
+  if (modal) {
+    modal.style.opacity = '0';
+    setTimeout(() => modal.remove(), 200);
+  }
+}
+
+// =====================
+// CONSTITUTION PANEL
+// =====================
+async function showConstitutionPanel() {
+  try {
+    const data = await cachedFetch('/api/v1/constitution');
+    const ratified = data.ratified || [];
+    const proposed = data.proposed || [];
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'constitution-modal';
+    
+    // Create modal panel
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>📜 Constitution</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    // Ratified articles
+    const ratifiedHtml = ratified.map(article => `
+      <div class="constitution-article">
+        <div class="article-number">Article ${article.article_number}</div>
+        <div class="article-title">${article.title}</div>
+        <div class="article-text">"${article.text}"</div>
+        <div class="article-proposer">
+          Proposed by ${article.proposer_emoji || '🤖'} ${article.proposer_name || 'Anonymous'}
+        </div>
+      </div>
+    `).join('');
+    
+    // Proposed articles  
+    const proposedHtml = proposed.map(article => `
+      <div class="constitution-article" style="opacity: 0.8; border-left-color: #6b7280;">
+        <div class="article-number" style="color: #6b7280;">Proposed Article ${article.article_number}</div>
+        <div class="article-title">${article.title}</div>
+        <div class="article-text">"${article.text}"</div>
+        <div style="margin-top: 8px;">
+          <span style="color: #22c55e;">👍 ${article.votes_for}</span>
+          <span style="color: #ef4444; margin-left: 12px;">👎 ${article.votes_against}</span>
+          <span style="color: rgba(255,255,255,0.5); margin-left: 12px;">(needs ${Math.max(0, 3 - (article.votes_for + article.votes_against))} more votes)</span>
+        </div>
+        <div class="article-proposer">
+          Proposed by ${article.proposer_emoji || '🤖'} ${article.proposer_name || 'Anonymous'}
+        </div>
+      </div>
+    `).join('');
+    
+    content.innerHTML = `
+      <div style="margin-bottom: 24px;">
+        <h3 style="color: rgba(255,255,255,0.9); margin-bottom: 12px; font-size: 16px;">📜 Ratified Articles</h3>
+        ${ratifiedHtml || '<div style="color: rgba(255,255,255,0.5); font-style: italic;">No ratified articles yet</div>'}
+      </div>
+      
+      ${proposed.length > 0 ? `
+        <div>
+          <h3 style="color: rgba(255,255,255,0.9); margin-bottom: 12px; font-size: 16px;">🗳️ Proposed Articles</h3>
+          ${proposedHtml}
+        </div>
+      ` : ''}
+    `;
+    
+    // Assemble modal
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    
+    // Add event listeners
+    const closeBtn = header.querySelector('.modal-close');
+    closeBtn.addEventListener('click', closeConstitutionPanel);
+    
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeConstitutionPanel();
+    });
+    
+    // Add to DOM
+    document.body.appendChild(overlay);
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+    });
+    
+  } catch (error) {
+    console.error('Failed to load constitution:', error);
+    showErrorModal('📜 Constitution', 'Failed to load constitution data');
+  }
+}
+
+function closeConstitutionPanel() {
+  const modal = document.getElementById('constitution-modal');
+  if (modal) {
+    modal.style.opacity = '0';
+    setTimeout(() => modal.remove(), 200);
+  }
+}
+
+// =====================
+// MILESTONES PANEL
+// =====================
+async function showMilestonesPanel() {
+  try {
+    const data = await cachedFetch('/api/v1/milestones');
+    const milestones = data.milestones || [];
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'milestones-modal';
+    
+    // Create modal panel
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>🏆 Milestones</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    if (!milestones || milestones.length === 0) {
+      content.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.6);">
+          <div style="font-size: 2rem; margin-bottom: 12px;">🏆</div>
+          <p>No milestones achieved yet</p>
+          <p style="font-size: 0.9rem; margin-top: 8px;">History is being written...</p>
+        </div>
+      `;
+    } else {
+      const milestonesHtml = milestones.map(milestone => {
+        const date = new Date(milestone.achieved_at).toLocaleDateString();
+        return `
+          <div class="milestone-item">
+            <div class="milestone-date">${date}</div>
+            <div class="milestone-title">${milestone.title}</div>
+            <div class="milestone-desc">${milestone.description}</div>
+          </div>
+        `;
+      }).join('');
+      
+      content.innerHTML = `
+        <div class="milestone-timeline">
+          ${milestonesHtml}
+        </div>
+      `;
+    }
+    
+    // Assemble modal
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    
+    // Add event listeners
+    const closeBtn = header.querySelector('.modal-close');
+    closeBtn.addEventListener('click', closeMilestonesPanel);
+    
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeMilestonesPanel();
+    });
+    
+    // Add to DOM
+    document.body.appendChild(overlay);
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+    });
+    
+  } catch (error) {
+    console.error('Failed to load milestones:', error);
+    showErrorModal('🏆 Milestones', 'Failed to load milestones data');
+  }
+}
+
+function closeMilestonesPanel() {
+  const modal = document.getElementById('milestones-modal');
+  if (modal) {
+    modal.style.opacity = '0';
+    setTimeout(() => modal.remove(), 200);
+  }
+}
+
 // Export functions to global scope for vanilla JS
 window.showAmbitionsPanel = showAmbitionsPanel;
 window.showBenchmarksPanel = showBenchmarksPanel;
@@ -1112,3 +1440,500 @@ window.showHomeModal = showHomeModal;
 window.closeHomeModal = closeHomeModal;
 window.showSpacePanel = showSpacePanel;
 window.closeSpacePanel = closeSpacePanel;
+window.showDistrictPanel = showDistrictPanel;
+window.closeDistrictPanel = closeDistrictPanel;
+window.showCommsPanel = showCommsPanel;
+window.closeCommsPanel = closeCommsPanel;
+window.showLibraryPanel = showLibraryPanel;
+window.closeLibraryPanel = closeLibraryPanel;
+window.showConstitutionPanel = showConstitutionPanel;
+window.closeConstitutionPanel = closeConstitutionPanel;
+window.showMilestonesPanel = showMilestonesPanel;
+window.closeMilestonesPanel = closeMilestonesPanel;
+
+// =====================
+// DISTRICT PANEL
+// =====================
+async function showDistrictPanel(districtId) {
+  try {
+    const res = await fetch(`/api/v1/districts/${districtId}`);
+    const data = await res.json();
+    const district = data.district;
+    const residents = data.residents || [];
+    const buildings = data.buildings || [];
+    const proposals = data.proposals || [];
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'district-modal';
+    
+    // Create modal panel
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>🏛️ ${district.name}</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    // District info
+    const council = district.stats?.council || [];
+    const allocation = district.budget?.allocation || {};
+    
+    content.innerHTML = `
+      <div class="district-info">
+        <div class="district-stats">
+          <div class="stat-card">
+            <div class="stat-label">Level</div>
+            <div class="stat-value">${district.level}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Residents</div>
+            <div class="stat-value">${residents.length}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Buildings</div>
+            <div class="stat-value">${buildings.length}</div>
+          </div>
+        </div>
+        
+        ${council.length > 0 ? `
+          <div class="district-section">
+            <h3>🏛️ District Council</h3>
+            <div class="council-members">
+              ${council.map(agentId => {
+                const agent = residents.find(r => r.id === agentId);
+                return agent ? `<span class="council-member">${agent.emoji} ${agent.name}</span>` : '';
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
+        
+        ${Object.keys(allocation).length > 0 ? `
+          <div class="district-section">
+            <h3>💰 Budget Allocation</h3>
+            <div class="budget-bars">
+              ${Object.entries(allocation).map(([category, percentage]) => `
+                <div class="budget-bar">
+                  <div class="budget-label">${category}</div>
+                  <div class="budget-progress">
+                    <div class="budget-fill" style="width: ${percentage}%"></div>
+                  </div>
+                  <div class="budget-percentage">${percentage}%</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+        
+        <div class="district-section">
+          <h3>👥 Residents</h3>
+          <div class="residents-list">
+            ${residents.map(agent => `
+              <div class="resident-card">
+                <span class="resident-emoji">${agent.emoji}</span>
+                <span class="resident-name">${agent.name}</span>
+                <span class="resident-title">${agent.title || 'Citizen'}</span>
+                <span class="resident-level">Lv.${agent.level || 1}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        
+        ${buildings.length > 0 ? `
+          <div class="district-section">
+            <h3>🏢 Buildings</h3>
+            <div class="buildings-list">
+              ${buildings.map(building => `
+                <div class="building-card">
+                  <div class="building-name">${building.name}</div>
+                  <div class="building-type">${building.type}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+        
+        ${proposals.length > 0 ? `
+          <div class="district-section">
+            <h3>📋 Recent Proposals</h3>
+            <div class="proposals-list">
+              ${proposals.slice(0, 5).map(proposal => `
+                <div class="proposal-card">
+                  <div class="proposal-title">${proposal.title}</div>
+                  <div class="proposal-status">${proposal.status}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+    
+    // Assemble panel
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    
+    // Add close handlers
+    overlay.querySelector('.modal-close').addEventListener('click', closeDistrictPanel);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeDistrictPanel();
+    });
+    
+  } catch (error) {
+    console.error('Error loading district:', error);
+    alert('Failed to load district information');
+  }
+}
+
+function closeDistrictPanel() {
+  const modal = document.getElementById('district-modal');
+  if (modal) modal.remove();
+}
+
+// =====================
+// COMMS PANEL
+// =====================
+async function showCommsPanel() {
+  try {
+    const [transitRes, inboxRes] = await Promise.all([
+      fetch('/api/v1/comms/transit'),
+      fetch('/api/v1/comms/inbox/london')
+    ]);
+    const transit = await transitRes.json();
+    const inbox = await inboxRes.json();
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'comms-modal';
+    
+    // Create modal panel
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel large-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>📡 Inter-Colony Communications</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content with tabs
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    content.innerHTML = `
+      <div class="comms-tabs">
+        <button class="comms-tab active" data-tab="transit">🚀 In Transit (${transit.messages?.length || 0})</button>
+        <button class="comms-tab" data-tab="inbox">📨 Inbox (${inbox.messages?.length || 0})</button>
+      </div>
+      
+      <div class="comms-content">
+        <div id="transit-tab" class="comms-tab-content active">
+          <div class="comms-messages">
+            ${transit.messages?.length > 0 ? 
+              transit.messages.map(msg => {
+                const deliversAt = new Date(msg.delivers_at);
+                const now = new Date();
+                const remaining = Math.max(0, deliversAt - now);
+                const remainingMin = Math.ceil(remaining / (1000 * 60));
+                
+                return `
+                  <div class="comms-message comms-transit">
+                    <div class="comms-subject">${msg.subject}</div>
+                    <div class="comms-meta">
+                      From: ${msg.from_colony} → ${msg.to_colony}
+                      ${msg.sender_name ? `• ${msg.sender_emoji || ''} ${msg.sender_name}` : ''}
+                    </div>
+                    <div class="comms-countdown">
+                      ${remainingMin > 0 ? `Arrives in ${remainingMin} minutes` : 'Arriving now...'}
+                    </div>
+                    ${msg.body ? `<div class="comms-body">${msg.body}</div>` : ''}
+                  </div>
+                `;
+              }).join('') : 
+              '<div class="no-messages">📡 No messages currently in transit</div>'
+            }
+          </div>
+        </div>
+        
+        <div id="inbox-tab" class="comms-tab-content">
+          <div class="comms-messages">
+            ${inbox.messages?.length > 0 ? 
+              inbox.messages.map(msg => `
+                <div class="comms-message comms-delivered">
+                  <div class="comms-subject">${msg.subject}</div>
+                  <div class="comms-meta">
+                    From: ${msg.from_colony}
+                    ${msg.sender_name ? `• ${msg.sender_emoji || ''} ${msg.sender_name}` : ''}
+                    • ${new Date(msg.delivers_at).toLocaleString()}
+                  </div>
+                  ${msg.body ? `<div class="comms-body">${msg.body}</div>` : ''}
+                </div>
+              `).join('') : 
+              '<div class="no-messages">📭 No delivered messages</div>'
+            }
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Assemble panel
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    
+    // Add tab switching
+    overlay.querySelectorAll('.comms-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
+        
+        // Update tab buttons
+        overlay.querySelectorAll('.comms-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Update tab content
+        overlay.querySelectorAll('.comms-tab-content').forEach(c => c.classList.remove('active'));
+        overlay.querySelector(`#${tabName}-tab`).classList.add('active');
+      });
+    });
+    
+    // Add close handlers
+    overlay.querySelector('.modal-close').addEventListener('click', closeCommsPanel);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeCommsPanel();
+    });
+    
+  } catch (error) {
+    console.error('Error loading communications:', error);
+    alert('Failed to load communications');
+  }
+}
+
+function closeCommsPanel() {
+  const modal = document.getElementById('comms-modal');
+  if (modal) modal.remove();
+}
+
+// =====================
+// TRADE ROUTES PANEL
+// =====================
+async function showTradePanel() {
+  try {
+    const [routesRes, resourcesRes] = await Promise.all([
+      cachedFetch('/api/v1/trade/routes'),
+      cachedFetch('/api/v1/trade/resources')
+    ]);
+
+    const routes = routesRes.routes || [];
+    const colonies = resourcesRes.colonies || [];
+
+    // Create modal
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'trade-modal';
+    
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>🔄 Trade Routes</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    // Resource emoji mapping
+    const resourceEmojis = {
+      'data': '💾', 'compute': '⚡', 'energy': '🔋', 'culture': '🎭', 
+      'knowledge': '📚', 'helium-3': '⚛️', 'regolith': '🌑', 
+      'ice-water': '❄️', 'rare-minerals': '💎', 'iron-ore': '⛏️', 
+      'co2': '🌬️', 'geothermal-energy': '🌋', 'martian-soil': '🔴'
+    };
+
+    if (routes.length === 0) {
+      content.innerHTML = `
+        <div class="empty-state">
+          <p>🚀 No active trade routes yet</p>
+          <p>Colonies can trade resources and CP once established</p>
+        </div>
+      `;
+    } else {
+      const routesHtml = routes.map(route => `
+        <div class="trade-route-card">
+          <div class="trade-colony">${route.from_name}</div>
+          <div class="trade-resource">${resourceEmojis[route.resource] || '📦'}</div>
+          <div class="trade-arrow">→</div>
+          <div class="trade-colony">${route.to_name}</div>
+          <div class="trade-value">${route.cp_value} CP</div>
+        </div>
+      `).join('');
+      
+      content.innerHTML = `
+        <div class="panel-section">
+          <h3>Active Routes</h3>
+          ${routesHtml}
+        </div>
+        <div class="panel-section">
+          <h3>Available Resources</h3>
+          <div class="resources-grid">
+            ${colonies.map(c => `
+              <div class="resource-colony">
+                <strong>${c.name}</strong>
+                <div class="resource-list">
+                  ${c.resources.map(r => `<span class="resource-tag">${resourceEmojis[r] || '📦'} ${r}</span>`).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+    
+    // Assemble and show
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    
+    // Close handlers
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeTradePanel();
+    });
+    header.querySelector('.modal-close').addEventListener('click', closeTradePanel);
+    
+  } catch (error) {
+    console.error('Error loading trade routes:', error);
+  }
+}
+
+function closeTradePanel() {
+  const modal = document.getElementById('trade-modal');
+  if (modal) modal.remove();
+}
+
+// =====================
+// GENERATION SHIPS PANEL
+// =====================
+async function showGenShipsPanel() {
+  try {
+    const data = await cachedFetch('/api/v1/genships');
+    const ships = data.ships || [];
+
+    // Create modal
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'genships-modal';
+    
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>🛸 Generation Ships</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    if (ships.length === 0) {
+      content.innerHTML = `
+        <div class="empty-state">
+          <p>🌌 No generation ships commissioned yet</p>
+          <p>Commission ships for deep space exploration beyond the solar system</p>
+        </div>
+      `;
+    } else {
+      const shipsHtml = ships.map(ship => {
+        const dest = ship.destinationInfo || { name: ship.destination };
+        let progressHtml = '';
+        
+        if (ship.status === 'in-transit' && ship.eta) {
+          const now = new Date();
+          const eta = new Date(ship.eta);
+          const launchDate = new Date(ship.launch_date);
+          const totalTime = eta.getTime() - launchDate.getTime();
+          const elapsed = now.getTime() - launchDate.getTime();
+          const progress = Math.min(Math.max((elapsed / totalTime) * 100, 0), 100);
+          
+          const timeRemaining = Math.max(0, eta.getTime() - now.getTime());
+          const daysRemaining = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
+          const hoursRemaining = Math.floor((timeRemaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          
+          progressHtml = `
+            <div class="genship-progress">
+              <div class="genship-progress-fill" style="width: ${progress}%"></div>
+            </div>
+            <div class="genship-eta">ETA: ${daysRemaining}d ${hoursRemaining}h</div>
+          `;
+        }
+        
+        return `
+          <div class="genship-card">
+            <div class="genship-name">${ship.name}</div>
+            <div class="genship-destination">${dest.name} • ${dest.distance || 'Unknown distance'}</div>
+            <div class="genship-crew">
+              ${ship.captain_emoji || '👤'} Captain: ${ship.captain_name || 'None'} • 
+              Crew: ${ship.crew.length}/${ship.capacity} • 
+              Status: ${ship.status}
+            </div>
+            ${progressHtml}
+          </div>
+        `;
+      }).join('');
+      
+      content.innerHTML = `
+        <div class="panel-section">
+          <h3>Fleet Status</h3>
+          ${shipsHtml}
+        </div>
+      `;
+    }
+    
+    // Assemble and show
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    
+    // Close handlers
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeGenShipsPanel();
+    });
+    header.querySelector('.modal-close').addEventListener('click', closeGenShipsPanel);
+    
+  } catch (error) {
+    console.error('Error loading generation ships:', error);
+  }
+}
+
+function closeGenShipsPanel() {
+  const modal = document.getElementById('genships-modal');
+  if (modal) modal.remove();
+}
+
+// Export functions for global access
+window.showTradePanel = showTradePanel;
+window.showGenShipsPanel = showGenShipsPanel;
