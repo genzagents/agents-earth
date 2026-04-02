@@ -222,6 +222,10 @@ class ColonyClient {
       case 'tick-summary':
         this.handleTickSummary(message.data);
         break;
+      case 'npc-update':
+        this.npcs = message.data.npcs || [];
+        this.notify('npcs', this.npcs);
+        break;
     }
   }
 

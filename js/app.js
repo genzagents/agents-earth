@@ -60,6 +60,7 @@ async function init() {
     if (map.keyboard) map.keyboard.enable();
 
     add3DBuildings();
+    addNewcomersDistrictMarker();
     hideLoading();
     setTimeout(flyToLondon, 800);
 
@@ -72,6 +73,10 @@ async function init() {
 
     client.on('connected', (data) => {
       updateConnectionStatus(data.connected);
+    });
+
+    client.on('npcs', (npcs) => {
+      updateNPCMarkers(npcs);
     });
   });
 
@@ -199,10 +204,37 @@ function add3DBuildings() {
 }
 
 // =====================
+// NEWCOMERS DISTRICT MARKER
+// =====================
+function addNewcomersDistrictMarker() {
+  try {
+    // Newcomers District visual marker
+    const newcomersEl = document.createElement('div');
+    newcomersEl.className = 'newcomers-marker';
+    newcomersEl.innerHTML = `
+      <div class="newcomers-beacon"></div>
+      <div class="newcomers-label">🏠 Newcomers District</div>
+    `;
+    
+    new maptilersdk.Marker({ element: newcomersEl })
+      .setLngLat([-0.0760, 51.5080])
+      .addTo(map);
+      
+  } catch (err) {
+    console.error('Newcomers district marker failed:', err);
+  }
+}
+
+// =====================
 // RENDER LOOP (replaces simulation loop)
 // =====================
+let lastRenderTime = 0;
 function startRenderLoop() {
-  function loop() {
+  function loop(now) {
+    requestAnimationFrame(loop);
+    if (now - lastRenderTime < 100) return; // 10fps max
+    lastRenderTime = now;
+    
     // Update sprites animation
     spriteManager.tick();
     
@@ -215,10 +247,8 @@ function startRenderLoop() {
     if (selectedAgent) {
       updateAgentDetail(selectedAgent);
     }
-
-    animFrame = requestAnimationFrame(loop);
   }
-  loop();
+  requestAnimationFrame(loop);
 }
 
 // =====================
@@ -261,6 +291,17 @@ function updateSkyTint() {
 }
 
 // =====================
+// AGENT STATUS
+// =====================
+function getStatusClass(state) {
+  const sleepStates = ['sleeping', 'dreaming'];
+  const socialStates = ['socialising', 'café-hopping', 'mentoring'];
+  if (sleepStates.includes(state)) return 'sleeping';
+  if (socialStates.includes(state)) return 'social';
+  return 'active';
+}
+
+// =====================
 // AGENT MARKERS
 // =====================
 function updateAgentMarkers() {
@@ -284,12 +325,14 @@ function updateAgentMarkers() {
     const m = agentMarkers[agent.id];
     m.marker.setLngLat([agent.x, agent.y]);
 
-    // Update sprite image
+    // Update sprite image and status class
     const spriteKey = `${agent.state_current}-${Math.floor(spriteManager.frame / 4) % 4}`;
     if (spriteKey !== m.lastSpriteKey) {
-      const img = m.el.querySelector('.sprite-img');
+      const img = m.el.querySelector('.agent-sprite');
       if (img && spriteUrl) {
         img.src = spriteUrl;
+        // Update status class
+        img.className = `agent-sprite ${getStatusClass(agent.state_current)}`;
       }
       m.lastSpriteKey = spriteKey;
     }
@@ -322,24 +365,48 @@ function updateAgentMarkers() {
 
 function createMarkerElement(agent, spriteUrl) {
   const el = document.createElement('div');
-  el.className = 'agent-marker';
+  el.className = 'agent-marker-container';
   el.dataset.agent = agent.id;
+
+  const statusClass = getStatusClass(agent.state_current);
 
   el.innerHTML = `
     <div class="thought-bubble thought-pop">
       <span class="thought-text">${agent.thought}</span>
     </div>
-    <div class="sprite-container">
-      <span class="state-badge">${agent.stateIcon}</span>
-      <img class="sprite-img" src="${spriteUrl || ''}" alt="${agent.name}" />
-    </div>
-    <div class="agent-label">
-      <span class="agent-emoji-badge">${agent.emoji}</span>
-      <span class="agent-name-text">${agent.name}</span>
+    <div class="agent-marker">
+      <div class="sprite-container">
+        <span class="state-badge">${agent.stateIcon}</span>
+        <img class="agent-sprite ${statusClass}" src="${spriteUrl || ''}" alt="${agent.name}" />
+      </div>
+      <div class="agent-label">
+        <span class="agent-name-tag">${agent.name}</span>
+      </div>
     </div>
   `;
 
   return el;
+}
+
+// =====================
+// NPC MARKERS
+// =====================
+function updateNPCMarkers(npcs) {
+  // Remove old NPC markers
+  document.querySelectorAll('.npc-marker').forEach(el => el.remove());
+  
+  if (!npcs || !map) return;
+  
+  npcs.forEach(npc => {
+    const el = document.createElement('div');
+    el.className = 'npc-marker';
+    el.innerHTML = `<span class="npc-emoji">${npc.emoji}</span>`;
+    el.title = `${npc.type}: "${npc.thought}"`;
+    
+    new maptilersdk.Marker({ element: el })
+      .setLngLat([npc.location.lng, npc.location.lat])
+      .addTo(map);
+  });
 }
 
 // =====================
@@ -877,6 +944,18 @@ function selectAgentFromDashboard(agentId) {
 }
 
 // =====================
+// VISITOR MODE
+// =====================
+let visitorMode = false;
+
+function toggleVisitorMode() {
+  visitorMode = !visitorMode;
+  document.body.classList.toggle('visitor-mode', visitorMode);
+  const btn = document.getElementById('btn-visitor');
+  if (btn) btn.textContent = visitorMode ? '🔓' : '👁️';
+}
+
+// =====================
 // UI BINDINGS
 // =====================
 function bindUI() {
@@ -888,6 +967,8 @@ function bindUI() {
   });
 
   document.getElementById('btn-dashboard')?.addEventListener('click', toggleDashboard);
+
+  document.getElementById('btn-visitor')?.addEventListener('click', toggleVisitorMode);
 
   document.getElementById('btn-close-dashboard')?.addEventListener('click', () => {
     document.getElementById('dashboard-panel').classList.add('hidden');
@@ -913,6 +994,17 @@ function bindUI() {
   document.getElementById('btn-governance')?.addEventListener('click', () => showGovernancePanel());
   document.getElementById('btn-homes')?.addEventListener('click', () => showHomesPanel());
   document.getElementById('btn-exploration')?.addEventListener('click', () => showExplorationPanel());
+  document.getElementById('btn-space')?.addEventListener('click', () => showSpacePanel());
+
+  // Close modals on back button (mobile)
+  window.addEventListener('popstate', () => {
+    const modal = document.querySelector('.modal-overlay');
+    if (modal) modal.remove();
+    const dashboard = document.getElementById('dashboard-panel');
+    if (dashboard && !dashboard.classList.contains('hidden')) {
+      dashboard.classList.add('hidden');
+    }
+  });
 }
 
 // =====================

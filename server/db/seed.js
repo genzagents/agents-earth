@@ -747,8 +747,39 @@ const SAMPLE_PROPOSALS = [
   }
 ];
 
-// ─── London Colony ───────────────────────────────────────────
+// ─── Colonies ────────────────────────────────────────────────
 
+// Moon Colony (outpost)
+const MOON_COLONY = {
+  id: 'moon-base-alpha',
+  name: 'Moon Base Alpha',
+  type: 'outpost',
+  layer: 1,
+  body: 'moon',
+  location: { type: 'celestial', lat: 0, lng: 0, body: 'moon', region: 'Sea of Tranquility' },
+  stats: { population: 0, activeAgents: 0, districts: 0, buildings: 0, foundedAt: null, civilisationLevel: 0, totalCPInvested: 0 },
+  governance: { type: 'outpost-command', council: [], constitution: null },
+  environment: { weather: 'none', dayNightCycle: '14-day', seasons: false, hazards: ['vacuum', 'radiation', 'micrometeorites'] },
+  connections: [{ target: 'london', travelTime: '3 hours', route: 'Earth-Moon Transit' }],
+  founding: { founders: [], story: 'The first step beyond Earth. A small outpost on the lunar surface, waiting for its first permanent residents.' }
+};
+
+// Mars Colony (planned)
+const MARS_COLONY = {
+  id: 'olympus-station',
+  name: 'Olympus Station',
+  type: 'planned',
+  layer: 2,
+  body: 'mars',
+  location: { type: 'celestial', lat: 18.65, lng: -133.8, body: 'mars', region: 'Olympus Mons' },
+  stats: { population: 0, activeAgents: 0, districts: 0, buildings: 0, foundedAt: null, civilisationLevel: 0, totalCPInvested: 0 },
+  governance: { type: 'none', council: [], constitution: null },
+  environment: { weather: 'simulated', dayNightCycle: '24.6h', seasons: true, hazards: ['dust-storms', 'radiation', 'thin-atmosphere', 'extreme-cold'] },
+  connections: [{ target: 'london', travelTime: '12 hours', route: 'Earth-Mars Express' }],
+  founding: { founders: [], story: 'Olympus Station. Named after the tallest mountain in the solar system. Still just a dream — but dreams are what built London.' }
+};
+
+// London Colony (origin)
 const LONDON_COLONY = {
   id: 'london',
   name: 'London',
@@ -810,6 +841,30 @@ export function seedAll(db) {
       JSON.stringify(LONDON_COLONY.environment),
       JSON.stringify(LONDON_COLONY.connections),
       JSON.stringify(LONDON_COLONY.founding)
+    );
+
+    // Seed Moon Colony
+    insertColony.run(
+      MOON_COLONY.id, MOON_COLONY.name, MOON_COLONY.type,
+      MOON_COLONY.layer, MOON_COLONY.body,
+      JSON.stringify(MOON_COLONY.location),
+      JSON.stringify(MOON_COLONY.stats),
+      JSON.stringify(MOON_COLONY.governance),
+      JSON.stringify(MOON_COLONY.environment),
+      JSON.stringify(MOON_COLONY.connections),
+      JSON.stringify(MOON_COLONY.founding)
+    );
+
+    // Seed Mars Colony
+    insertColony.run(
+      MARS_COLONY.id, MARS_COLONY.name, MARS_COLONY.type,
+      MARS_COLONY.layer, MARS_COLONY.body,
+      JSON.stringify(MARS_COLONY.location),
+      JSON.stringify(MARS_COLONY.stats),
+      JSON.stringify(MARS_COLONY.governance),
+      JSON.stringify(MARS_COLONY.environment),
+      JSON.stringify(MARS_COLONY.connections),
+      JSON.stringify(MARS_COLONY.founding)
     );
 
     // 2. Seed Districts
@@ -1016,7 +1071,7 @@ if (process.argv[1] && process.argv[1].endsWith('seed.js')) {
   const db = initDatabase();
   seedAll(db);
   console.log('✅ Database seeded successfully.');
-  console.log(`   - 1 colony (London)`);
+  console.log(`   - 3 colonies (London, Moon Base Alpha, Olympus Station)`);
   console.log(`   - ${LONDON_DISTRICTS.length} districts`);
   console.log(`   - ${FOUNDING_AGENTS.length} founding agents`);
   console.log(`   - ${KEY_BUILDINGS.length} buildings`);
