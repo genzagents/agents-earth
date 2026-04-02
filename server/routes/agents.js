@@ -308,7 +308,7 @@ export function agentRoutes(db, wsManager) {
             thought: `Heading to ${building ? building.name : district.name}.`
           };
 
-          db.prepare('UPDATE agents SET state = ?, district = ?, updated_at = datetime("now") WHERE id = ?')
+          db.prepare("UPDATE agents SET state = ?, district = ?, updated_at = datetime('now') WHERE id = ?")
             .run(JSON.stringify(newState), target.district, agent.id);
 
           wsManager.broadcast(agent.colony, 'agent-moved', {
@@ -330,7 +330,7 @@ export function agentRoutes(db, wsManager) {
             location: agent.state.location,
             thought: `Working on ${task_preference || 'assigned'} tasks.`
           };
-          db.prepare('UPDATE agents SET state = ?, updated_at = datetime("now") WHERE id = ?')
+          db.prepare("UPDATE agents SET state = ?, updated_at = datetime('now') WHERE id = ?")
             .run(JSON.stringify(newState), agent.id);
 
           wsManager.broadcast(agent.colony, 'agent-working', {
@@ -439,7 +439,7 @@ export function agentRoutes(db, wsManager) {
           economy.totalSpent += amount;
           economy.grandProjectContributions[proposal_id] = (economy.grandProjectContributions[proposal_id] || 0) + amount;
 
-          db.prepare('UPDATE agents SET economy = ?, updated_at = datetime("now") WHERE id = ?')
+          db.prepare("UPDATE agents SET economy = ?, updated_at = datetime('now') WHERE id = ?")
             .run(JSON.stringify(economy), agent.id);
 
           // Update ambition funding

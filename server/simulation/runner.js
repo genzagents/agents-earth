@@ -192,7 +192,7 @@ export function createSimulation(db, wsManager, tickMs) {
             };
 
             // Update agent in DB
-            db.prepare('UPDATE agents SET state = ?, needs = ?, updated_at = datetime("now") WHERE id = ?')
+            db.prepare("UPDATE agents SET state = ?, needs = ?, updated_at = datetime('now') WHERE id = ?")
               .run(JSON.stringify(newState), JSON.stringify(updatedNeeds), agent.id);
 
             // Update meta
@@ -220,7 +220,7 @@ export function createSimulation(db, wsManager, tickMs) {
 
         // If no transition, just update needs
         if (!transitioned) {
-          db.prepare('UPDATE agents SET needs = ?, updated_at = datetime("now") WHERE id = ?')
+          db.prepare("UPDATE agents SET needs = ?, updated_at = datetime('now') WHERE id = ?")
             .run(JSON.stringify(updatedNeeds), agent.id);
           agent.needs = JSON.stringify(updatedNeeds);
         }

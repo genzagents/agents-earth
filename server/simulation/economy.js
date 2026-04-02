@@ -154,7 +154,7 @@ export function processEarning(db, agent, amount, category, description) {
   economy.weeklyContribution += amount;
 
   // Update agent
-  db.prepare('UPDATE agents SET economy = ?, updated_at = datetime("now") WHERE id = ?')
+  db.prepare("UPDATE agents SET economy = ?, updated_at = datetime('now') WHERE id = ?")
     .run(JSON.stringify(economy), agent.id);
 
   // Ledger entry — batch small amounts (only log if >= 5 CP)
@@ -252,7 +252,7 @@ export function awardSkillXP(db, agent, state, tickMs) {
     leveledUp = true;
   }
 
-  db.prepare('UPDATE agents SET skills = ?, updated_at = datetime("now") WHERE id = ?')
+  db.prepare("UPDATE agents SET skills = ?, updated_at = datetime('now') WHERE id = ?")
     .run(JSON.stringify(skills), agent.id);
 
   return leveledUp ? { skill: targetSkill, newLevel: skills[targetSkill].level } : null;
