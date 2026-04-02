@@ -1333,3 +1333,188 @@ html, body {
   font-size: 11px;
   color: rgba(255, 255, 255, 0.3);
 }
+
+/* ============ NEW PANEL CARDS ============ */
+
+/* Event cards */
+.event-card {
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.event-title { 
+  font-weight: 600; 
+  color: white; 
+  font-size: 15px; 
+}
+.event-meta { 
+  font-size: 12px; 
+  color: rgba(255,255,255,0.5); 
+  margin-top: 4px; 
+}
+.event-attendees { 
+  font-size: 12px; 
+  color: #60a5fa; 
+  margin-top: 6px; 
+}
+
+/* Proposal cards */
+.proposal-card {
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+.proposal-title { 
+  font-weight: 600; 
+  color: white; 
+  font-size: 15px; 
+}
+.proposal-desc { 
+  font-size: 13px; 
+  color: rgba(255,255,255,0.6); 
+  margin-top: 4px; 
+}
+.vote-bar {
+  display: flex; 
+  height: 8px; 
+  border-radius: 4px; 
+  overflow: hidden; 
+  margin-top: 10px; 
+  background: rgba(255,255,255,0.1);
+}
+.vote-yes { 
+  background: #16a34a; 
+  height: 100%; 
+}
+.vote-no { 
+  background: #dc2626; 
+  height: 100%; 
+}
+.vote-meta { 
+  display: flex; 
+  justify-content: space-between; 
+  font-size: 11px; 
+  color: rgba(255,255,255,0.4); 
+  margin-top: 4px; 
+}
+
+/* Home cards */
+.home-card {
+  display: flex; 
+  align-items: center; 
+  gap: 12px;
+  padding: 12px 16px; 
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px; 
+  margin-bottom: 8px;
+}
+.home-emoji { 
+  font-size: 28px; 
+}
+.home-info { 
+  flex: 1; 
+}
+.home-name { 
+  font-weight: 600; 
+  color: white; 
+  font-size: 14px; 
+}
+.home-district { 
+  font-size: 12px; 
+  color: rgba(255,255,255,0.5); 
+}
+.home-level { 
+  font-size: 12px; 
+  color: #fbbf24; 
+}
+
+/* Mission cards */
+.mission-card {
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  border-left: 3px solid rgba(99, 102, 241, 0.5);
+}
+.mission-destination { 
+  font-weight: 600; 
+  color: white; 
+  font-size: 15px; 
+}
+.mission-meta { 
+  font-size: 12px; 
+  color: rgba(255,255,255,0.5); 
+  margin-top: 4px; 
+}
+.mission-status { 
+  display: inline-block; 
+  padding: 2px 8px; 
+  border-radius: 10px; 
+  font-size: 11px; 
+  font-weight: 500; 
+}
+
+/* Discovery cards */
+.discovery-card {
+  display: flex; 
+  align-items: center; 
+  gap: 10px;
+  padding: 10px 14px; 
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px; 
+  margin-bottom: 6px;
+}
+.discovery-icon { 
+  font-size: 20px; 
+}
+.discovery-name { 
+  font-weight: 500; 
+  color: white; 
+  font-size: 13px; 
+}
+.discovery-detail { 
+  font-size: 11px; 
+  color: rgba(255,255,255,0.4); 
+}
+
+/* Skills section */
+.skill-row { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+  margin-bottom: 6px; 
+}
+.skill-name { 
+  font-size: 12px; 
+  color: rgba(255,255,255,0.7); 
+  width: 80px; 
+  text-transform: capitalize; 
+}
+.skill-level { 
+  font-size: 11px; 
+  color: #fbbf24; 
+  width: 35px; 
+}
+.skill-bar { 
+  flex: 1; 
+  height: 6px; 
+  background: rgba(255,255,255,0.1); 
+  border-radius: 3px; 
+  overflow: hidden; 
+}
+.skill-fill { 
+  height: 100%; 
+  background: linear-gradient(90deg, #6366f1, #8b5cf6); 
+  border-radius: 3px; 
+}
+
+/* === Skill Bars === */
+.skills-list { display: flex; flex-direction: column; gap: 8px; }
+.skill-row { }
+.skill-header { display: flex; justify-content: space-between; margin-bottom: 3px; }
+.skill-name { font-size: 12px; color: rgba(255,255,255,0.7); text-transform: capitalize; }
+.skill-level { font-size: 11px; color: rgba(255,255,255,0.4); font-weight: 600; }
+.skill-bar { height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
+.skill-bar-fill { height: 100%; background: linear-gradient(90deg, #6366f1, #8b5cf6); border-radius: 3px; transition: width 0.3s; }
