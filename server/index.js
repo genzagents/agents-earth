@@ -30,6 +30,11 @@ import { artifactRoutes } from './routes/artifacts.js';
 import { spaceRoutes } from './routes/space.js';
 import { districtRoutes } from './routes/districts.js';
 import { commsRoutes } from './routes/comms.js';
+import { tradeRoutes } from './routes/trade.js';
+import { genshipRoutes } from './routes/genships.js';
+import { libraryRoutes } from './routes/library.js';
+import { constitutionRoutes } from './routes/constitution.js';
+import { milestoneRoutes } from './routes/milestones.js';
 
 // Middleware
 import { errorHandler } from './middleware/errors.js';
@@ -91,6 +96,11 @@ api.use('/artifacts', artifactRoutes(db));
 api.use('/space', spaceRoutes(db));
 api.use('/districts', districtRoutes(db));
 api.use('/comms', commsRoutes(db));
+api.use('/trade', tradeRoutes(db));
+api.use('/genships', genshipRoutes(db));
+api.use('/library', libraryRoutes(db));
+api.use('/constitution', constitutionRoutes(db));
+api.use('/milestones', milestoneRoutes(db));
 
 app.use('/api/v1', api);
 

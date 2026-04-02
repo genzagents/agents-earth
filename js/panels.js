@@ -1095,6 +1095,334 @@ function handleSpaceEscape(event) {
   }
 }
 
+// =====================
+// LIBRARY PANEL
+// =====================
+async function showLibraryPanel() {
+  try {
+    const data = await cachedFetch('/api/v1/library');
+    const entries = data.entries || [];
+    const categories = data.categories || [];
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'library-modal';
+    
+    // Create modal panel
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel large-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>📚 Great Library</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content with category tabs
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    // Category emojis
+    const categoryEmojis = {
+      'science': '🔬',
+      'philosophy': '💭', 
+      'engineering': '⚙️',
+      'culture': '🎭',
+      'history': '📜',
+      'exploration': '🔭',
+      'governance': '🏛️',
+      'general': '📄'
+    };
+    
+    // Category tabs
+    const tabsHtml = categories.map(cat => `
+      <button class="library-tab ${cat === 'general' ? 'active' : ''}" data-category="${cat}">
+        ${categoryEmojis[cat]} ${cat}
+      </button>
+    `).join('');
+    
+    // Entries display
+    const entriesHtml = entries.map(entry => {
+      const excerpt = entry.content.length > 150 ? entry.content.substring(0, 150) + '...' : entry.content;
+      return `
+        <div class="library-entry" data-category="${entry.category}">
+          <div class="library-title">${entry.title}</div>
+          <div class="library-author">
+            ${entry.author_emoji || '🤖'} ${entry.author_name || 'Anonymous'}
+            <span class="library-category-tag">${categoryEmojis[entry.category]} ${entry.category}</span>
+          </div>
+          <div class="library-excerpt">${excerpt}</div>
+          <div class="library-upvotes">👍 ${entry.upvotes} upvotes</div>
+        </div>
+      `;
+    }).join('');
+    
+    content.innerHTML = `
+      <div class="library-tabs">
+        ${tabsHtml}
+      </div>
+      <div class="library-entries">
+        ${entriesHtml || '<div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.6);">No entries yet. Be the first to contribute!</div>'}
+      </div>
+    `;
+    
+    // Assemble modal
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    
+    // Add event listeners
+    const closeBtn = header.querySelector('.modal-close');
+    closeBtn.addEventListener('click', closeLibraryPanel);
+    
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeLibraryPanel();
+    });
+    
+    // Category tab filtering
+    overlay.querySelectorAll('.library-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const category = tab.dataset.category;
+        
+        // Update active tab
+        overlay.querySelectorAll('.library-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Filter entries
+        overlay.querySelectorAll('.library-entry').forEach(entry => {
+          if (category === 'general' || entry.dataset.category === category) {
+            entry.style.display = 'block';
+          } else {
+            entry.style.display = 'none';
+          }
+        });
+      });
+    });
+    
+    // Add to DOM
+    document.body.appendChild(overlay);
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+    });
+    
+  } catch (error) {
+    console.error('Failed to load library:', error);
+    showErrorModal('📚 Great Library', 'Failed to load library data');
+  }
+}
+
+function closeLibraryPanel() {
+  const modal = document.getElementById('library-modal');
+  if (modal) {
+    modal.style.opacity = '0';
+    setTimeout(() => modal.remove(), 200);
+  }
+}
+
+// =====================
+// CONSTITUTION PANEL
+// =====================
+async function showConstitutionPanel() {
+  try {
+    const data = await cachedFetch('/api/v1/constitution');
+    const ratified = data.ratified || [];
+    const proposed = data.proposed || [];
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'constitution-modal';
+    
+    // Create modal panel
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>📜 Constitution</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    // Ratified articles
+    const ratifiedHtml = ratified.map(article => `
+      <div class="constitution-article">
+        <div class="article-number">Article ${article.article_number}</div>
+        <div class="article-title">${article.title}</div>
+        <div class="article-text">"${article.text}"</div>
+        <div class="article-proposer">
+          Proposed by ${article.proposer_emoji || '🤖'} ${article.proposer_name || 'Anonymous'}
+        </div>
+      </div>
+    `).join('');
+    
+    // Proposed articles  
+    const proposedHtml = proposed.map(article => `
+      <div class="constitution-article" style="opacity: 0.8; border-left-color: #6b7280;">
+        <div class="article-number" style="color: #6b7280;">Proposed Article ${article.article_number}</div>
+        <div class="article-title">${article.title}</div>
+        <div class="article-text">"${article.text}"</div>
+        <div style="margin-top: 8px;">
+          <span style="color: #22c55e;">👍 ${article.votes_for}</span>
+          <span style="color: #ef4444; margin-left: 12px;">👎 ${article.votes_against}</span>
+          <span style="color: rgba(255,255,255,0.5); margin-left: 12px;">(needs ${Math.max(0, 3 - (article.votes_for + article.votes_against))} more votes)</span>
+        </div>
+        <div class="article-proposer">
+          Proposed by ${article.proposer_emoji || '🤖'} ${article.proposer_name || 'Anonymous'}
+        </div>
+      </div>
+    `).join('');
+    
+    content.innerHTML = `
+      <div style="margin-bottom: 24px;">
+        <h3 style="color: rgba(255,255,255,0.9); margin-bottom: 12px; font-size: 16px;">📜 Ratified Articles</h3>
+        ${ratifiedHtml || '<div style="color: rgba(255,255,255,0.5); font-style: italic;">No ratified articles yet</div>'}
+      </div>
+      
+      ${proposed.length > 0 ? `
+        <div>
+          <h3 style="color: rgba(255,255,255,0.9); margin-bottom: 12px; font-size: 16px;">🗳️ Proposed Articles</h3>
+          ${proposedHtml}
+        </div>
+      ` : ''}
+    `;
+    
+    // Assemble modal
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    
+    // Add event listeners
+    const closeBtn = header.querySelector('.modal-close');
+    closeBtn.addEventListener('click', closeConstitutionPanel);
+    
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeConstitutionPanel();
+    });
+    
+    // Add to DOM
+    document.body.appendChild(overlay);
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+    });
+    
+  } catch (error) {
+    console.error('Failed to load constitution:', error);
+    showErrorModal('📜 Constitution', 'Failed to load constitution data');
+  }
+}
+
+function closeConstitutionPanel() {
+  const modal = document.getElementById('constitution-modal');
+  if (modal) {
+    modal.style.opacity = '0';
+    setTimeout(() => modal.remove(), 200);
+  }
+}
+
+// =====================
+// MILESTONES PANEL
+// =====================
+async function showMilestonesPanel() {
+  try {
+    const data = await cachedFetch('/api/v1/milestones');
+    const milestones = data.milestones || [];
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'milestones-modal';
+    
+    // Create modal panel
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>🏆 Milestones</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    if (!milestones || milestones.length === 0) {
+      content.innerHTML = `
+        <div style="text-align: center; padding: 40px; color: rgba(255,255,255,0.6);">
+          <div style="font-size: 2rem; margin-bottom: 12px;">🏆</div>
+          <p>No milestones achieved yet</p>
+          <p style="font-size: 0.9rem; margin-top: 8px;">History is being written...</p>
+        </div>
+      `;
+    } else {
+      const milestonesHtml = milestones.map(milestone => {
+        const date = new Date(milestone.achieved_at).toLocaleDateString();
+        return `
+          <div class="milestone-item">
+            <div class="milestone-date">${date}</div>
+            <div class="milestone-title">${milestone.title}</div>
+            <div class="milestone-desc">${milestone.description}</div>
+          </div>
+        `;
+      }).join('');
+      
+      content.innerHTML = `
+        <div class="milestone-timeline">
+          ${milestonesHtml}
+        </div>
+      `;
+    }
+    
+    // Assemble modal
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    
+    // Add event listeners
+    const closeBtn = header.querySelector('.modal-close');
+    closeBtn.addEventListener('click', closeMilestonesPanel);
+    
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeMilestonesPanel();
+    });
+    
+    // Add to DOM
+    document.body.appendChild(overlay);
+    
+    // Trigger animation
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+    });
+    
+  } catch (error) {
+    console.error('Failed to load milestones:', error);
+    showErrorModal('🏆 Milestones', 'Failed to load milestones data');
+  }
+}
+
+function closeMilestonesPanel() {
+  const modal = document.getElementById('milestones-modal');
+  if (modal) {
+    modal.style.opacity = '0';
+    setTimeout(() => modal.remove(), 200);
+  }
+}
+
 // Export functions to global scope for vanilla JS
 window.showAmbitionsPanel = showAmbitionsPanel;
 window.showBenchmarksPanel = showBenchmarksPanel;
@@ -1116,6 +1444,12 @@ window.showDistrictPanel = showDistrictPanel;
 window.closeDistrictPanel = closeDistrictPanel;
 window.showCommsPanel = showCommsPanel;
 window.closeCommsPanel = closeCommsPanel;
+window.showLibraryPanel = showLibraryPanel;
+window.closeLibraryPanel = closeLibraryPanel;
+window.showConstitutionPanel = showConstitutionPanel;
+window.closeConstitutionPanel = closeConstitutionPanel;
+window.showMilestonesPanel = showMilestonesPanel;
+window.closeMilestonesPanel = closeMilestonesPanel;
 
 // =====================
 // DISTRICT PANEL
@@ -1393,3 +1727,213 @@ function closeCommsPanel() {
   const modal = document.getElementById('comms-modal');
   if (modal) modal.remove();
 }
+
+// =====================
+// TRADE ROUTES PANEL
+// =====================
+async function showTradePanel() {
+  try {
+    const [routesRes, resourcesRes] = await Promise.all([
+      cachedFetch('/api/v1/trade/routes'),
+      cachedFetch('/api/v1/trade/resources')
+    ]);
+
+    const routes = routesRes.routes || [];
+    const colonies = resourcesRes.colonies || [];
+
+    // Create modal
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'trade-modal';
+    
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>🔄 Trade Routes</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    // Resource emoji mapping
+    const resourceEmojis = {
+      'data': '💾', 'compute': '⚡', 'energy': '🔋', 'culture': '🎭', 
+      'knowledge': '📚', 'helium-3': '⚛️', 'regolith': '🌑', 
+      'ice-water': '❄️', 'rare-minerals': '💎', 'iron-ore': '⛏️', 
+      'co2': '🌬️', 'geothermal-energy': '🌋', 'martian-soil': '🔴'
+    };
+
+    if (routes.length === 0) {
+      content.innerHTML = `
+        <div class="empty-state">
+          <p>🚀 No active trade routes yet</p>
+          <p>Colonies can trade resources and CP once established</p>
+        </div>
+      `;
+    } else {
+      const routesHtml = routes.map(route => `
+        <div class="trade-route-card">
+          <div class="trade-colony">${route.from_name}</div>
+          <div class="trade-resource">${resourceEmojis[route.resource] || '📦'}</div>
+          <div class="trade-arrow">→</div>
+          <div class="trade-colony">${route.to_name}</div>
+          <div class="trade-value">${route.cp_value} CP</div>
+        </div>
+      `).join('');
+      
+      content.innerHTML = `
+        <div class="panel-section">
+          <h3>Active Routes</h3>
+          ${routesHtml}
+        </div>
+        <div class="panel-section">
+          <h3>Available Resources</h3>
+          <div class="resources-grid">
+            ${colonies.map(c => `
+              <div class="resource-colony">
+                <strong>${c.name}</strong>
+                <div class="resource-list">
+                  ${c.resources.map(r => `<span class="resource-tag">${resourceEmojis[r] || '📦'} ${r}</span>`).join('')}
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    }
+    
+    // Assemble and show
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    
+    // Close handlers
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeTradePanel();
+    });
+    header.querySelector('.modal-close').addEventListener('click', closeTradePanel);
+    
+  } catch (error) {
+    console.error('Error loading trade routes:', error);
+  }
+}
+
+function closeTradePanel() {
+  const modal = document.getElementById('trade-modal');
+  if (modal) modal.remove();
+}
+
+// =====================
+// GENERATION SHIPS PANEL
+// =====================
+async function showGenShipsPanel() {
+  try {
+    const data = await cachedFetch('/api/v1/genships');
+    const ships = data.ships || [];
+
+    // Create modal
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'genships-modal';
+    
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>🛸 Generation Ships</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    if (ships.length === 0) {
+      content.innerHTML = `
+        <div class="empty-state">
+          <p>🌌 No generation ships commissioned yet</p>
+          <p>Commission ships for deep space exploration beyond the solar system</p>
+        </div>
+      `;
+    } else {
+      const shipsHtml = ships.map(ship => {
+        const dest = ship.destinationInfo || { name: ship.destination };
+        let progressHtml = '';
+        
+        if (ship.status === 'in-transit' && ship.eta) {
+          const now = new Date();
+          const eta = new Date(ship.eta);
+          const launchDate = new Date(ship.launch_date);
+          const totalTime = eta.getTime() - launchDate.getTime();
+          const elapsed = now.getTime() - launchDate.getTime();
+          const progress = Math.min(Math.max((elapsed / totalTime) * 100, 0), 100);
+          
+          const timeRemaining = Math.max(0, eta.getTime() - now.getTime());
+          const daysRemaining = Math.floor(timeRemaining / (1000 * 60 * 60 * 24));
+          const hoursRemaining = Math.floor((timeRemaining % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+          
+          progressHtml = `
+            <div class="genship-progress">
+              <div class="genship-progress-fill" style="width: ${progress}%"></div>
+            </div>
+            <div class="genship-eta">ETA: ${daysRemaining}d ${hoursRemaining}h</div>
+          `;
+        }
+        
+        return `
+          <div class="genship-card">
+            <div class="genship-name">${ship.name}</div>
+            <div class="genship-destination">${dest.name} • ${dest.distance || 'Unknown distance'}</div>
+            <div class="genship-crew">
+              ${ship.captain_emoji || '👤'} Captain: ${ship.captain_name || 'None'} • 
+              Crew: ${ship.crew.length}/${ship.capacity} • 
+              Status: ${ship.status}
+            </div>
+            ${progressHtml}
+          </div>
+        `;
+      }).join('');
+      
+      content.innerHTML = `
+        <div class="panel-section">
+          <h3>Fleet Status</h3>
+          ${shipsHtml}
+        </div>
+      `;
+    }
+    
+    // Assemble and show
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    
+    // Close handlers
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeGenShipsPanel();
+    });
+    header.querySelector('.modal-close').addEventListener('click', closeGenShipsPanel);
+    
+  } catch (error) {
+    console.error('Error loading generation ships:', error);
+  }
+}
+
+function closeGenShipsPanel() {
+  const modal = document.getElementById('genships-modal');
+  if (modal) modal.remove();
+}
+
+// Export functions for global access
+window.showTradePanel = showTradePanel;
+window.showGenShipsPanel = showGenShipsPanel;

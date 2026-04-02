@@ -1079,12 +1079,32 @@ function bindUI() {
     showArchiveModal();
   });
 
+  document.getElementById('btn-library')?.addEventListener('click', () => {
+    if (window.showLibraryPanel) {
+      window.showLibraryPanel();
+    }
+  });
+
+  document.getElementById('btn-constitution')?.addEventListener('click', () => {
+    if (window.showConstitutionPanel) {
+      window.showConstitutionPanel();
+    }
+  });
+
+  document.getElementById('btn-milestones')?.addEventListener('click', () => {
+    if (window.showMilestonesPanel) {
+      window.showMilestonesPanel();
+    }
+  });
+
   document.getElementById('btn-events')?.addEventListener('click', () => showEventsPanel());
   document.getElementById('btn-governance')?.addEventListener('click', () => showGovernancePanel());
   document.getElementById('btn-homes')?.addEventListener('click', () => showHomesPanel());
   document.getElementById('btn-exploration')?.addEventListener('click', () => showExplorationPanel());
   document.getElementById('btn-space')?.addEventListener('click', () => showSpacePanel());
   document.getElementById('btn-comms')?.addEventListener('click', () => showCommsPanel());
+  document.getElementById('btn-trade')?.addEventListener('click', () => showTradePanel());
+  document.getElementById('btn-genships')?.addEventListener('click', () => showGenShipsPanel());
 
   // Close modals on back button (mobile)
   window.addEventListener('popstate', () => {
