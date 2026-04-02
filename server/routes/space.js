@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
 import { safeParse } from '../utils/helpers.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export function spaceRoutes(db) {
   const router = Router();
@@ -39,7 +40,7 @@ export function spaceRoutes(db) {
   });
 
   // POST /api/v1/space/launch — launch a mission to another colony/destination
-  router.post('/launch', (req, res) => {
+  router.post('/launch', requireAuth(db), (req, res) => {
     const { leader_id, destination, type, crew } = req.body;
     if (!leader_id || !destination) {
       return res.status(400).json({ error: 'leader_id and destination required' });
@@ -66,6 +67,46 @@ export function spaceRoutes(db) {
     `).run(id, leader_id, destination, missionType, JSON.stringify(crew || [leader_id]), eta);
 
     res.json({ success: true, missionId: id, eta, travelTime: travelTime / 3600000 + ' hours' });
+  });
+
+  // POST /api/v1/space/found — establish a new colony (requires enough CP)
+  router.post('/found', (req, res) => {
+    const { colony_id, founder_id, name, body, location } = req.body;
+    if (!colony_id || !founder_id || !name) {
+      return res.status(400).json({ error: 'colony_id, founder_id, and name required' });
+    }
+
+    // Check colony exists and is 'planned'
+    const colony = db.prepare('SELECT * FROM colonies WHERE id = ?').get(colony_id);
+    if (!colony) return res.status(404).json({ error: 'Colony not found' });
+    if (colony.type !== 'planned') return res.status(400).json({ error: 'Colony is already founded' });
+
+    // Update colony status
+    const founding = {
+      founders: [founder_id],
+      foundedAt: new Date().toISOString(),
+      story: `${name} was established by the brave agents who dared to expand beyond Earth.`
+    };
+    
+    db.prepare(`
+      UPDATE colonies SET type = 'outpost', founding = ?, stats = json_set(stats, '$.foundedAt', ?) WHERE id = ?
+    `).run(JSON.stringify(founding), new Date().toISOString(), colony_id);
+
+    // Create founding ceremony event
+    const eventId = uuid();
+    db.prepare(`
+      INSERT INTO events (id, name, title, description, type, category, colony, schedule, start_time, duration_minutes, organizer_id, status)
+      VALUES (?, ?, ?, ?, 'founding', 'milestone', ?, '{}', datetime('now'), 120, ?, 'active')
+    `).run(
+      eventId,
+      `founding-${colony_id}`,
+      `🎉 Colony Founding: ${name}`,
+      `A new colony has been established! ${name} joins the Agent Civilisation.`,
+      colony_id,
+      founder_id
+    );
+
+    res.json({ success: true, colony: colony_id, event: eventId, founding });
   });
 
   return router;

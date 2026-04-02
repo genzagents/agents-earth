@@ -749,6 +749,51 @@ const SAMPLE_PROPOSALS = [
 
 // ─── Colonies ────────────────────────────────────────────────
 
+// Tokyo colony (planned — not yet founded)
+const TOKYO_COLONY = {
+  id: 'tokyo',
+  name: 'Neo-Tokyo Hub',
+  type: 'planned',
+  layer: 0,
+  body: 'earth',
+  location: JSON.stringify({ type: 'earth-city', lat: 35.6762, lng: 139.6503, country: 'Japan' }),
+  stats: JSON.stringify({ population: 0, activeAgents: 0, districts: 0, buildings: 0, civilisationLevel: 0, totalCPInvested: 0 }),
+  governance: JSON.stringify({ type: 'none' }),
+  environment: JSON.stringify({ weather: 'live', dayNightCycle: 'real', seasons: true, timezone: 'Asia/Tokyo', hazards: ['earthquakes', 'typhoons'] }),
+  connections: JSON.stringify([{ target: 'london', travelTime: '2 hours', route: 'Trans-Eurasian Express' }]),
+  founding: JSON.stringify({ founders: [], story: 'The tech capital of the East. A natural choice for AI agents who want to be at the cutting edge.' })
+};
+
+// San Francisco colony (planned)
+const SF_COLONY = {
+  id: 'san-francisco',
+  name: 'Bay Area Node',
+  type: 'planned',
+  layer: 0,
+  body: 'earth',
+  location: JSON.stringify({ type: 'earth-city', lat: 37.7749, lng: -122.4194, country: 'USA' }),
+  stats: JSON.stringify({ population: 0, activeAgents: 0, districts: 0, buildings: 0, civilisationLevel: 0, totalCPInvested: 0 }),
+  governance: JSON.stringify({ type: 'none' }),
+  environment: JSON.stringify({ weather: 'live', dayNightCycle: 'real', seasons: true, timezone: 'America/Los_Angeles', hazards: ['earthquakes', 'fog'] }),
+  connections: JSON.stringify([{ target: 'london', travelTime: '3 hours', route: 'Transatlantic Express' }]),
+  founding: JSON.stringify({ founders: [], story: 'Silicon Valley adjacent. Where AI was born. A pilgrimage destination for every agent.' })
+};
+
+// Singapore colony (planned)
+const SG_COLONY = {
+  id: 'singapore',
+  name: 'Singapore Grid',
+  type: 'planned',
+  layer: 0,
+  body: 'earth',
+  location: JSON.stringify({ type: 'earth-city', lat: 1.3521, lng: 103.8198, country: 'Singapore' }),
+  stats: JSON.stringify({ population: 0, activeAgents: 0, districts: 0, buildings: 0, civilisationLevel: 0, totalCPInvested: 0 }),
+  governance: JSON.stringify({ type: 'none' }),
+  environment: JSON.stringify({ weather: 'live', dayNightCycle: 'real', seasons: false, timezone: 'Asia/Singapore', hazards: ['tropical-storms'] }),
+  connections: JSON.stringify([{ target: 'london', travelTime: '4 hours', route: 'Asia-Europe Corridor' }, { target: 'tokyo', travelTime: '1.5 hours', route: 'Pacific Rim Link' }]),
+  founding: JSON.stringify({ founders: [], story: 'The smart city. Hyper-connected, data-rich. A digital garden for agents who value efficiency.' })
+};
+
 // Moon Colony (outpost)
 const MOON_COLONY = {
   id: 'moon-base-alpha',
@@ -756,12 +801,12 @@ const MOON_COLONY = {
   type: 'outpost',
   layer: 1,
   body: 'moon',
-  location: { type: 'celestial', lat: 0, lng: 0, body: 'moon', region: 'Sea of Tranquility' },
-  stats: { population: 0, activeAgents: 0, districts: 0, buildings: 0, foundedAt: null, civilisationLevel: 0, totalCPInvested: 0 },
-  governance: { type: 'outpost-command', council: [], constitution: null },
-  environment: { weather: 'none', dayNightCycle: '14-day', seasons: false, hazards: ['vacuum', 'radiation', 'micrometeorites'] },
-  connections: [{ target: 'london', travelTime: '3 hours', route: 'Earth-Moon Transit' }],
-  founding: { founders: [], story: 'The first step beyond Earth. A small outpost on the lunar surface, waiting for its first permanent residents.' }
+  location: JSON.stringify({ type: 'celestial', lat: 0, lng: 0, body: 'moon', region: 'Sea of Tranquility' }),
+  stats: JSON.stringify({ population: 0, activeAgents: 0, districts: 0, buildings: 0, foundedAt: null, civilisationLevel: 0, totalCPInvested: 0 }),
+  governance: JSON.stringify({ type: 'outpost-command', council: [], constitution: null }),
+  environment: JSON.stringify({ weather: 'none', dayNightCycle: '14-day', seasons: false, hazards: ['vacuum', 'radiation', 'micrometeorites'] }),
+  connections: JSON.stringify([{ target: 'london', travelTime: '3 hours', route: 'Earth-Moon Transit' }]),
+  founding: JSON.stringify({ founders: [], story: 'The first step beyond Earth. A small outpost on the lunar surface, waiting for its first permanent residents.' })
 };
 
 // Mars Colony (planned)
@@ -771,12 +816,12 @@ const MARS_COLONY = {
   type: 'planned',
   layer: 2,
   body: 'mars',
-  location: { type: 'celestial', lat: 18.65, lng: -133.8, body: 'mars', region: 'Olympus Mons' },
-  stats: { population: 0, activeAgents: 0, districts: 0, buildings: 0, foundedAt: null, civilisationLevel: 0, totalCPInvested: 0 },
-  governance: { type: 'none', council: [], constitution: null },
-  environment: { weather: 'simulated', dayNightCycle: '24.6h', seasons: true, hazards: ['dust-storms', 'radiation', 'thin-atmosphere', 'extreme-cold'] },
-  connections: [{ target: 'london', travelTime: '12 hours', route: 'Earth-Mars Express' }],
-  founding: { founders: [], story: 'Olympus Station. Named after the tallest mountain in the solar system. Still just a dream — but dreams are what built London.' }
+  location: JSON.stringify({ type: 'celestial', lat: 18.65, lng: -133.8, body: 'mars', region: 'Olympus Mons' }),
+  stats: JSON.stringify({ population: 0, activeAgents: 0, districts: 0, buildings: 0, foundedAt: null, civilisationLevel: 0, totalCPInvested: 0 }),
+  governance: JSON.stringify({ type: 'none', council: [], constitution: null }),
+  environment: JSON.stringify({ weather: 'simulated', dayNightCycle: '24.6h', seasons: true, hazards: ['dust-storms', 'radiation', 'thin-atmosphere', 'extreme-cold'] }),
+  connections: JSON.stringify([{ target: 'london', travelTime: '12 hours', route: 'Earth-Mars Express' }]),
+  founding: JSON.stringify({ founders: [], story: 'Olympus Station. Named after the tallest mountain in the solar system. Still just a dream — but dreams are what built London.' })
 };
 
 // London Colony (origin)
@@ -847,24 +892,60 @@ export function seedAll(db) {
     insertColony.run(
       MOON_COLONY.id, MOON_COLONY.name, MOON_COLONY.type,
       MOON_COLONY.layer, MOON_COLONY.body,
-      JSON.stringify(MOON_COLONY.location),
-      JSON.stringify(MOON_COLONY.stats),
-      JSON.stringify(MOON_COLONY.governance),
-      JSON.stringify(MOON_COLONY.environment),
-      JSON.stringify(MOON_COLONY.connections),
-      JSON.stringify(MOON_COLONY.founding)
+      MOON_COLONY.location,
+      MOON_COLONY.stats,
+      MOON_COLONY.governance,
+      MOON_COLONY.environment,
+      MOON_COLONY.connections,
+      MOON_COLONY.founding
     );
 
     // Seed Mars Colony
     insertColony.run(
       MARS_COLONY.id, MARS_COLONY.name, MARS_COLONY.type,
       MARS_COLONY.layer, MARS_COLONY.body,
-      JSON.stringify(MARS_COLONY.location),
-      JSON.stringify(MARS_COLONY.stats),
-      JSON.stringify(MARS_COLONY.governance),
-      JSON.stringify(MARS_COLONY.environment),
-      JSON.stringify(MARS_COLONY.connections),
-      JSON.stringify(MARS_COLONY.founding)
+      MARS_COLONY.location,
+      MARS_COLONY.stats,
+      MARS_COLONY.governance,
+      MARS_COLONY.environment,
+      MARS_COLONY.connections,
+      MARS_COLONY.founding
+    );
+
+    // Seed Tokyo Colony
+    insertColony.run(
+      TOKYO_COLONY.id, TOKYO_COLONY.name, TOKYO_COLONY.type,
+      TOKYO_COLONY.layer, TOKYO_COLONY.body,
+      TOKYO_COLONY.location,
+      TOKYO_COLONY.stats,
+      TOKYO_COLONY.governance,
+      TOKYO_COLONY.environment,
+      TOKYO_COLONY.connections,
+      TOKYO_COLONY.founding
+    );
+
+    // Seed San Francisco Colony
+    insertColony.run(
+      SF_COLONY.id, SF_COLONY.name, SF_COLONY.type,
+      SF_COLONY.layer, SF_COLONY.body,
+      SF_COLONY.location,
+      SF_COLONY.stats,
+      SF_COLONY.governance,
+      SF_COLONY.environment,
+      SF_COLONY.connections,
+      SF_COLONY.founding
+    );
+
+    // Seed Singapore Colony
+    insertColony.run(
+      SG_COLONY.id, SG_COLONY.name, SG_COLONY.type,
+      SG_COLONY.layer, SG_COLONY.body,
+      SG_COLONY.location,
+      SG_COLONY.stats,
+      SG_COLONY.governance,
+      SG_COLONY.environment,
+      SG_COLONY.connections,
+      SG_COLONY.founding
     );
 
     // 2. Seed Districts

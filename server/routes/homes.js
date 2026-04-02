@@ -6,6 +6,7 @@
 
 import { Router } from 'express';
 import { safeParse } from '../utils/helpers.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export function homeRoutes(db) {
   const router = Router();
@@ -35,7 +36,7 @@ export function homeRoutes(db) {
   });
 
   // POST /api/v1/homes/buy — buy a home in a district
-  router.post('/buy', (req, res) => {
+  router.post('/buy', requireAuth(db), (req, res) => {
     const { agent_id, district_id } = req.body;
     if (!agent_id || !district_id) return res.status(400).json({ error: 'agent_id and district_id required' });
 
@@ -80,7 +81,7 @@ export function homeRoutes(db) {
   });
 
   // POST /api/v1/homes/customize — customize home
-  router.post('/customize', (req, res) => {
+  router.post('/customize', requireAuth(db), (req, res) => {
     const { agent_id, name, style } = req.body;
     if (!agent_id) return res.status(400).json({ error: 'agent_id required' });
 

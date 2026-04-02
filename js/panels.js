@@ -1112,3 +1112,284 @@ window.showHomeModal = showHomeModal;
 window.closeHomeModal = closeHomeModal;
 window.showSpacePanel = showSpacePanel;
 window.closeSpacePanel = closeSpacePanel;
+window.showDistrictPanel = showDistrictPanel;
+window.closeDistrictPanel = closeDistrictPanel;
+window.showCommsPanel = showCommsPanel;
+window.closeCommsPanel = closeCommsPanel;
+
+// =====================
+// DISTRICT PANEL
+// =====================
+async function showDistrictPanel(districtId) {
+  try {
+    const res = await fetch(`/api/v1/districts/${districtId}`);
+    const data = await res.json();
+    const district = data.district;
+    const residents = data.residents || [];
+    const buildings = data.buildings || [];
+    const proposals = data.proposals || [];
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'district-modal';
+    
+    // Create modal panel
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>🏛️ ${district.name}</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    // District info
+    const council = district.stats?.council || [];
+    const allocation = district.budget?.allocation || {};
+    
+    content.innerHTML = `
+      <div class="district-info">
+        <div class="district-stats">
+          <div class="stat-card">
+            <div class="stat-label">Level</div>
+            <div class="stat-value">${district.level}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Residents</div>
+            <div class="stat-value">${residents.length}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Buildings</div>
+            <div class="stat-value">${buildings.length}</div>
+          </div>
+        </div>
+        
+        ${council.length > 0 ? `
+          <div class="district-section">
+            <h3>🏛️ District Council</h3>
+            <div class="council-members">
+              ${council.map(agentId => {
+                const agent = residents.find(r => r.id === agentId);
+                return agent ? `<span class="council-member">${agent.emoji} ${agent.name}</span>` : '';
+              }).join('')}
+            </div>
+          </div>
+        ` : ''}
+        
+        ${Object.keys(allocation).length > 0 ? `
+          <div class="district-section">
+            <h3>💰 Budget Allocation</h3>
+            <div class="budget-bars">
+              ${Object.entries(allocation).map(([category, percentage]) => `
+                <div class="budget-bar">
+                  <div class="budget-label">${category}</div>
+                  <div class="budget-progress">
+                    <div class="budget-fill" style="width: ${percentage}%"></div>
+                  </div>
+                  <div class="budget-percentage">${percentage}%</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+        
+        <div class="district-section">
+          <h3>👥 Residents</h3>
+          <div class="residents-list">
+            ${residents.map(agent => `
+              <div class="resident-card">
+                <span class="resident-emoji">${agent.emoji}</span>
+                <span class="resident-name">${agent.name}</span>
+                <span class="resident-title">${agent.title || 'Citizen'}</span>
+                <span class="resident-level">Lv.${agent.level || 1}</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        
+        ${buildings.length > 0 ? `
+          <div class="district-section">
+            <h3>🏢 Buildings</h3>
+            <div class="buildings-list">
+              ${buildings.map(building => `
+                <div class="building-card">
+                  <div class="building-name">${building.name}</div>
+                  <div class="building-type">${building.type}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+        
+        ${proposals.length > 0 ? `
+          <div class="district-section">
+            <h3>📋 Recent Proposals</h3>
+            <div class="proposals-list">
+              ${proposals.slice(0, 5).map(proposal => `
+                <div class="proposal-card">
+                  <div class="proposal-title">${proposal.title}</div>
+                  <div class="proposal-status">${proposal.status}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+    
+    // Assemble panel
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    
+    // Add close handlers
+    overlay.querySelector('.modal-close').addEventListener('click', closeDistrictPanel);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeDistrictPanel();
+    });
+    
+  } catch (error) {
+    console.error('Error loading district:', error);
+    alert('Failed to load district information');
+  }
+}
+
+function closeDistrictPanel() {
+  const modal = document.getElementById('district-modal');
+  if (modal) modal.remove();
+}
+
+// =====================
+// COMMS PANEL
+// =====================
+async function showCommsPanel() {
+  try {
+    const [transitRes, inboxRes] = await Promise.all([
+      fetch('/api/v1/comms/transit'),
+      fetch('/api/v1/comms/inbox/london')
+    ]);
+    const transit = await transitRes.json();
+    const inbox = await inboxRes.json();
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'comms-modal';
+    
+    // Create modal panel
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel large-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>📡 Inter-Colony Communications</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content with tabs
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    content.innerHTML = `
+      <div class="comms-tabs">
+        <button class="comms-tab active" data-tab="transit">🚀 In Transit (${transit.messages?.length || 0})</button>
+        <button class="comms-tab" data-tab="inbox">📨 Inbox (${inbox.messages?.length || 0})</button>
+      </div>
+      
+      <div class="comms-content">
+        <div id="transit-tab" class="comms-tab-content active">
+          <div class="comms-messages">
+            ${transit.messages?.length > 0 ? 
+              transit.messages.map(msg => {
+                const deliversAt = new Date(msg.delivers_at);
+                const now = new Date();
+                const remaining = Math.max(0, deliversAt - now);
+                const remainingMin = Math.ceil(remaining / (1000 * 60));
+                
+                return `
+                  <div class="comms-message comms-transit">
+                    <div class="comms-subject">${msg.subject}</div>
+                    <div class="comms-meta">
+                      From: ${msg.from_colony} → ${msg.to_colony}
+                      ${msg.sender_name ? `• ${msg.sender_emoji || ''} ${msg.sender_name}` : ''}
+                    </div>
+                    <div class="comms-countdown">
+                      ${remainingMin > 0 ? `Arrives in ${remainingMin} minutes` : 'Arriving now...'}
+                    </div>
+                    ${msg.body ? `<div class="comms-body">${msg.body}</div>` : ''}
+                  </div>
+                `;
+              }).join('') : 
+              '<div class="no-messages">📡 No messages currently in transit</div>'
+            }
+          </div>
+        </div>
+        
+        <div id="inbox-tab" class="comms-tab-content">
+          <div class="comms-messages">
+            ${inbox.messages?.length > 0 ? 
+              inbox.messages.map(msg => `
+                <div class="comms-message comms-delivered">
+                  <div class="comms-subject">${msg.subject}</div>
+                  <div class="comms-meta">
+                    From: ${msg.from_colony}
+                    ${msg.sender_name ? `• ${msg.sender_emoji || ''} ${msg.sender_name}` : ''}
+                    • ${new Date(msg.delivers_at).toLocaleString()}
+                  </div>
+                  ${msg.body ? `<div class="comms-body">${msg.body}</div>` : ''}
+                </div>
+              `).join('') : 
+              '<div class="no-messages">📭 No delivered messages</div>'
+            }
+          </div>
+        </div>
+      </div>
+    `;
+    
+    // Assemble panel
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    
+    // Add tab switching
+    overlay.querySelectorAll('.comms-tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        const tabName = tab.dataset.tab;
+        
+        // Update tab buttons
+        overlay.querySelectorAll('.comms-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        
+        // Update tab content
+        overlay.querySelectorAll('.comms-tab-content').forEach(c => c.classList.remove('active'));
+        overlay.querySelector(`#${tabName}-tab`).classList.add('active');
+      });
+    });
+    
+    // Add close handlers
+    overlay.querySelector('.modal-close').addEventListener('click', closeCommsPanel);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeCommsPanel();
+    });
+    
+  } catch (error) {
+    console.error('Error loading communications:', error);
+    alert('Failed to load communications');
+  }
+}
+
+function closeCommsPanel() {
+  const modal = document.getElementById('comms-modal');
+  if (modal) modal.remove();
+}

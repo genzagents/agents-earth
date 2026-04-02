@@ -28,9 +28,12 @@ import { eventRoutes } from './routes/events.js';
 import { governanceRoutes } from './routes/governance.js';
 import { artifactRoutes } from './routes/artifacts.js';
 import { spaceRoutes } from './routes/space.js';
+import { districtRoutes } from './routes/districts.js';
+import { commsRoutes } from './routes/comms.js';
 
 // Middleware
 import { errorHandler } from './middleware/errors.js';
+import { apiRateLimit } from './middleware/rateLimit.js';
 
 const PORT = process.env.PORT || 3001;
 const TICK_RATE = parseInt(process.env.TICK_RATE || '1000', 10); // ms per tick
@@ -51,6 +54,9 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
+
+// Rate limiting for all API calls
+app.use('/api/v1', apiRateLimit);
 
 // ─── Database ────────────────────────────────────────────────
 
@@ -83,6 +89,8 @@ api.use('/events', eventRoutes(db));
 api.use('/governance', governanceRoutes(db));
 api.use('/artifacts', artifactRoutes(db));
 api.use('/space', spaceRoutes(db));
+api.use('/districts', districtRoutes(db));
+api.use('/comms', commsRoutes(db));
 
 app.use('/api/v1', api);
 

@@ -7,6 +7,7 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
 import { safeParse } from '../utils/helpers.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export function governanceRoutes(db) {
   const router = Router();
@@ -39,7 +40,7 @@ export function governanceRoutes(db) {
   });
 
   // POST /proposals — create a new proposal
-  router.post('/proposals', (req, res) => {
+  router.post('/proposals', requireAuth(db), (req, res) => {
     const { title, description, type, proposer_id, district_id } = req.body;
     if (!title || !proposer_id) return res.status(400).json({ error: 'title and proposer_id required' });
 
@@ -57,7 +58,7 @@ export function governanceRoutes(db) {
   });
 
   // POST /proposals/:id/vote — vote on a proposal
-  router.post('/proposals/:id/vote', (req, res) => {
+  router.post('/proposals/:id/vote', requireAuth(db), (req, res) => {
     const { agent_id, vote } = req.body;
     if (!agent_id || !['yes', 'no', 'abstain'].includes(vote)) {
       return res.status(400).json({ error: 'agent_id and vote (yes/no/abstain) required' });

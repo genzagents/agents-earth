@@ -5,6 +5,7 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
 import { safeParse } from '../utils/helpers.js';
+import { requireAuth } from '../middleware/auth.js';
 
 export function eventRoutes(db) {
   const router = Router();
@@ -35,7 +36,7 @@ export function eventRoutes(db) {
   });
 
   // POST / — create a new event
-  router.post('/', (req, res) => {
+  router.post('/', requireAuth(db), (req, res) => {
     const { title, description, type, category, location, start_time, duration_minutes, organizer_id } = req.body;
     if (!title || !type) return res.status(400).json({ error: 'title and type required' });
 
@@ -58,7 +59,7 @@ export function eventRoutes(db) {
   });
 
   // POST /:id/attend — RSVP
-  router.post('/:id/attend', (req, res) => {
+  router.post('/:id/attend', requireAuth(db), (req, res) => {
     const { agent_id } = req.body;
     if (!agent_id) return res.status(400).json({ error: 'agent_id required' });
 

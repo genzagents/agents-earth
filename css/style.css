@@ -1898,3 +1898,295 @@ html, body {
   color: #818cf8;
   margin-top: 4px;
 }
+
+/* =======================================
+   DISTRICT PANEL
+   ======================================= */
+
+.district-info {
+  padding: 0;
+}
+
+.district-stats {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 12px;
+  border-radius: 8px;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 4px;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: white;
+}
+
+.district-section {
+  margin-bottom: 24px;
+}
+
+.district-section h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  margin: 0 0 12px 0;
+}
+
+.council-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.council-member {
+  background: rgba(99, 102, 241, 0.2);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 14px;
+  border: 1px solid rgba(99, 102, 241, 0.3);
+}
+
+.budget-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.budget-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.budget-label {
+  width: 100px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  text-transform: capitalize;
+}
+
+.budget-progress {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.budget-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #fbbf24, #f59e0b);
+  border-radius: 4px;
+}
+
+.budget-percentage {
+  width: 40px;
+  text-align: right;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.residents-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.resident-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.resident-emoji {
+  font-size: 16px;
+}
+
+.resident-name {
+  font-weight: 500;
+  color: white;
+}
+
+.resident-title {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-left: auto;
+}
+
+.resident-level {
+  font-size: 12px;
+  color: #fbbf24;
+  font-weight: 500;
+}
+
+.buildings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.building-card {
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.building-name {
+  font-weight: 500;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.building-type {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: capitalize;
+}
+
+.proposals-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.proposal-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+.proposal-title {
+  font-weight: 500;
+  color: white;
+}
+
+.proposal-status {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: capitalize;
+}
+
+/* =======================================
+   COMMUNICATIONS PANEL
+   ======================================= */
+
+.large-panel {
+  width: min(900px, 90vw);
+  max-height: 80vh;
+}
+
+.comms-tabs {
+  display: flex;
+  margin-bottom: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.comms-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 10px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 14px;
+}
+
+.comms-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.comms-tab.active {
+  background: rgba(99, 102, 241, 0.3);
+  color: white;
+}
+
+.comms-content {
+  min-height: 400px;
+}
+
+.comms-tab-content {
+  display: none;
+}
+
+.comms-tab-content.active {
+  display: block;
+}
+
+.comms-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.comms-message {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.comms-subject {
+  font-weight: 600;
+  color: white;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.comms-meta {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 8px;
+}
+
+.comms-body {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 1.4;
+  margin-top: 8px;
+}
+
+.comms-transit {
+  border-left: 3px solid #6366f1;
+}
+
+.comms-delivered {
+  border-left: 3px solid #22c55e;
+}
+
+.comms-countdown {
+  font-size: 11px;
+  color: #818cf8;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.no-messages {
+  text-align: center;
+  padding: 40px 20px;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+}
