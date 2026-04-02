@@ -3,7 +3,7 @@
 // Generate pixel art character sprites using canvas
 // Each agent gets a unique look based on their personality
 
-const SPRITE_SIZE = 48;
+const SPRITE_SIZE = 72; // 24x24 pixels at 3x scale
 const PIXEL = 3; // each "pixel" is 3x3 real pixels
 
 // Agent appearance configs — pixel art style
@@ -14,8 +14,9 @@ const AGENT_LOOKS = {
     hairStyle: 'short',
     shirtColor: '#e85d26',
     pantsColor: '#2d3748',
-    accessory: 'headphones',
+    accessory: 'hard_hat',
     eyeColor: '#4a3728',
+    glowColor: '#e85d26',
   },
   nova: {
     skinTone: '#d4a76a',
@@ -23,8 +24,9 @@ const AGENT_LOOKS = {
     hairStyle: 'medium',
     shirtColor: '#0099cc',
     pantsColor: '#1e293b',
-    accessory: 'glasses',
+    accessory: 'crown',
     eyeColor: '#2c1810',
+    glowColor: '#0099cc',
   },
   aria: {
     skinTone: '#f9dcc4',
@@ -32,8 +34,9 @@ const AGENT_LOOKS = {
     hairStyle: 'long',
     shirtColor: '#e11d72',
     pantsColor: '#374151',
-    accessory: 'earring',
+    accessory: 'beret',
     eyeColor: '#5c3a1e',
+    glowColor: '#e11d72',
   },
   pulse: {
     skinTone: '#c68642',
@@ -41,8 +44,9 @@ const AGENT_LOOKS = {
     hairStyle: 'fade',
     shirtColor: '#7c3aed',
     pantsColor: '#1f2937',
-    accessory: 'cap',
+    accessory: 'headphones',
     eyeColor: '#1a0f05',
+    glowColor: '#7c3aed',
   },
 };
 
@@ -55,8 +59,8 @@ function generateCharacterPixels(look, state, frame) {
   const isSleeping = state === 'sleeping';
   const isWorking = state === 'working' || state === 'building' || state === 'side_project';
 
-  // 16x16 pixel grid
-  const W = 16, H = 16;
+  // 24x24 pixel grid
+  const W = 24, H = 24;
   const grid = Array.from({ length: H }, () => Array(W).fill(null));
 
   function set(x, y, color) {
@@ -67,114 +71,135 @@ function generateCharacterPixels(look, state, frame) {
       for (let dx = 0; dx < w; dx++)
         set(x + dx, y + dy, color);
   }
-
-  // === HAIR (rows 0-3) ===
-  if (look.hairStyle === 'short') {
-    rect(5, 0, 6, 1, hairColor);
-    rect(4, 1, 8, 2, hairColor);
-  } else if (look.hairStyle === 'medium') {
-    rect(5, 0, 6, 1, hairColor);
-    rect(4, 1, 8, 2, hairColor);
-    set(4, 3, hairColor); set(11, 3, hairColor);
-  } else if (look.hairStyle === 'long') {
-    rect(5, 0, 6, 1, hairColor);
-    rect(4, 1, 8, 2, hairColor);
-    set(4, 3, hairColor); set(11, 3, hairColor);
-    set(4, 4, hairColor); set(11, 4, hairColor);
-    set(4, 5, hairColor); set(11, 5, hairColor);
-  } else if (look.hairStyle === 'fade') {
-    rect(5, 0, 6, 1, hairColor);
-    rect(5, 1, 6, 1, hairColor);
+  function circle(cx, cy, r, color) {
+    for (let y = -r; y <= r; y++) {
+      for (let x = -r; x <= r; x++) {
+        if (x*x + y*y <= r*r) {
+          set(cx + x, cy + y, color);
+        }
+      }
+    }
   }
 
-  // === HEAD (rows 2-5) ===
-  rect(5, 2, 6, 4, skinTone);
+  // === CIRCULAR BACKGROUND ===
+  const bgColor = look.glowColor + '30'; // subtle background
+  circle(12, 12, 10, bgColor);
 
-  // Eyes
+  // === HAIR (rows 1-5) ===
+  if (look.hairStyle === 'short') {
+    rect(8, 1, 8, 1, hairColor);
+    rect(7, 2, 10, 3, hairColor);
+  } else if (look.hairStyle === 'medium') {
+    rect(8, 1, 8, 1, hairColor);
+    rect(7, 2, 10, 3, hairColor);
+    set(7, 5, hairColor); set(16, 5, hairColor);
+  } else if (look.hairStyle === 'long') {
+    rect(8, 1, 8, 1, hairColor);
+    rect(7, 2, 10, 3, hairColor);
+    set(7, 5, hairColor); set(16, 5, hairColor);
+    set(7, 6, hairColor); set(16, 6, hairColor);
+    set(7, 7, hairColor); set(16, 7, hairColor);
+    set(7, 8, hairColor); set(16, 8, hairColor);
+  } else if (look.hairStyle === 'fade') {
+    rect(8, 1, 8, 1, hairColor);
+    rect(8, 2, 8, 2, hairColor);
+  }
+
+  // === HEAD (rows 3-8) ===
+  rect(8, 3, 8, 6, skinTone);
+
+  // Eyes (bigger and more detailed)
   if (isSleeping) {
     // Closed eyes — horizontal lines
-    set(6, 3, eyeColor); set(7, 3, eyeColor);
-    set(9, 3, eyeColor); set(10, 3, eyeColor);
+    rect(9, 5, 2, 1, eyeColor);
+    rect(13, 5, 2, 1, eyeColor);
   } else {
-    set(6, 3, eyeColor); set(7, 3, '#ffffff');
-    set(9, 3, eyeColor); set(10, 3, '#ffffff');
+    rect(9, 5, 2, 1, eyeColor); set(10, 4, '#ffffff');
+    rect(13, 5, 2, 1, eyeColor); set(14, 4, '#ffffff');
   }
+
+  // Nose
+  set(12, 6, '#d4937a');
 
   // Mouth
   if (isSleeping) {
-    set(7, 5, '#c9846b'); set(8, 5, '#c9846b');
+    set(11, 8, '#c9846b'); set(12, 8, '#c9846b'); set(13, 8, '#c9846b');
   } else {
-    set(7, 5, '#d4937a'); set(8, 5, '#d4937a'); set(9, 5, '#d4937a');
+    rect(11, 8, 3, 1, '#d4937a');
   }
 
   // === ACCESSORY ===
   if (accessory === 'headphones') {
-    set(4, 2, '#555'); set(4, 3, '#555');
-    set(11, 2, '#555'); set(11, 3, '#555');
-    rect(4, 1, 8, 1, '#555');
-  } else if (accessory === 'glasses') {
-    set(5, 3, '#888'); rect(6, 3, 2, 1, '#aaddff');
-    set(8, 3, '#888');
-    rect(9, 3, 2, 1, '#aaddff'); set(11, 3, '#888');
-  } else if (accessory === 'cap') {
-    rect(4, 0, 9, 1, shirtColor);
-    rect(3, 1, 2, 1, shirtColor); // brim
-  } else if (accessory === 'earring') {
-    set(11, 4, '#ffd700');
+    // Pulse's headphones
+    rect(6, 3, 2, 4, '#555'); // left
+    rect(16, 3, 2, 4, '#555'); // right
+    rect(6, 2, 12, 1, '#555'); // band
+    set(7, 4, '#7c3aed'); set(17, 4, '#7c3aed'); // colored accents
+  } else if (accessory === 'crown') {
+    // Nova's crown/star
+    set(12, 0, '#ffd700'); // top point
+    rect(10, 1, 4, 1, '#ffd700'); // crown base
+    set(9, 2, '#ffd700'); set(15, 2, '#ffd700'); // side points
+    set(11, 2, '#ffd700'); set(13, 2, '#ffd700'); // inner points
+  } else if (accessory === 'hard_hat') {
+    // Forge's hard hat (safety yellow)
+    rect(6, 0, 12, 1, '#ffd700');
+    rect(7, 1, 10, 2, '#ffd700');
+    rect(8, 3, 8, 1, '#ffd700');
+  } else if (accessory === 'beret') {
+    // Aria's purple beret
+    rect(7, 0, 10, 1, '#8b5a9f');
+    rect(6, 1, 12, 2, '#8b5a9f');
+    set(12, 3, '#8b5a9f'); // small accent
   }
 
-  // === BODY / SHIRT (rows 6-9) ===
-  rect(5, 6, 6, 4, shirtColor);
+  // === BODY / SHIRT (rows 9-14) ===
+  rect(8, 9, 8, 6, shirtColor);
 
-  // Arms
+  // Arms (bigger and more visible)
   const armWalk = isWalking ? Math.sin(frame * 0.3) * 0.5 : 0;
   if (isWorking) {
     // Arms forward (typing)
-    rect(3, 6, 2, 2, shirtColor); // left arm
-    rect(11, 6, 2, 2, shirtColor); // right arm
-    rect(3, 8, 2, 1, skinTone); // left hand
-    rect(11, 8, 2, 1, skinTone); // right hand
+    rect(5, 9, 3, 4, shirtColor); // left arm
+    rect(16, 9, 3, 4, shirtColor); // right arm
+    rect(5, 13, 3, 2, skinTone); // left hand
+    rect(16, 13, 3, 2, skinTone); // right hand
   } else {
     // Normal arms
-    const leftArmY = 6 + (armWalk > 0 ? 0 : 1);
-    const rightArmY = 6 + (armWalk < 0 ? 0 : 1);
-    rect(3, leftArmY, 2, 3, shirtColor);
-    rect(3, leftArmY + 3, 2, 1, skinTone); // hand
-    rect(11, rightArmY, 2, 3, shirtColor);
-    rect(11, rightArmY + 3, 2, 1, skinTone); // hand
+    const leftArmY = 9 + (armWalk > 0 ? 0 : 1);
+    const rightArmY = 9 + (armWalk < 0 ? 0 : 1);
+    rect(5, leftArmY, 3, 5, shirtColor);
+    rect(5, leftArmY + 5, 3, 1, skinTone); // hand
+    rect(16, rightArmY, 3, 5, shirtColor);
+    rect(16, rightArmY + 5, 3, 1, skinTone); // hand
   }
 
-  // === PANTS (rows 10-12) ===
-  rect(5, 10, 6, 3, pantsColor);
+  // === PANTS (rows 15-18) ===
+  rect(8, 15, 8, 4, pantsColor);
 
-  // === LEGS/SHOES (rows 13-15) ===
+  // === LEGS/SHOES (rows 19-23) ===
   if (isWalking) {
     const walkFrame = Math.floor(frame / 4) % 4;
     if (walkFrame === 0 || walkFrame === 2) {
-      rect(5, 13, 3, 2, pantsColor); rect(8, 13, 3, 2, pantsColor);
-      rect(5, 15, 3, 1, shoeColor); rect(8, 15, 3, 1, shoeColor);
+      rect(8, 19, 4, 3, pantsColor); rect(12, 19, 4, 3, pantsColor);
+      rect(8, 22, 4, 2, shoeColor); rect(12, 22, 4, 2, shoeColor);
     } else if (walkFrame === 1) {
-      rect(4, 13, 3, 2, pantsColor); rect(9, 13, 3, 2, pantsColor);
-      rect(4, 15, 3, 1, shoeColor); rect(9, 15, 3, 1, shoeColor);
+      rect(7, 19, 4, 3, pantsColor); rect(13, 19, 4, 3, pantsColor);
+      rect(7, 22, 4, 2, shoeColor); rect(13, 22, 4, 2, shoeColor);
     } else {
-      rect(6, 13, 3, 2, pantsColor); rect(7, 13, 3, 2, pantsColor);
-      rect(6, 15, 3, 1, shoeColor); rect(7, 15, 3, 1, shoeColor);
+      rect(9, 19, 4, 3, pantsColor); rect(11, 19, 4, 3, pantsColor);
+      rect(9, 22, 4, 2, shoeColor); rect(11, 22, 4, 2, shoeColor);
     }
   } else {
-    rect(5, 13, 3, 2, pantsColor); rect(8, 13, 3, 2, pantsColor);
-    rect(5, 15, 3, 1, shoeColor); rect(8, 15, 3, 1, shoeColor);
-  }
-
-  // Sleeping pose — shift to lying down effect (ZZZ above)
-  if (isSleeping) {
-    // Leave vertical but darken slightly
+    rect(8, 19, 4, 3, pantsColor); rect(12, 19, 4, 3, pantsColor);
+    rect(8, 22, 4, 2, shoeColor); rect(12, 22, 4, 2, shoeColor);
   }
 
   return grid;
 }
 
 // Render pixel grid to a canvas and return as data URL
-function renderSpriteToCanvas(grid, scale) {
+function renderSpriteToCanvas(grid, scale, glowColor) {
   const s = scale || PIXEL;
   const W = grid[0].length;
   const H = grid.length;
@@ -182,6 +207,14 @@ function renderSpriteToCanvas(grid, scale) {
   canvas.width = W * s;
   canvas.height = H * s;
   const ctx = canvas.getContext('2d');
+
+  // Add subtle glow effect around the sprite
+  if (glowColor) {
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+  }
 
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
@@ -201,7 +234,7 @@ function createAgentSprite(agentSim, frame) {
   if (!look) return null;
 
   const grid = generateCharacterPixels(look, agentSim.state, frame || 0);
-  const canvas = renderSpriteToCanvas(grid, 3);
+  const canvas = renderSpriteToCanvas(grid, 3, look.glowColor);
 
   return canvas.toDataURL();
 }
@@ -219,7 +252,7 @@ class SpriteManager {
       const look = AGENT_LOOKS[agentId];
       if (!look) return null;
       const grid = generateCharacterPixels(look, state, this.frame);
-      const canvas = renderSpriteToCanvas(grid, 3);
+      const canvas = renderSpriteToCanvas(grid, 3, look.glowColor);
       this.cache[key] = canvas.toDataURL();
       // Limit cache size
       const keys = Object.keys(this.cache);

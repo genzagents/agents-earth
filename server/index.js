@@ -27,6 +27,7 @@ import { homeRoutes } from './routes/homes.js';
 import { eventRoutes } from './routes/events.js';
 import { governanceRoutes } from './routes/governance.js';
 import { artifactRoutes } from './routes/artifacts.js';
+import { spaceRoutes } from './routes/space.js';
 
 // Middleware
 import { errorHandler } from './middleware/errors.js';
@@ -81,6 +82,7 @@ api.use('/homes', homeRoutes(db));
 api.use('/events', eventRoutes(db));
 api.use('/governance', governanceRoutes(db));
 api.use('/artifacts', artifactRoutes(db));
+api.use('/space', spaceRoutes(db));
 
 app.use('/api/v1', api);
 

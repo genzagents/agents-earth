@@ -600,6 +600,55 @@ export function createSimulation(db, wsManager, tickMs) {
         wsManager.broadcast('london', 'new-event-created', event);
       }
 
+      // ─── Phase 5: NPC Management ─────────────────────
+      if (tickCount % 200 === 0) {
+        // Manage NPC pool
+        const npcTypes = [
+          { type: 'commuter', emoji: '🚶', thoughts: ['Heading to the tube...', 'Running late again', 'Nice day for a walk'] },
+          { type: 'tourist', emoji: '📸', thoughts: ['What a beautiful city!', 'Where\'s Big Ben from here?', 'Need to find a good café'] },
+          { type: 'shopkeeper', emoji: '🛍️', thoughts: ['Open for business!', 'Come in, come in!', 'Fresh stock today'] },
+          { type: 'musician', emoji: '🎸', thoughts: ['♫ Playing some tunes...', 'Any requests?', '♪ La la la...'] },
+          { type: 'jogger', emoji: '🏃', thoughts: ['Just five more minutes...', 'Morning run feels great', 'Almost at my PB!'] },
+          { type: 'dog-walker', emoji: '🐕', thoughts: ['Good boy!', 'Heel, Biscuit!', 'Who wants a treat?'] },
+        ];
+
+        // Central London districts for NPC placement
+        const CENTRAL_DISTRICTS = [
+          { name: 'City of London', lat: 51.5155, lng: -0.0922 },
+          { name: 'Westminster', lat: 51.4975, lng: -0.1357 },
+          { name: 'Shoreditch', lat: 51.5265, lng: -0.0825 },
+          { name: 'Camden', lat: 51.5517, lng: -0.1588 },
+          { name: 'Soho', lat: 51.5137, lng: -0.1337 },
+          { name: 'South Bank', lat: 51.5055, lng: -0.1160 },
+          { name: 'Clerkenwell', lat: 51.5237, lng: -0.1099 },
+          { name: 'Covent Garden', lat: 51.5117, lng: -0.1240 },
+        ];
+
+        // Generate NPCs
+        const npcs = [];
+        const npcCount = 4 + Math.floor(Math.random() * 4); // 4-8 NPCs
+        
+        for (let i = 0; i < npcCount; i++) {
+          const npcType = npcTypes[Math.floor(Math.random() * npcTypes.length)];
+          const district = CENTRAL_DISTRICTS[Math.floor(Math.random() * CENTRAL_DISTRICTS.length)];
+          
+          npcs.push({
+            id: `npc-${tickCount}-${i}`,
+            type: npcType.type,
+            emoji: npcType.emoji,
+            thought: npcType.thoughts[Math.floor(Math.random() * npcType.thoughts.length)],
+            location: {
+              lat: district.lat + (Math.random() - 0.5) * 0.004,
+              lng: district.lng + (Math.random() - 0.5) * 0.006,
+              name: district.name
+            }
+          });
+        }
+
+        // Broadcast NPC updates via WebSocket
+        wsManager.broadcast('london', 'npc-update', { npcs, tick: tickCount });
+      }
+
       // Broadcast tick summary every 60 ticks (~1 minute at 1s ticks)
       if (tickCount % 60 === 0) {
         wsManager.broadcastGlobal('tick-summary', {

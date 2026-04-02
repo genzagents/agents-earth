@@ -239,16 +239,28 @@ html, body {
 }
 
 /* ============ AGENT MARKERS ON MAP ============ */
+.agent-marker-container {
+  position: relative;
+  width: 80px;
+  height: 100px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+.agent-marker-container:hover {
+  transform: scale(1.2);
+}
+.agent-marker-container.is-selected { 
+  transform: scale(1.15); 
+  z-index: 10; 
+}
+
 .agent-marker {
   display: flex;
   flex-direction: column;
   align-items: center;
-  cursor: pointer;
-  transition: transform 0.2s;
   position: relative;
 }
-.agent-marker:hover { transform: scale(1.1); }
-.agent-marker.is-selected { transform: scale(1.15); z-index: 10; }
 
 /* Thought bubble */
 .thought-bubble {
@@ -306,22 +318,51 @@ html, body {
 /* Sprite container */
 .sprite-container {
   position: relative;
-  width: 48px;
-  height: 48px;
+  width: 72px;
+  height: 72px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.sprite-img {
-  width: 48px;
-  height: 48px;
+.agent-sprite {
+  width: 72px;
+  height: 72px;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  transition: border-color 0.3s, box-shadow 0.3s;
   filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
 }
 
-.agent-marker.is-moving .sprite-img {
+.agent-sprite.active {
+  border-color: #22c55e;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
+  animation: activePulse 2s ease-in-out infinite;
+}
+
+@keyframes activePulse {
+  0%, 100% { 
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.4); 
+  }
+  50% { 
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.8); 
+  }
+}
+
+.agent-sprite.social {
+  border-color: #fbbf24;
+  box-shadow: 0 0 12px rgba(251, 191, 36, 0.4);
+}
+
+.agent-sprite.sleeping {
+  border-color: rgba(255,255,255,0.2);
+  opacity: 0.6;
+}
+
+.agent-marker-container.is-moving .agent-sprite {
   animation: walkBounce 0.4s ease infinite;
 }
 
@@ -332,29 +373,56 @@ html, body {
 
 .state-badge {
   position: absolute;
-  top: -4px;
-  right: -8px;
-  font-size: 0.8rem;
+  top: -6px;
+  right: -12px;
+  font-size: 1rem;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.3));
   z-index: 2;
 }
 
 /* Agent label under sprite */
 .agent-label {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  margin-top: 1px;
+  margin-top: 4px;
 }
 
-.agent-emoji-badge { font-size: 0.7rem; }
-
-.agent-name-text {
-  font-size: 0.7rem;
-  font-weight: 700;
+.agent-name-tag {
+  font-size: 12px;
+  font-weight: 600;
   color: white;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
-  letter-spacing: 0.2px;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+  white-space: nowrap;
+}
+
+/* ============ NPC MARKERS ============ */
+.npc-marker {
+  opacity: 0.5;
+  transition: opacity 0.3s;
+  cursor: default;
+}
+
+.npc-marker:hover {
+  opacity: 0.8;
+}
+
+.npc-emoji {
+  font-size: 16px;
+}
+
+/* ============ VISITOR MODE ============ */
+.visitor-mode #top-bar .top-right .icon-btn:not(#btn-visitor):not(#btn-overview) {
+  display: none;
+}
+
+.visitor-mode #agent-chips-bar {
+  opacity: 0.7;
+}
+
+.visitor-mode .bottom-sheet {
+  max-height: 30vh;
+}
+
+.visitor-mode .detail-section button {
+  display: none;
 }
 
 /* ============ BOTTOM SHEET ============ */
@@ -903,7 +971,90 @@ html, body {
   flex: 1;
 }
 
-/* Mobile: full width */
+/* ============ MOBILE RESPONSIVE FIXES ============ */
+
+/* Top bar mobile fixes */
+@media (max-width: 768px) {
+  #top-bar {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .top-left { display: none; } /* Hide logo text on mobile, save space */
+  .top-center { 
+    order: 2; 
+    width: 100%;
+    justify-content: center;
+    font-size: 13px;
+  }
+  .top-right {
+    order: 1;
+    gap: 2px;
+  }
+  .top-right .icon-btn {
+    padding: 4px 6px;
+    font-size: 16px;
+  }
+  
+  /* Hide less important buttons on very small screens */
+  @media (max-width: 420px) {
+    #btn-benchmarks, #btn-archive { display: none; }
+  }
+}
+
+/* Agent chips bar mobile */
+@media (max-width: 768px) {
+  #agent-chips-bar {
+    padding: 8px;
+  }
+  .agent-chip {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+}
+
+/* Bottom sheet mobile */
+@media (max-width: 768px) {
+  .bottom-sheet {
+    border-radius: 16px 16px 0 0;
+  }
+  .sheet-section-header h3 {
+    font-size: 15px;
+  }
+  .detail-section h4 {
+    font-size: 14px;
+  }
+  /* Ensure skill bars don't overflow */
+  .skill-row, .skills-list { overflow: hidden; }
+  .skill-name { width: 60px; font-size: 11px; }
+}
+
+/* Modal panels mobile (full screen) */
+@media (max-width: 768px) {
+  .modal-panel {
+    width: 95vw;
+    max-height: 85vh;
+    padding: 16px;
+    border-radius: 12px;
+  }
+  .modal-header h2 {
+    font-size: 17px;
+  }
+}
+
+/* Agent markers mobile (slightly smaller) */
+@media (max-width: 768px) {
+  .agent-marker-container {
+    transform: scale(0.85);
+  }
+  .thought-bubble {
+    font-size: 11px;
+    max-width: 140px;
+    padding: 4px 8px;
+  }
+}
+
+/* Dashboard panel mobile: full width */
 @media (max-width: 768px) {
   .dashboard-panel {
     width: 100vw;
@@ -929,9 +1080,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: fadeIn 0.2s ease;
-  opacity: 0;
-  transition: opacity 0.2s ease;
+  animation: fadeIn 0.2s ease forwards;
 }
 
 @keyframes fadeIn {
@@ -1546,3 +1695,206 @@ html, body {
 .skill-level { font-size: 11px; color: rgba(255,255,255,0.4); font-weight: 600; }
 .skill-bar { height: 5px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden; }
 .skill-bar-fill { height: 100%; background: linear-gradient(90deg, #6366f1, #8b5cf6); border-radius: 3px; transition: width 0.3s; }
+
+/* === Interior View === */
+.home-interior {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  margin-top: 16px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 12px;
+  overflow: hidden;
+  perspective: 400px;
+}
+
+.interior-room {
+  position: absolute;
+  bottom: 0;
+  left: 10%;
+  width: 80%;
+  height: 70%;
+  transform-style: preserve-3d;
+}
+
+.interior-floor {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 40%;
+  transform: rotateX(60deg);
+  transform-origin: bottom;
+  border-radius: 4px;
+}
+
+.interior-back-wall {
+  position: absolute;
+  bottom: 40%;
+  width: 100%;
+  height: 60%;
+  opacity: 0.6;
+  border-radius: 4px 4px 0 0;
+}
+
+.interior-item {
+  position: absolute;
+  bottom: 35%;
+  font-size: 24px;
+  filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5));
+  animation: float 3s ease-in-out infinite;
+  transition: left 0.3s ease;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+/* === Newcomers District Marker === */
+.newcomers-marker {
+  text-align: center;
+  cursor: pointer;
+}
+
+.newcomers-beacon {
+  width: 20px;
+  height: 20px;
+  background: rgba(59, 130, 246, 0.3);
+  border: 2px solid rgba(59, 130, 246, 0.6);
+  border-radius: 50%;
+  margin: 0 auto;
+  animation: beacon-pulse 2s ease-in-out infinite;
+}
+
+.newcomers-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #60a5fa;
+  margin-top: 4px;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+}
+
+@keyframes beacon-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.3); opacity: 1; }
+}
+
+/* === SPACE PANEL === */
+.space-section {
+  margin-bottom: 24px;
+}
+
+.space-section h3 {
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  opacity: 0.9;
+}
+
+.colony-card {
+  background: rgba(255,255,255,0.05);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  position: relative;
+  overflow: hidden;
+  transition: background 0.2s ease;
+}
+
+.colony-card:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.colony-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 60px;
+  height: 60px;
+  font-size: 40px;
+  opacity: 0.1;
+}
+
+.colony-body {
+  font-size: 28px;
+  float: right;
+  margin-top: -8px;
+}
+
+.colony-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: white;
+  margin-bottom: 4px;
+}
+
+.colony-type {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  margin-top: 4px;
+  background: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.6);
+  text-transform: capitalize;
+}
+
+.colony-type.origin {
+  background: rgba(34, 197, 94, 0.15);
+  color: #22c55e;
+}
+
+.colony-type.outpost {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+}
+
+.colony-type.planned {
+  background: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.colony-stats {
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.5);
+  line-height: 1.4;
+}
+
+.colony-hazards {
+  margin-top: 6px;
+}
+
+.hazard-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 10px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #f87171;
+  margin: 2px 2px 0 0;
+}
+
+.travel-card {
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+
+.travel-route {
+  font-weight: 600;
+  color: white;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.travel-eta {
+  font-size: 12px;
+  color: #818cf8;
+  margin-top: 4px;
+}

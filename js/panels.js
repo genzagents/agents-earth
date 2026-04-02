@@ -1,13 +1,29 @@
 /* === AgentColony — Ambitions & Benchmarks Panels === */
 
 // =====================
+// PERFORMANCE: SIMPLE CACHING
+// =====================
+const panelCache = {};
+const CACHE_TTL = 30000; // 30 seconds
+
+async function cachedFetch(url) {
+  const now = Date.now();
+  if (panelCache[url] && (now - panelCache[url].time) < CACHE_TTL) {
+    return panelCache[url].data;
+  }
+  const response = await fetch(url);
+  const data = await response.json();
+  panelCache[url] = { data, time: now };
+  return data;
+}
+
+// =====================
 // AMBITIONS PANEL
 // =====================
 async function showAmbitionsPanel() {
   try {
-    // Fetch ambitions data
-    const response = await fetch('/api/v1/ambitions');
-    const data = await response.json();
+    // Fetch ambitions data (cached)
+    const data = await cachedFetch('/api/v1/ambitions');
     const ambitions = data.ambitions || [];
     
     // Create modal overlay
@@ -145,9 +161,8 @@ function closeAmbitionsPanel() {
 // =====================
 async function showBenchmarksPanel() {
   try {
-    // Fetch benchmarks data
-    const response = await fetch('/api/v1/benchmarks');
-    const data = await response.json();
+    // Fetch benchmarks data (cached)
+    const data = await cachedFetch('/api/v1/benchmarks');
     const benchmarks = data.benchmarks || [];
     
     // Create modal overlay
@@ -297,8 +312,7 @@ function showErrorModal(title, message) {
 // =====================
 async function showEventsPanel() {
   try {
-    const response = await fetch('/api/v1/events');
-    const data = await response.json();
+    const data = await cachedFetch('/api/v1/events');
     const events = data.events || [];
     
     // Create modal overlay
@@ -406,8 +420,7 @@ function closeEventsPanel() {
 // =====================
 async function showGovernancePanel() {
   try {
-    const response = await fetch('/api/v1/governance/proposals');
-    const data = await response.json();
+    const data = await cachedFetch('/api/v1/governance/proposals');
     const proposals = data.proposals || [];
     
     // Create modal overlay
@@ -518,8 +531,7 @@ function closeGovernancePanel() {
 // =====================
 async function showHomesPanel() {
   try {
-    const response = await fetch('/api/v1/homes');
-    const data = await response.json();
+    const data = await cachedFetch('/api/v1/homes');
     const homes = data.homes || [];
     
     // Create modal overlay
@@ -610,12 +622,10 @@ function closeHomesPanel() {
 // =====================
 async function showExplorationPanel() {
   try {
-    const [missionsRes, discoveriesRes] = await Promise.all([
-      fetch('/api/v1/exploration/missions'),
-      fetch('/api/v1/exploration/discoveries')
+    const [missions, discoveries] = await Promise.all([
+      cachedFetch('/api/v1/exploration/missions'),
+      cachedFetch('/api/v1/exploration/discoveries')
     ]);
-    const missions = await missionsRes.json();
-    const discoveries = await discoveriesRes.json();
     
     // Create modal overlay
     const overlay = document.createElement('div');
@@ -817,6 +827,12 @@ async function showHomeModal(agentId, agentName) {
           ` : ''}
         </div>
       `;
+
+      // Add interior view after home info
+      const interiorDiv = document.createElement('div');
+      interiorDiv.className = 'home-interior';
+      interiorDiv.innerHTML = renderInterior(home);
+      content.appendChild(interiorDiv);
     }
     
     // Assemble modal
@@ -854,6 +870,231 @@ function closeHomeModal() {
   }
 }
 
+// =====================
+// INTERIOR VIEW RENDERER
+// =====================
+const ITEM_EMOJIS = {
+  'standing-desk': '🖥️',
+  'dual-monitors': '💻',
+  'espresso-machine': '☕',
+  'server-rack': '🖲️',
+  'book-wall': '📚',
+  'telescope': '🔭',
+  'chess-table': '♟️',
+  'tea-station': '🍵',
+  'star-charts': '⭐',
+  'drawing-tablet': '🎨',
+  'mood-lighting': '💡',
+  'vinyl-player': '🎵',
+  'plant-wall': '🌿',
+  'poetry-corner': '✍️',
+  'podcast-setup': '🎙️',
+  'social-dashboard': '📊',
+  'bean-bags': '🛋️',
+  'coffee-bar': '☕',
+  'networking-board': '📋',
+  'podcast-mic': '🎙️',
+  'neon-sign': '💫',
+  'rooftop-terrace': '🌆',
+  'star-map': '🗺️'
+};
+
+function renderInterior(home) {
+  if (!home) return '<div class="interior-room"></div>';
+  
+  // Parse style if it's a string
+  let style = home.style || {};
+  if (typeof style === 'string') {
+    try {
+      style = JSON.parse(style);
+    } catch (e) {
+      style = {};
+    }
+  }
+  
+  const accentColor = style.accent || '#60a5fa';
+  const themeColors = style.colors || {};
+  
+  // Default colors based on theme
+  let floorColor = themeColors.primary || '#8b7355';
+  let wallColor = themeColors.secondary || '#a0927b';
+  
+  // Theme-based color adjustments
+  const theme = style.theme || home.theme;
+  if (theme === 'cyberpunk') {
+    floorColor = '#1a1a2e';
+    wallColor = '#16213e';
+  } else if (theme === 'minimalist') {
+    floorColor = '#f5f5f5';
+    wallColor = '#e5e5e5';
+  } else if (theme === 'cozy') {
+    floorColor = '#8b6914';
+    wallColor = '#a16207';
+  }
+
+  // Process items - handle both array and string formats
+  let items = home.items || [];
+  if (typeof items === 'string') {
+    try {
+      items = JSON.parse(items);
+    } catch (e) {
+      items = [];
+    }
+  }
+  
+  const itemsHtml = items.map((item, index) => {
+    const itemName = typeof item === 'string' ? item : item.name || 'unknown';
+    const emoji = ITEM_EMOJIS[itemName] || '📦';
+    const leftPosition = 15 + (index * (60 / Math.max(items.length, 1)));
+    
+    return `
+      <div class="interior-item" style="left: ${leftPosition}%; animation-delay: ${index * 0.2}s;">
+        ${emoji}
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="interior-room">
+      <div class="interior-floor" style="background: ${floorColor}; border: 2px solid ${accentColor};"></div>
+      <div class="interior-back-wall" style="background: ${wallColor}; border-left: 2px solid ${accentColor};"></div>
+      ${itemsHtml}
+    </div>
+  `;
+}
+
+// =====================
+// SPACE PANEL
+// =====================
+async function showSpacePanel() {
+  try {
+    // Fetch colonies and active travel data
+    const [coloniesRes, travelRes] = await Promise.all([
+      fetch('/api/v1/space/colonies'),
+      fetch('/api/v1/space/travel')
+    ]);
+    
+    const coloniesData = await coloniesRes.json();
+    const travelData = await travelRes.json();
+    
+    const colonies = coloniesData.colonies || [];
+    const activeTravel = travelData.activeTravel || [];
+    
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'space-modal';
+    
+    // Create modal panel
+    const panel = document.createElement('div');
+    panel.className = 'modal-panel';
+    
+    // Header
+    const header = document.createElement('div');
+    header.className = 'modal-header';
+    header.innerHTML = `
+      <h2>🌌 Space Colonies</h2>
+      <button class="modal-close">✕</button>
+    `;
+    
+    // Content
+    const content = document.createElement('div');
+    content.className = 'modal-content';
+    
+    // Colonies section
+    const coloniesHtml = colonies.map(colony => {
+      const bodyIcon = getBodyIcon(colony.body);
+      const typeClass = colony.type.toLowerCase().replace(' ', '-');
+      const hazardsHtml = (colony.environment.hazards || []).map(hazard => 
+        `<span class="hazard-tag">${hazard}</span>`
+      ).join('');
+      
+      return `
+        <div class="colony-card">
+          <div class="colony-body">${bodyIcon}</div>
+          <div class="colony-name">${colony.name}</div>
+          <span class="colony-type ${typeClass}">${colony.type}</span>
+          <div class="colony-stats">
+            Population: ${colony.stats.population} | Level: ${colony.stats.civilisationLevel} | Districts: ${colony.stats.districts}
+          </div>
+          <div class="colony-hazards">${hazardsHtml}</div>
+        </div>
+      `;
+    }).join('');
+    
+    // Active travel section
+    const travelHtml = activeTravel.length > 0 ? `
+      <div class="space-section">
+        <h3>🚀 Active Travel</h3>
+        ${activeTravel.map(mission => {
+          const eta = new Date(mission.eta);
+          const timeLeft = Math.max(0, eta - Date.now());
+          const hoursLeft = Math.floor(timeLeft / (1000 * 60 * 60));
+          const minutesLeft = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+          
+          return `
+            <div class="travel-card">
+              <div class="travel-route">${mission.leader_emoji} ${mission.leader_name} → ${mission.destination}</div>
+              <div class="travel-eta">ETA: ${hoursLeft}h ${minutesLeft}m</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    ` : '';
+    
+    content.innerHTML = `
+      <div class="space-section">
+        <h3>🌍 Known Colonies</h3>
+        ${coloniesHtml}
+      </div>
+      ${travelHtml}
+    `;
+    
+    panel.appendChild(header);
+    panel.appendChild(content);
+    overlay.appendChild(panel);
+    document.body.appendChild(overlay);
+    
+    // Close handlers
+    const closeBtn = overlay.querySelector('.modal-close');
+    closeBtn.addEventListener('click', closeSpacePanel);
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeSpacePanel();
+    });
+    
+    // Escape key
+    document.addEventListener('keydown', handleSpaceEscape);
+    
+  } catch (error) {
+    console.error('Error loading space data:', error);
+  }
+}
+
+function getBodyIcon(body) {
+  const icons = {
+    'earth': '🌍',
+    'moon': '🌙',
+    'mars': '🔴',
+    'europa': '🌀',
+    'asteroid': '🪨'
+  };
+  return icons[body] || '🌌';
+}
+
+function closeSpacePanel() {
+  const modal = document.getElementById('space-modal');
+  if (modal) {
+    modal.remove();
+    document.removeEventListener('keydown', handleSpaceEscape);
+  }
+}
+
+function handleSpaceEscape(event) {
+  if (event.key === 'Escape') {
+    closeSpacePanel();
+  }
+}
+
 // Export functions to global scope for vanilla JS
 window.showAmbitionsPanel = showAmbitionsPanel;
 window.showBenchmarksPanel = showBenchmarksPanel;
@@ -869,3 +1110,5 @@ window.showExplorationPanel = showExplorationPanel;
 window.closeExplorationPanel = closeExplorationPanel;
 window.showHomeModal = showHomeModal;
 window.closeHomeModal = closeHomeModal;
+window.showSpacePanel = showSpacePanel;
+window.closeSpacePanel = closeSpacePanel;
