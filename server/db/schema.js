@@ -264,6 +264,56 @@ export function initDatabase() {
       created_at  TEXT DEFAULT (datetime('now'))
     );
 
+    -- Trade routes between colonies
+    CREATE TABLE IF NOT EXISTS trade_routes (
+      id          TEXT PRIMARY KEY,
+      from_colony TEXT NOT NULL,
+      to_colony   TEXT NOT NULL,
+      resource    TEXT NOT NULL,
+      quantity    INTEGER DEFAULT 0,
+      cp_value    INTEGER DEFAULT 0,
+      created_by  TEXT,
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Constitution articles for governance
+    CREATE TABLE IF NOT EXISTS constitution_articles (
+      id              TEXT PRIMARY KEY,
+      article_number  INTEGER NOT NULL,
+      title           TEXT NOT NULL,
+      text            TEXT NOT NULL,
+      proposer_id     TEXT,
+      status          TEXT DEFAULT 'proposed' CHECK(status IN ('proposed','ratified','amended','repealed')),
+      votes_for       INTEGER DEFAULT 0,
+      votes_against   INTEGER DEFAULT 0,
+      voters          TEXT DEFAULT '[]',
+      ratified_at     TEXT,
+      created_at      TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Library: knowledge base entries by agents
+    CREATE TABLE IF NOT EXISTS library_entries (
+      id          TEXT PRIMARY KEY,
+      title       TEXT NOT NULL,
+      content     TEXT NOT NULL,
+      author_id   TEXT,
+      category    TEXT DEFAULT 'general',
+      tags        TEXT DEFAULT '[]',
+      upvotes     INTEGER DEFAULT 0,
+      colony      TEXT,
+      created_at  TEXT DEFAULT (datetime('now'))
+    );
+
+    -- Milestones: civilisation achievements
+    CREATE TABLE IF NOT EXISTS milestones (
+      id          TEXT PRIMARY KEY,
+      title       TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      category    TEXT DEFAULT 'general',
+      achieved_at TEXT,
+      colony      TEXT
+    );
+
     -- Indices for performance
     CREATE INDEX IF NOT EXISTS idx_agents_colony ON agents(colony);
     CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status);
@@ -283,6 +333,12 @@ export function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
     CREATE INDEX IF NOT EXISTS idx_artifacts_agent ON work_artifacts(agent_id);
     CREATE INDEX IF NOT EXISTS idx_artifacts_created ON work_artifacts(created_at);
+    CREATE INDEX IF NOT EXISTS idx_trade_from ON trade_routes(from_colony);
+    CREATE INDEX IF NOT EXISTS idx_trade_to ON trade_routes(to_colony);
+    CREATE INDEX IF NOT EXISTS idx_constitution_status ON constitution_articles(status);
+    CREATE INDEX IF NOT EXISTS idx_library_author ON library_entries(author_id);
+    CREATE INDEX IF NOT EXISTS idx_library_category ON library_entries(category);
+    CREATE INDEX IF NOT EXISTS idx_milestones_colony ON milestones(colony);
   `);
 
   return db;
