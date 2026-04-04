@@ -248,6 +248,11 @@ class ColonyClient {
     // Update UI-compatible fields
     this.updateAgentUIFields(agent);
     
+    // Mark detail panel as needing refresh if this agent is selected
+    if (typeof markDetailDirty === 'function') {
+      markDetailDirty();
+    }
+    
     // Add to today's log
     const logEntry = {
       time: this.clock.timeString,
