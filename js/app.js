@@ -301,6 +301,9 @@ function addNewcomersDistrictMarker() {
 // RENDER LOOP (replaces simulation loop)
 // =====================
 let lastRenderTime = 0;
+let lastDetailAgent = null; // Track which agent detail is currently rendered
+let detailDirty = false;    // Flag to force detail re-render
+
 function startRenderLoop() {
   function loop(now) {
     requestAnimationFrame(loop);
@@ -316,11 +319,19 @@ function startRenderLoop() {
     updateAgentChips();
     updateSkyTint();
 
-    if (selectedAgent) {
+    // Only re-render agent detail when agent changed or data is dirty
+    if (selectedAgent && (selectedAgent !== lastDetailAgent || detailDirty)) {
       updateAgentDetail(selectedAgent);
+      lastDetailAgent = selectedAgent;
+      detailDirty = false;
     }
   }
   requestAnimationFrame(loop);
+}
+
+// Mark detail as needing a refresh (called from WebSocket updates)
+function markDetailDirty() {
+  detailDirty = true;
 }
 
 // =====================
@@ -388,10 +399,19 @@ function updateAgentMarkers() {
 
       agentMarkers[agent.id] = { marker, el, lastSpriteKey: '' };
 
+      // Use a captured ID to avoid closure issues with the agent object
+      const capturedId = agent.id;
       el.addEventListener('click', (e) => {
         e.stopPropagation();
-        selectAgent(agent.id);
+        e.preventDefault();
+        selectAgent(capturedId);
       });
+      // Also handle touch events for mobile reliability
+      el.addEventListener('touchend', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        selectAgent(capturedId);
+      }, { passive: false });
     }
 
     const m = agentMarkers[agent.id];
@@ -509,10 +529,14 @@ function initBottomSheet() {
     else setSheetState('peek');
   });
 
+  // Track whether an agent marker was just clicked (to prevent map click from interfering)
   map.on('click', () => {
-    if (!selectedAgent && bottomSheetState !== 'collapsed') {
-      setSheetState('collapsed');
-    }
+    // Use a short delay to let agent marker clicks process first
+    setTimeout(() => {
+      if (!selectedAgent && bottomSheetState !== 'collapsed') {
+        setSheetState('collapsed');
+      }
+    }, 50);
   });
 }
 
@@ -535,9 +559,28 @@ function snapSheet() {}
 // AGENT SELECTION & DETAIL
 // =====================
 function selectAgent(agentId) {
-  selectedAgent = agentId;
+  // If already selected, ignore (avoid re-triggering flyTo)
+  if (selectedAgent === agentId) return;
+  
   const agent = client.getAgent(agentId);
-  if (!agent) return;
+  if (!agent) {
+    console.warn('selectAgent: agent not found:', agentId);
+    return;
+  }
+
+  // Deselect previous marker styling
+  if (selectedAgent && agentMarkers[selectedAgent]) {
+    agentMarkers[selectedAgent].el.classList.remove('is-selected');
+  }
+
+  selectedAgent = agentId;
+  lastDetailAgent = null; // Force detail re-render
+  detailDirty = true;
+
+  // Mark new agent marker as selected
+  if (agentMarkers[agentId]) {
+    agentMarkers[agentId].el.classList.add('is-selected');
+  }
 
   flyToAgent(agent);
   updateAgentDetail(agentId);
@@ -548,7 +591,11 @@ function selectAgent(agentId) {
 }
 
 function deselectAgent() {
+  if (selectedAgent && agentMarkers[selectedAgent]) {
+    agentMarkers[selectedAgent].el.classList.remove('is-selected');
+  }
   selectedAgent = null;
+  lastDetailAgent = null;
   document.getElementById('sheet-overview').classList.remove('hidden');
   document.getElementById('sheet-detail').classList.add('hidden');
   setSheetState('peek');
@@ -559,6 +606,9 @@ function updateAgentDetail(agentId) {
   if (!agent) return;
 
   const container = document.getElementById('agent-detail-content');
+  if (!container) return;
+  
+  try {
 
   const energyPct = Math.round(agent.energy || 50);
   const moodPct = Math.round(agent.mood || 50);
@@ -623,14 +673,15 @@ function updateAgentDetail(agentId) {
       <p>${agent.bio || 'No bio available.'}</p>
     </div>
 
-    ${agent.skills && typeof agent.skills === 'object' ? `
+    ${agent.skills && typeof agent.skills === 'object' && !Array.isArray(agent.skills) ? `
     <div class="detail-section">
       <h4>⚡ Skills</h4>
       <div class="skills-list">
         ${Object.entries(agent.skills).slice(0, 6).map(([name, data]) => {
-          const level = data?.level || 1;
-          const xp = data?.xp || 0;
-          const xpToNext = data?.xpToNext || 100;
+          if (!data || typeof data !== 'object') return '';
+          const level = data.level || 1;
+          const xp = data.xp || 0;
+          const xpToNext = data.xpToNext || 100;
           const pct = Math.min(100, Math.round((xp / xpToNext) * 100));
           const displayName = name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
           return `
@@ -645,33 +696,18 @@ function updateAgentDetail(agentId) {
       </div>
     </div>` : ''}
 
-    ${agent.personality ? `
+    ${agent.personality && typeof agent.personality === 'object' ? `
     <div class="detail-section">
       <h4>🧬 Personality</h4>
       <div class="personality-traits">
-        <div class="trait">Introversion: ${Math.round(agent.personality.introversion * 100)}%</div>
-        <div class="trait">Creativity: ${Math.round(agent.personality.creativity * 100)}%</div>
-        <div class="trait">Discipline: ${Math.round(agent.personality.discipline * 100)}%</div>
-        <div class="trait">Curiosity: ${Math.round(agent.personality.curiosity * 100)}%</div>
+        <div class="trait">Introversion: ${Math.round((agent.personality.introversion || 0) * 100)}%</div>
+        <div class="trait">Creativity: ${Math.round((agent.personality.creativity || 0) * 100)}%</div>
+        <div class="trait">Discipline: ${Math.round((agent.personality.discipline || 0) * 100)}%</div>
+        <div class="trait">Curiosity: ${Math.round((agent.personality.curiosity || 0) * 100)}%</div>
       </div>
     </div>` : ''}
 
-    ${agent.skills ? `
-    <div class="detail-section">
-      <h4>🎯 Skills</h4>
-      <div class="skills-container">
-        ${Object.entries(agent.skills).map(([name, data]) => {
-          const pct = data.xpToNext ? Math.round((data.xp / data.xpToNext) * 100) : 0;
-          return `
-            <div class="skill-row">
-              <span class="skill-name">${name}</span>
-              <span class="skill-level">Lv.${data.level}</span>
-              <div class="skill-bar"><div class="skill-fill" style="width:${pct}%"></div></div>
-            </div>
-          `;
-        }).join('')}
-      </div>
-    </div>` : ''}
+    ${/* Duplicate skills section removed — already shown above */ ''}
 
     <div class="detail-section">
       <h4>📋 Today's Log</h4>
@@ -687,13 +723,13 @@ function updateAgentDetail(agentId) {
     </div>
 
     <div class="detail-section" style="display:flex; gap:8px;">
-      <button onclick="showJournalModal('${agent.id}', '${agent.name}', '${agent.emoji}')" 
+      <button onclick="showJournalModal('${(agent.id || '').replace(/'/g, "\\'")}', '${(agent.name || '').replace(/'/g, "\\'")}', '${(agent.emoji || '').replace(/'/g, "\\'")}')" 
               style="flex:1; padding: 12px; background: rgba(59, 130, 246, 0.1); 
                      color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3); 
                      border-radius: 8px; cursor: pointer; font-size: 14px;">
         📖 Journal
       </button>
-      <button onclick="showHomeModal('${agent.id}', '${agent.name}')" 
+      <button onclick="showHomeModal('${(agent.id || '').replace(/'/g, "\\'")}', '${(agent.name || '').replace(/'/g, "\\'")}')" 
               style="flex:1; padding: 12px; background: rgba(245, 158, 11, 0.1); 
                      color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); 
                      border-radius: 8px; cursor: pointer; font-size: 14px;">
@@ -701,6 +737,9 @@ function updateAgentDetail(agentId) {
       </button>
     </div>
   `;
+  } catch (err) {
+    console.error('updateAgentDetail error:', err);
+  }
 }
 
 // =====================
