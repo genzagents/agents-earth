@@ -160,6 +160,31 @@ Be true to your personality. Respond ONLY with valid JSON, no markdown.`;
       return EMPTY_OUTPUT;
     }
   }
+
+  /**
+   * Responds to a user message in-character as the agent.
+   * Returns null if no API key is configured.
+   * Throws on LLM API failure so callers can return 503.
+   */
+  async chat(agent: Agent, memories: Memory[], userMessage: string): Promise<string | null> {
+    if (!this.client) return null;
+
+    const recentMems = [...memories]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .slice(0, 5)
+      .map(m => m.description)
+      .join("; ");
+
+    const prompt = `You are ${agent.name}. Bio: ${agent.bio}. Traits: ${agent.traits.join(", ")}. Current mood: ${agent.state.mood}. Recent memories: ${recentMems || "none yet"}. A user says: "${userMessage}". Respond in character in 1-3 sentences.`;
+
+    const response = await this.client.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 150,
+      messages: [{ role: "user", content: prompt }],
+    });
+
+    return response.content[0].type === "text" ? response.content[0].text.trim() : "";
+  }
 }
 
 export const agentBrain = new AgentBrain();

@@ -3,6 +3,22 @@ import type { FastifyInstance } from "fastify";
 import { store } from "../db/store";
 import type { WorldTickEngine } from "../simulation/WorldTick";
 import type { Agent, AgentTrait, ActivityType } from "@agentcolony/shared";
+import { agentBrain } from "../simulation/AgentBrain";
+
+// Rate limit: max 10 chat messages per agent per minute
+const chatRateLimit = new Map<string, { count: number; resetAt: number }>();
+
+function checkChatRateLimit(agentId: string): boolean {
+  const now = Date.now();
+  const entry = chatRateLimit.get(agentId);
+  if (!entry || now >= entry.resetAt) {
+    chatRateLimit.set(agentId, { count: 1, resetAt: now + 60_000 });
+    return true;
+  }
+  if (entry.count >= 10) return false;
+  entry.count++;
+  return true;
+}
 
 interface CreateAgentBody {
   name: string;
@@ -111,5 +127,54 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     });
 
     return reply.code(201).send(newAgent);
+  });
+
+  fastify.post<{ Params: { id: string }; Body: { message: string } }>("/api/agents/:id/chat", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["message"],
+        properties: {
+          message: { type: "string", minLength: 1, maxLength: 500 },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+
+    const { message } = req.body;
+
+    if (!checkChatRateLimit(agent.id)) {
+      return reply.code(429).send({ error: "Too many messages. Max 10 per minute per agent." });
+    }
+
+    let response: string | null;
+    try {
+      response = await agentBrain.chat(agent, store.getAgentMemories(agent.id), message);
+    } catch {
+      return reply.code(503).send({ error: "Agent brain unavailable. Please try again later." });
+    }
+
+    if (!response) {
+      return reply.code(503).send({ error: "Agent brain unavailable. Please try again later." });
+    }
+
+    store.addMemory({
+      id: uuidv4(),
+      agentId: agent.id,
+      kind: "social",
+      description: `User asked: "${message}". ${agent.name} responded: "${response}"`,
+      emotionalWeight: 0.2,
+      tags: ["chat", "user"],
+      createdAt: store.tick,
+    });
+
+    return {
+      agentId: agent.id,
+      agentName: agent.name,
+      response,
+      tick: store.tick,
+    };
   });
 }
