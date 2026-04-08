@@ -32,6 +32,12 @@ jobs:
           find . -name "*.js" -not -path "./node_modules/*" | \
             xargs -I{} node --check {} && echo "All JS files passed syntax check"
 
+      - name: Install root dependencies (ESLint)
+        run: npm install
+
+      - name: Lint frontend JS
+        run: npm run lint
+
       - name: Validate colony.yaml
         run: |
           python3 -c "import yaml; yaml.safe_load(open('colony.yaml'))" && \
