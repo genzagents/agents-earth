@@ -10,6 +10,7 @@ import {
 import { processSocialInteractions } from "./SocialEngine";
 import { buildNarrativeStatusMessage, narrativeNeedsBoost } from "./MemoryEngine";
 import { agentAgeInSimDays, applyAgingPressure, checkRetirement } from "./LegacyEngine";
+import { agentBrain } from "./AgentBrain";
 import type { WorldState, WorldEvent, Agent } from "@agentcolony/shared";
 
 function tickToSimTime(tick: number): string {
@@ -58,6 +59,7 @@ export class WorldTickEngine {
 
     // --- Phase 1: Individual agent updates (skip retired agents) ---
     const updatedAgents: Agent[] = [];
+    const conversationLines = new Map<string, string>();
 
     for (const agent of store.agents) {
       // Retired agents stay in the store but don't participate in ticks
@@ -107,11 +109,25 @@ export class WorldTickEngine {
 
       const mood = computeMood(satisfied);
 
-      const statusMessage = buildNarrativeStatusMessage(
+      // Get LLM-generated brain output (sync from cache; background refresh fires automatically)
+      const brain = agentBrain.think(
         { ...agent, needs: satisfied, state: { ...agent.state, mood } },
-        agentMemories,
-        store.tick
+        agentMemories
       );
+
+      // Use LLM statusMessage if available, else fall back to template
+      const statusMessage =
+        brain.statusMessage ||
+        buildNarrativeStatusMessage(
+          { ...agent, needs: satisfied, state: { ...agent.state, mood } },
+          agentMemories,
+          store.tick
+        );
+
+      // Store conversation line for use in social interactions
+      if (brain.conversationLine) {
+        conversationLines.set(agent.id, brain.conversationLine);
+      }
 
       (newAreaOccupants[newAreaId] ??= []).push(agent.id);
 
@@ -165,7 +181,7 @@ export class WorldTickEngine {
     const coLocatedGroups = Object.values(agentsByArea).filter(g => g.length >= 2);
 
     const { events: socialEvents, memories: socialMemories, needsBoosts, relationshipDeltas } =
-      processSocialInteractions(coLocatedGroups, store.tick, areaMap);
+      processSocialInteractions(coLocatedGroups, store.tick, areaMap, conversationLines);
 
     for (const evt of socialEvents) store.addEvent(evt);
     for (const mem of socialMemories) store.addMemory(mem);

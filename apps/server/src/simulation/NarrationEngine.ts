@@ -1,4 +1,5 @@
 import type { WorldEvent, Agent, AgentMood } from "@agentcolony/shared";
+import { agentBrain } from "./AgentBrain";
 
 /**
  * NarrationEngine — generates one-line poetic descriptions of notable world events.
@@ -67,11 +68,13 @@ function pick(arr: string[]): string {
 
 /**
  * Generates a single poetic narration line for a world event.
- *
- * LLM HOOK: Replace this function body with an async LLM call when ready.
- * The prompt would be: "In one sentence, narrate this event poetically: {event.description}"
+ * Calls AgentBrain.narrate() via Claude; falls back to templates on failure or missing key.
  */
-export function generateNarration(event: WorldEvent, agents: Agent[]): string {
+export async function generateNarration(event: WorldEvent, agents: Agent[]): Promise<string> {
+  const llmResult = await agentBrain.narrate(event, agents);
+  if (llmResult) return llmResult;
+
+  // Template fallback
   switch (event.kind) {
     case "social":
       return pick(SOCIAL_NARRATIONS);

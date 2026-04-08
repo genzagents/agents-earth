@@ -59,7 +59,8 @@ function pickTemplate(areaType: string, other: string): string {
 export function processSocialInteractions(
   coLocatedAgents: Agent[][],
   tick: number,
-  areaMap: Record<string, { name: string; type: string }>
+  areaMap: Record<string, { name: string; type: string }>,
+  conversationLines?: Map<string, string>
 ): {
   events: WorldEvent[];
   memories: Memory[];
@@ -88,8 +89,13 @@ export function processSocialInteractions(
       const area = areaMap[areaId];
       if (!area) continue;
 
-      const actionPhrase = pickTemplate(area.type, agentB.name);
-      const description = `${agentA.name} ${actionPhrase}`;
+      const llmLine = conversationLines?.get(agentA.id);
+      const actionPhrase = llmLine
+        ? `to ${agentB.name}: "${llmLine}"`
+        : pickTemplate(area.type, agentB.name);
+      const description = llmLine
+        ? `${agentA.name} says ${actionPhrase}`
+        : `${agentA.name} ${actionPhrase}`;
 
       events.push({
         id: uuidv4(),
