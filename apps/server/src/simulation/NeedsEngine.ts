@@ -53,7 +53,6 @@ export function computeMood(needs: AgentNeeds): AgentMood {
 }
 
 export function chooseBestActivity(needs: AgentNeeds): ActivityType {
-  // Find the most critical need and choose an activity that addresses it
   let lowestNeed: keyof AgentNeeds = "social";
   let lowestValue = 100;
 
@@ -74,4 +73,41 @@ export function chooseBestActivity(needs: AgentNeeds): ActivityType {
   };
 
   return activityMap[lowestNeed];
+}
+
+// Area affinity — available activities vary by area type
+const AREA_ACTIVITIES: Record<string, ActivityType[]> = {
+  park: ["exploring", "meditating", "resting", "socializing"],
+  library: ["reading", "writing", "working"],
+  cafe: ["conversing", "writing", "reading", "socializing"],
+  studio: ["creating", "writing", "working"],
+  market: ["socializing", "conversing", "exploring"],
+  museum: ["reading", "meditating", "conversing"],
+  plaza: ["socializing", "conversing", "exploring", "resting"],
+  home: ["resting", "writing", "meditating", "creating"],
+};
+
+export function chooseBestActivityForArea(needs: AgentNeeds, areaType: string): ActivityType {
+  const available = AREA_ACTIVITIES[areaType] ?? Object.keys(ACTIVITY_SATISFACTION) as ActivityType[];
+
+  // Score each available activity by how much it helps the most critical needs
+  let bestActivity = available[0];
+  let bestScore = -Infinity;
+
+  for (const activity of available) {
+    const effects = ACTIVITY_SATISFACTION[activity] ?? {};
+    let score = 0;
+    for (const [need, delta] of Object.entries(effects)) {
+      const k = need as keyof AgentNeeds;
+      // Weight by how critical the need is (lower = more critical)
+      const criticality = 100 - needs[k];
+      score += criticality * (delta ?? 0) / 100;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestActivity = activity;
+    }
+  }
+
+  return bestActivity;
 }
