@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWorldStore, getSelectedAgent } from "../store/worldStore";
 import { RelationshipGraph } from "./RelationshipGraph";
 import type { Memory } from "@agentcolony/shared";
+
+type ChatMessage = { role: "user" | "agent"; text: string };
 
 const NEED_COLORS: Record<string, string> = {
   social: "bg-blue-500",
@@ -28,7 +30,11 @@ export function AgentPanel() {
   const store = useWorldStore();
   const agent = getSelectedAgent(store);
   const [memories, setMemories] = useState<Memory[]>([]);
-  const [activeTab, setActiveTab] = useState<"info" | "memories" | "graph">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "memories" | "graph" | "talk">("info");
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [inputText, setInputText] = useState("");
+  const [isSending, setIsSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!agent) { setMemories([]); return; }
@@ -37,6 +43,37 @@ export function AgentPanel() {
       .then(setMemories)
       .catch(() => setMemories([]));
   }, [agent?.id]);
+
+  useEffect(() => {
+    setMessages([]);
+    setInputText("");
+  }, [agent?.id]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  async function sendMessage() {
+    if (!inputText.trim() || !agent || isSending) return;
+    const text = inputText.trim();
+    setInputText("");
+    setMessages(prev => [...prev, { role: "user", text }]);
+    setIsSending(true);
+    try {
+      const res = await fetch(`/api/agents/${agent.id}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text }),
+      });
+      if (!res.ok) throw new Error("API error");
+      const data = await res.json() as { response: string; agentName: string };
+      setMessages(prev => [...prev, { role: "agent", text: data.response }]);
+    } catch {
+      setMessages(prev => [...prev, { role: "agent", text: "(LLM not ready yet)" }]);
+    } finally {
+      setIsSending(false);
+    }
+  }
 
   if (!agent) {
     return (
@@ -67,7 +104,7 @@ export function AgentPanel() {
       </div>
 
       <div className="flex border-b border-slate-800">
-        {(["info", "memories", "graph"] as const).map(tab => (
+        {(["info", "memories", "graph", "talk"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -81,7 +118,63 @@ export function AgentPanel() {
         ))}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      {activeTab === "talk" && (
+        <div className="flex flex-col flex-1 min-h-0">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
+            {messages.length === 0 && (
+              <p className="text-xs text-gray-600 italic text-center mt-4">
+                Say something to {agent.name}…
+              </p>
+            )}
+            {messages.map((msg, i) => (
+              <div key={i} className={`flex flex-col gap-0.5 ${msg.role === "user" ? "items-end" : "items-start"}`}>
+                {msg.role === "agent" && (
+                  <div className="flex items-center gap-1.5 ml-1">
+                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: agent.avatar }} />
+                    <span className="text-xs text-gray-500">{agent.name}</span>
+                  </div>
+                )}
+                <div className={`max-w-[85%] rounded-lg px-2.5 py-1.5 text-xs leading-relaxed ${
+                  msg.role === "user"
+                    ? "bg-indigo-600 text-white"
+                    : "bg-slate-800 text-gray-200"
+                }`}>
+                  {msg.text}
+                </div>
+              </div>
+            ))}
+            {isSending && (
+              <div className="flex items-center gap-1.5 ml-1">
+                <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: agent.avatar }} />
+                <div className="bg-slate-800 rounded-lg px-2.5 py-1.5">
+                  <span className="text-xs text-gray-500 animate-pulse">…</span>
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+          <div className="p-2 border-t border-slate-800 flex gap-2">
+            <input
+              type="text"
+              value={inputText}
+              onChange={e => setInputText(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(); } }}
+              placeholder="Type a message…"
+              disabled={isSending}
+              className="flex-1 bg-slate-800 text-white text-xs rounded px-2.5 py-1.5 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50"
+            />
+            <button
+              onClick={() => void sendMessage()}
+              disabled={!inputText.trim() || isSending}
+              className="text-xs bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded transition-colors"
+            >
+              Send
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className={`flex-1 overflow-y-auto p-3 space-y-3 ${activeTab === "talk" ? "hidden" : ""}`}>
         {activeTab === "info" && (
           <>
             <div>
