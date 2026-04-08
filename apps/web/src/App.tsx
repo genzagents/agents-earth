@@ -1,7 +1,7 @@
 import { useSocket } from "./hooks/useSocket";
 import { WorldCanvas } from "./canvas/WorldCanvas";
 import { AgentPanel } from "./components/AgentPanel";
-import { EventFeed } from "./components/EventFeed";
+import { TimelinePanel } from "./components/TimelinePanel";
 import { HUD } from "./components/HUD";
 
 export function App() {
@@ -25,9 +25,9 @@ export function App() {
             </div>
             <AgentPanel />
           </div>
-          {/* Event feed */}
-          <div className="h-48 overflow-hidden">
-            <EventFeed />
+          {/* Timeline feed */}
+          <div className="h-52 overflow-hidden border-t border-slate-800">
+            <TimelinePanel />
           </div>
         </div>
       </div>

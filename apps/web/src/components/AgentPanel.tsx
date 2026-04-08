@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useWorldStore, getSelectedAgent } from "../store/worldStore";
+import { RelationshipGraph } from "./RelationshipGraph";
 import type { Memory } from "@agentcolony/shared";
 
 const NEED_COLORS: Record<string, string> = {
@@ -27,7 +28,7 @@ export function AgentPanel() {
   const store = useWorldStore();
   const agent = getSelectedAgent(store);
   const [memories, setMemories] = useState<Memory[]>([]);
-  const [activeTab, setActiveTab] = useState<"info" | "memories">("info");
+  const [activeTab, setActiveTab] = useState<"info" | "memories" | "graph">("info");
 
   useEffect(() => {
     if (!agent) { setMemories([]); return; }
@@ -66,7 +67,7 @@ export function AgentPanel() {
       </div>
 
       <div className="flex border-b border-slate-800">
-        {(["info", "memories"] as const).map(tab => (
+        {(["info", "memories", "graph"] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -74,7 +75,8 @@ export function AgentPanel() {
               activeTab === tab ? "text-white border-b border-indigo-500" : "text-gray-500 hover:text-gray-300"
             }`}
           >
-            {tab} {tab === "memories" && memories.length > 0 ? `(${memories.length})` : ""}
+            {tab === "graph" ? "Network" : tab}
+            {tab === "memories" && memories.length > 0 ? ` (${memories.length})` : ""}
           </button>
         ))}
       </div>
@@ -114,6 +116,10 @@ export function AgentPanel() {
               </div>
             </div>
           </>
+        )}
+
+        {activeTab === "graph" && (
+          <RelationshipGraph agent={agent} />
         )}
 
         {activeTab === "memories" && (
