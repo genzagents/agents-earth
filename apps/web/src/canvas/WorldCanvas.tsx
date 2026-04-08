@@ -219,7 +219,8 @@ export function WorldCanvas() {
     const areasLayer = areasLayerRef.current;
     if (!app || !world || !areasLayer) return;
 
-    // Redraw areas
+    // Redraw areas — clear all children first (removes both pooled Graphics AND Text labels)
+    areasLayer.removeChildren();
     areaPoolRef.current.releaseAll(areasLayer);
     for (const area of world.areas) {
       const color = AREA_COLORS[area.type] ?? 0x334155;
@@ -354,6 +355,8 @@ function drawAgents(
   selectAgent: (id: string | null) => void,
   pulse: number,
 ) {
+  // Clear all children first (removes both pooled Graphics AND Text labels/bubbles)
+  agentsLayer.removeChildren();
   pool.releaseAll(agentsLayer);
   const now = Date.now();
 
