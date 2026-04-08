@@ -8,10 +8,16 @@ import type {
   WorldEvent,
   AgentTrait,
   ActivityType,
-  AgentMood,
+  RelationshipType,
 } from "@agentcolony/shared";
 
 const DATA_PATH = process.env.DATA_PATH || path.join(process.cwd(), "agentcolony-data.json");
+
+function computeRelType(interactions: number, strength: number): RelationshipType {
+  if (strength > 70) return "friend";
+  if (interactions >= 5) return "collaborator";
+  return "stranger";
+}
 
 interface WorldData {
   tick: number;
@@ -142,6 +148,10 @@ class WorldStore {
     if (this.data.memories.length > 1000) this.data.memories.length = 1000;
   }
 
+  addAgent(agent: Agent) {
+    this.data.agents.push(agent);
+  }
+
   getAgent(id: string) {
     return this.data.agents.find(a => a.id === id);
   }
@@ -150,8 +160,47 @@ class WorldStore {
     return this.data.memories.filter(m => m.agentId === agentId).slice(0, 50);
   }
 
+  getAgentRelationships(agentId: string) {
+    return this.data.agents.find(a => a.id === agentId)?.relationships ?? [];
+  }
+
   getRecentEvents(n = 20) {
     return this.data.events.slice(0, n);
+  }
+
+  /**
+   * Update or create a relationship from agentId → targetAgentId.
+   * Call symmetrically for both directions after a social interaction.
+   */
+  updateAgentRelationship(
+    agentId: string,
+    targetAgentId: string,
+    delta: { interactionsDelta: number; strengthDelta: number }
+  ) {
+    const agentIdx = this.data.agents.findIndex(a => a.id === agentId);
+    if (agentIdx < 0) return;
+
+    const agent = this.data.agents[agentIdx];
+    const relIdx = agent.relationships.findIndex(r => r.agentId === targetAgentId);
+
+    if (relIdx >= 0) {
+      const rel = agent.relationships[relIdx];
+      const interactions = rel.interactions + delta.interactionsDelta;
+      const strength = Math.min(100, Math.max(0, rel.strength + delta.strengthDelta));
+      const type = computeRelType(interactions, strength);
+      agent.relationships[relIdx] = { ...rel, interactions, strength, type, lastMet: this.data.tick };
+    } else {
+      const interactions = delta.interactionsDelta;
+      const strength = Math.max(0, delta.strengthDelta);
+      const type = computeRelType(interactions, strength);
+      agent.relationships.push({
+        agentId: targetAgentId,
+        strength,
+        type,
+        interactions,
+        lastMet: this.data.tick,
+      });
+    }
   }
 }
 

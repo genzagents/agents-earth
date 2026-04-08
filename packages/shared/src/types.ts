@@ -46,7 +46,8 @@ export type MemoryKind =
   | "experience"
   | "observation"
   | "social"
-  | "creation";
+  | "creation"
+  | "legacy";
 
 export interface AgentNeeds {
   social: number;       // 0–100
@@ -83,6 +84,8 @@ export interface Agent {
   state: AgentState;
   relationships: Relationship[];
   createdAt: number; // sim tick
+  isRetired?: boolean;
+  legacyNote?: string;
 }
 
 export interface Memory {
@@ -108,7 +111,7 @@ export interface Area {
 export interface WorldEvent {
   id: string;
   tick: number;
-  kind: "social" | "creation" | "movement" | "mood_change";
+  kind: "social" | "creation" | "movement" | "mood_change" | "legacy";
   description: string;
   involvedAgentIds: string[];
   areaId?: string;

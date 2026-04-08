@@ -1,9 +1,16 @@
 import { v4 as uuidv4 } from "uuid";
 import { store } from "../db/store";
-import { decayNeeds, satisfyNeeds, computeMood, chooseBestActivityForArea } from "./NeedsEngine";
+import {
+  decayNeeds,
+  satisfyNeeds,
+  computeMood,
+  chooseBestActivityForArea,
+  chooseDestinationArea,
+} from "./NeedsEngine";
 import { processSocialInteractions } from "./SocialEngine";
 import { buildNarrativeStatusMessage, narrativeNeedsBoost } from "./MemoryEngine";
-import type { WorldState, WorldEvent, ActivityType, Agent } from "@agentcolony/shared";
+import { agentAgeInSimDays, applyAgingPressure, checkRetirement } from "./LegacyEngine";
+import type { WorldState, WorldEvent, Agent } from "@agentcolony/shared";
 
 function tickToSimTime(tick: number): string {
   const days = Math.floor(tick / (24 * 60));
@@ -23,7 +30,13 @@ export class WorldTickEngine {
 
   start(tickIntervalMs = 2000) {
     console.log(`[WorldTick] Starting simulation at tick ${store.tick}, interval=${tickIntervalMs}ms`);
-    this.interval = setInterval(() => this.runTick(), tickIntervalMs);
+    this.interval = setInterval(() => {
+      try {
+        this.runTick();
+      } catch (err) {
+        console.error("[WorldTick] Tick error:", err);
+      }
+    }, tickIntervalMs);
     this.saveInterval = setInterval(() => store.save(), 30_000);
   }
 
@@ -43,15 +56,24 @@ export class WorldTickEngine {
     const newAreaOccupants: Record<string, string[]> = {};
     for (const area of areas) newAreaOccupants[area.id] = [];
 
-    // --- Phase 1: Individual agent updates ---
+    // --- Phase 1: Individual agent updates (skip retired agents) ---
     const updatedAgents: Agent[] = [];
 
     for (const agent of store.agents) {
+      // Retired agents stay in the store but don't participate in ticks
+      if (agent.isRetired) {
+        updatedAgents.push(agent);
+        continue;
+      }
+
       const currentArea = areas.find(a => a.id === agent.state.currentAreaId);
       const areaType = currentArea?.type ?? "plaza";
 
-      // Decay then satisfy needs based on current area
-      const decayed = decayNeeds(agent.needs);
+      // Decay needs, then apply aging pressure for older agents
+      let decayed = decayNeeds(agent.needs);
+      const ageInDays = agentAgeInSimDays(agent, store.tick);
+      decayed = applyAgingPressure(decayed, ageInDays);
+
       const activity = chooseBestActivityForArea(decayed, areaType);
       const satisfied = satisfyNeeds(decayed, activity);
 
@@ -65,18 +87,16 @@ export class WorldTickEngine {
 
       const mood = computeMood(satisfied);
 
-      // Narrative status message (uses memories for richer messages)
       const statusMessage = buildNarrativeStatusMessage(
         { ...agent, needs: satisfied, state: { ...agent.state, mood } },
         agentMemories,
         store.tick
       );
 
-      // Movement: 12% chance per tick to move
+      // Movement: 12% chance — now need-aware via area affinity scoring
       let newAreaId = agent.state.currentAreaId;
       if (Math.random() < 0.12) {
-        // Prefer areas that match the agent's dominant need
-        const targetArea = areas[Math.floor(Math.random() * areas.length)];
+        const targetArea = chooseDestinationArea(satisfied, areas, agent.state.currentAreaId);
         newAreaId = targetArea.id;
 
         const event: WorldEvent = {
@@ -120,19 +140,30 @@ export class WorldTickEngine {
       store.updateArea(area.id, { currentOccupants: newAreaOccupants[area.id] ?? [] });
     }
 
-    // --- Phase 2: Social interactions ---
-    // Group agents by area
+    // --- Phase 2: Legacy — check retirements ---
+    const livingAgentIds = updatedAgents.filter(a => !a.isRetired).map(a => a.id);
+    for (const agent of updatedAgents) {
+      if (agent.isRetired) continue;
+      const result = checkRetirement(agent, store.tick, livingAgentIds);
+      if (result) {
+        store.updateAgent(agent.id, { isRetired: true, legacyNote: result.legacyNote });
+        store.addEvent(result.event);
+        for (const mem of result.legacyMemoriesForOthers) store.addMemory(mem);
+      }
+    }
+
+    // --- Phase 3: Social interactions ---
     const agentsByArea: Record<string, Agent[]> = {};
     for (const agent of updatedAgents) {
+      if (agent.isRetired) continue;
       const areaId = agent.state.currentAreaId;
       (agentsByArea[areaId] ??= []).push(agent);
     }
     const coLocatedGroups = Object.values(agentsByArea).filter(g => g.length >= 2);
 
-    const { events: socialEvents, memories: socialMemories, needsBoosts } =
+    const { events: socialEvents, memories: socialMemories, needsBoosts, relationshipDeltas } =
       processSocialInteractions(coLocatedGroups, store.tick, areaMap);
 
-    // Apply social events and memories
     for (const evt of socialEvents) store.addEvent(evt);
     for (const mem of socialMemories) store.addMemory(mem);
 
@@ -144,6 +175,14 @@ export class WorldTickEngine {
       newNeeds.social = Math.min(100, newNeeds.social + boost.social);
       if (boost.creative) newNeeds.creative = Math.min(100, newNeeds.creative + boost.creative);
       store.updateAgent(agentId, { needs: newNeeds });
+    }
+
+    // Apply relationship deltas (bidirectional, already both directions from SocialEngine)
+    for (const delta of relationshipDeltas) {
+      store.updateAgentRelationship(delta.agentId, delta.targetAgentId, {
+        interactionsDelta: delta.interactionsDelta,
+        strengthDelta: delta.strengthDelta,
+      });
     }
 
     this.onTickCallback?.(this.buildSnapshot());

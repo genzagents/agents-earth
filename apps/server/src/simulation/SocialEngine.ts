@@ -1,12 +1,11 @@
 import { v4 as uuidv4 } from "uuid";
-import type { Agent, WorldEvent, Memory, RelationshipType } from "@agentcolony/shared";
+import type { Agent, WorldEvent, Memory } from "@agentcolony/shared";
 
-export interface SocialInteraction {
-  agentA: Agent;
-  agentB: Agent;
-  areaId: string;
-  areaName: string;
-  tick: number;
+export interface RelationshipDelta {
+  agentId: string;
+  targetAgentId: string;
+  interactionsDelta: number;
+  strengthDelta: number;
 }
 
 const CONVERSATION_STARTERS: Record<string, string[]> = {
@@ -57,27 +56,29 @@ function pickTemplate(areaType: string, other: string): string {
   return t.replace("{other}", other);
 }
 
-function computeRelationshipType(interactions: number, strength: number): RelationshipType {
-  if (interactions === 0) return "stranger";
-  if (strength > 70) return "friend";
-  if (strength > 40 && interactions > 3) return "collaborator";
-  return "stranger";
-}
-
 export function processSocialInteractions(
   coLocatedAgents: Agent[][],
   tick: number,
   areaMap: Record<string, { name: string; type: string }>
-): { events: WorldEvent[]; memories: Memory[]; needsBoosts: Record<string, { social: number; creative?: number }> } {
+): {
+  events: WorldEvent[];
+  memories: Memory[];
+  needsBoosts: Record<string, { social: number; creative?: number }>;
+  relationshipDeltas: RelationshipDelta[];
+} {
   const events: WorldEvent[] = [];
   const memories: Memory[] = [];
   const needsBoosts: Record<string, { social: number; creative?: number }> = {};
+  const relationshipDeltas: RelationshipDelta[] = [];
 
   for (const group of coLocatedAgents) {
     if (group.length < 2) continue;
 
+    // Only active (non-retired) agents can interact
+    const active = group.filter(a => !a.isRetired);
+
     // Randomly pair agents within the group for interactions
-    const shuffled = [...group].sort(() => Math.random() - 0.5);
+    const shuffled = [...active].sort(() => Math.random() - 0.5);
     for (let i = 0; i < shuffled.length - 1; i += 2) {
       if (Math.random() > 0.3) continue; // 70% chance to skip any given pair this tick
 
@@ -87,7 +88,8 @@ export function processSocialInteractions(
       const area = areaMap[areaId];
       if (!area) continue;
 
-      const description = `${agentA.name} ${pickTemplate(area.type, agentB.name)}`;
+      const actionPhrase = pickTemplate(area.type, agentB.name);
+      const description = `${agentA.name} ${actionPhrase}`;
 
       events.push({
         id: uuidv4(),
@@ -98,11 +100,17 @@ export function processSocialInteractions(
         areaId,
       });
 
-      // Update needs — social satisfaction for both
+      // Needs boosts for both
       needsBoosts[agentA.id] = { social: 8, creative: area.type === "studio" ? 4 : 0 };
       needsBoosts[agentB.id] = { social: 8, creative: area.type === "studio" ? 4 : 0 };
 
-      // Create memories for both
+      // Relationship deltas — both directions, +1 interaction, +5 strength
+      relationshipDeltas.push(
+        { agentId: agentA.id, targetAgentId: agentB.id, interactionsDelta: 1, strengthDelta: 5 },
+        { agentId: agentB.id, targetAgentId: agentA.id, interactionsDelta: 1, strengthDelta: 5 }
+      );
+
+      // Memories for both
       memories.push({
         id: uuidv4(),
         agentId: agentA.id,
@@ -125,5 +133,5 @@ export function processSocialInteractions(
     }
   }
 
-  return { events, memories, needsBoosts };
+  return { events, memories, needsBoosts, relationshipDeltas };
 }

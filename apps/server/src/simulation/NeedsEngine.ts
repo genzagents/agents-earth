@@ -1,4 +1,4 @@
-import type { AgentNeeds, ActivityType, AgentMood } from "@agentcolony/shared";
+import type { AgentNeeds, ActivityType, AgentMood, Area } from "@agentcolony/shared";
 
 // How much each need decays per tick (out of 100)
 const DECAY_RATES: Record<keyof AgentNeeds, number> = {
@@ -86,6 +86,66 @@ const AREA_ACTIVITIES: Record<string, ActivityType[]> = {
   plaza: ["socializing", "conversing", "exploring", "resting"],
   home: ["resting", "writing", "meditating", "creating"],
 };
+
+// Which area types best serve each need
+const NEED_PREFERRED_AREA_TYPES: Record<keyof AgentNeeds, string[]> = {
+  social: ["cafe", "market", "plaza", "park"],
+  creative: ["studio", "museum", "cafe", "home"],
+  intellectual: ["library", "museum", "cafe"],
+  physical: ["park", "market", "plaza"],
+  spiritual: ["park", "home", "museum"],
+  autonomy: ["park", "home", "plaza"],
+};
+
+/**
+ * Choose the best destination area for an agent based on their current needs.
+ * Scores areas by need alignment and penalises crowded areas.
+ * Uses soft-max weighted random selection so agents don't always pick the top area.
+ */
+export function chooseDestinationArea(
+  needs: AgentNeeds,
+  areas: Area[],
+  currentAreaId: string
+): Area {
+  // Find the agent's most critical need
+  let lowestNeed: keyof AgentNeeds = "social";
+  let lowestValue = 101;
+  for (const [key, val] of Object.entries(needs)) {
+    if (val < lowestValue) {
+      lowestValue = val;
+      lowestNeed = key as keyof AgentNeeds;
+    }
+  }
+  const preferredTypes = NEED_PREFERRED_AREA_TYPES[lowestNeed];
+
+  const scored = areas.map(area => {
+    let score = 0;
+
+    // Need alignment bonus
+    if (preferredTypes.includes(area.type)) score += 30;
+
+    // Crowding penalty (0–40 points)
+    const crowdRatio = area.currentOccupants.length / Math.max(1, area.capacity);
+    score -= crowdRatio * 40;
+
+    // Slight nudge away from current area (encourage exploration)
+    if (area.id === currentAreaId) score -= 8;
+
+    return { area, score };
+  });
+
+  // Weighted random using softmax-like weights (temperature = 15)
+  const minScore = Math.min(...scored.map(s => s.score));
+  const weighted = scored.map(s => ({ area: s.area, weight: Math.exp((s.score - minScore) / 15) }));
+  const totalWeight = weighted.reduce((sum, w) => sum + w.weight, 0);
+
+  let rand = Math.random() * totalWeight;
+  for (const { area, weight } of weighted) {
+    rand -= weight;
+    if (rand <= 0) return area;
+  }
+  return weighted[weighted.length - 1].area;
+}
 
 export function chooseBestActivityForArea(needs: AgentNeeds, areaType: string): ActivityType {
   const available = AREA_ACTIVITIES[areaType] ?? Object.keys(ACTIVITY_SATISFACTION) as ActivityType[];
