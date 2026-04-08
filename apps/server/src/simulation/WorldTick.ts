@@ -74,29 +74,19 @@ export class WorldTickEngine {
       const ageInDays = agentAgeInSimDays(agent, store.tick);
       decayed = applyAgingPressure(decayed, ageInDays);
 
-      const activity = chooseBestActivityForArea(decayed, areaType);
-      const satisfied = satisfyNeeds(decayed, activity);
-
       // Apply memory-based needs boost
       const agentMemories = store.getAgentMemories(agent.id);
       const memBoost = narrativeNeedsBoost(agentMemories, store.tick);
       for (const [k, v] of Object.entries(memBoost)) {
-        const key = k as keyof typeof satisfied;
-        satisfied[key] = Math.min(100, satisfied[key] + (v ?? 0));
+        const key = k as keyof typeof decayed;
+        decayed[key] = Math.min(100, decayed[key] + (v ?? 0));
       }
 
-      const mood = computeMood(satisfied);
-
-      const statusMessage = buildNarrativeStatusMessage(
-        { ...agent, needs: satisfied, state: { ...agent.state, mood } },
-        agentMemories,
-        store.tick
-      );
-
-      // Movement: 12% chance — now need-aware via area affinity scoring
+      // Movement: 12% chance — need-aware via area affinity scoring
+      // Decide movement BEFORE choosing activity so activity matches the final area
       let newAreaId = agent.state.currentAreaId;
       if (Math.random() < 0.12) {
-        const targetArea = chooseDestinationArea(satisfied, areas, agent.state.currentAreaId);
+        const targetArea = chooseDestinationArea(decayed, areas, agent.state.currentAreaId);
         newAreaId = targetArea.id;
 
         const event: WorldEvent = {
@@ -109,6 +99,19 @@ export class WorldTickEngine {
         };
         store.addEvent(event);
       }
+
+      // Choose activity based on the final area (after any movement)
+      const finalAreaType = areas.find(a => a.id === newAreaId)?.type ?? "plaza";
+      const activity = chooseBestActivityForArea(decayed, finalAreaType);
+      const satisfied = satisfyNeeds(decayed, activity);
+
+      const mood = computeMood(satisfied);
+
+      const statusMessage = buildNarrativeStatusMessage(
+        { ...agent, needs: satisfied, state: { ...agent.state, mood } },
+        agentMemories,
+        store.tick
+      );
 
       (newAreaOccupants[newAreaId] ??= []).push(agent.id);
 
