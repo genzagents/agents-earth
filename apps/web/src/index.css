@@ -12,3 +12,55 @@ html, body, #root {
   padding: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }
+
+/* Speech bubble overlays on WorldCanvas */
+.speech-bubble {
+  position: absolute;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(71, 85, 105, 0.75);
+  border-radius: 8px;
+  padding: 5px 9px;
+  max-width: 200px;
+  font-size: 11px;
+  color: #e2e8f0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: speech-bubble-lifecycle 4s ease-out forwards;
+  z-index: 10;
+}
+
+/* Triangle pointer pointing down toward agent */
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 5px solid transparent;
+  border-top-color: rgba(71, 85, 105, 0.75);
+}
+
+.speech-bubble-name {
+  font-size: 9px;
+  color: #94a3b8;
+  margin-bottom: 2px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.speech-bubble-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes speech-bubble-lifecycle {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  8%   { opacity: 1; transform: translateX(-50%) translateY(0); }
+  75%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  100% { opacity: 0; transform: translateX(-50%) translateY(0); }
+}

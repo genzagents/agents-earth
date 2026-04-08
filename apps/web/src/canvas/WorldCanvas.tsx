@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Application, Graphics, Text, TextStyle, Container } from "pixi.js";
 import type { WorldState } from "@agentcolony/shared";
 import { useWorldStore } from "../store/worldStore";
@@ -98,8 +98,6 @@ function calcAgentPosition(
   };
 }
 
-const speechBubbles: Map<string, SpeechBubble> = new Map();
-
 export function WorldCanvas() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -117,6 +115,7 @@ export function WorldCanvas() {
   const agentTweensRef = useRef<Map<string, AgentTween>>(new Map());
 
   const { world, selectAgent, selectedAgentId } = useWorldStore();
+  const [speechBubbles, setSpeechBubbles] = useState<SpeechBubble[]>([]);
   const lastWorldRef = useRef<WorldState | null>(null);
   const worldRef = useRef<WorldState | null>(null);
   const selectedAgentIdRef = useRef<string | null>(null);
@@ -127,23 +126,45 @@ export function WorldCanvas() {
   worldRef.current = world;
   selectedAgentIdRef.current = selectedAgentId;
 
-  // Detect new social events → create speech bubbles
+  // Detect new social events → create speech bubbles (HTML overlay state)
   useEffect(() => {
     if (!world) return;
     const prev = lastWorldRef.current;
     const prevEventIds = new Set(prev?.recentEvents.map(e => e.id) ?? []);
+    const newBubbles: SpeechBubble[] = [];
+
     for (const event of world.recentEvents) {
       if (event.kind === "social" && !prevEventIds.has(event.id)) {
         const [agentId] = event.involvedAgentIds;
         if (agentId) {
-          const words = event.description.split(" ");
-          const short = words.slice(0, 6).join(" ") + (words.length > 6 ? "…" : "");
-          speechBubbles.set(agentId, { agentId, text: short, expiresAt: Date.now() + 3500 });
+          const raw = event.description;
+          const text = raw.length > 80 ? raw.slice(0, 79) + "…" : raw;
+          newBubbles.push({ agentId, text, expiresAt: Date.now() + 4000 });
         }
       }
     }
+
+    if (newBubbles.length > 0) {
+      setSpeechBubbles(prev => {
+        const now = Date.now();
+        const active = prev.filter(b => b.expiresAt > now);
+        return [...active, ...newBubbles].slice(-3); // max 3 simultaneous bubbles
+      });
+    }
+
     lastWorldRef.current = world;
   }, [world]);
+
+  // Auto-remove expired bubbles
+  useEffect(() => {
+    if (speechBubbles.length === 0) return;
+    const earliest = Math.min(...speechBubbles.map(b => b.expiresAt));
+    const delay = Math.max(0, earliest - Date.now());
+    const timer = setTimeout(() => {
+      setSpeechBubbles(prev => prev.filter(b => b.expiresAt > Date.now()));
+    }, delay);
+    return () => clearTimeout(timer);
+  }, [speechBubbles]);
 
   // Init PixiJS once — create layers, draw static background, start ticker
   useEffect(() => {
@@ -196,7 +217,6 @@ export function WorldCanvas() {
           agentsLayerRef.current,
           agentPoolRef.current,
           agentTweensRef.current,
-          speechBubbles,
           currentSelectedId,
           selectAgentRef.current,
           pulse,
@@ -295,10 +315,24 @@ export function WorldCanvas() {
   }, [world]);
 
   return (
-    <div
-      ref={canvasRef}
-      className="w-full h-full bg-slate-900 rounded-lg overflow-hidden"
-    />
+    <div className="w-full h-full bg-slate-900 rounded-lg overflow-hidden relative">
+      <div ref={canvasRef} className="w-full h-full" />
+      {world && speechBubbles.map(bubble => {
+        const pos = calcAgentPosition(world, bubble.agentId);
+        const agent = world.agents.find(a => a.id === bubble.agentId);
+        if (!pos || !agent) return null;
+        return (
+          <div
+            key={`${bubble.agentId}-${bubble.expiresAt}`}
+            className="speech-bubble"
+            style={{ left: pos.x, top: pos.y - 56 }}
+          >
+            <div className="speech-bubble-name">{agent.name.split(" ")[0]}</div>
+            <div className="speech-bubble-text">{bubble.text}</div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -350,15 +384,13 @@ function drawAgents(
   agentsLayer: Container,
   pool: GraphicsPool,
   tweens: Map<string, AgentTween>,
-  bubbles: Map<string, SpeechBubble>,
   selectedAgentId: string | null,
   selectAgent: (id: string | null) => void,
   pulse: number,
 ) {
-  // Clear all children first (removes both pooled Graphics AND Text labels/bubbles)
+  // Clear all children first (removes both pooled Graphics AND Text labels)
   agentsLayer.removeChildren();
   pool.releaseAll(agentsLayer);
-  const now = Date.now();
 
   for (const agent of world.agents) {
     const tween = tweens.get(agent.id);
@@ -414,38 +446,5 @@ function drawAgents(
       agentsLayer.addChild(nameLabel);
     }
 
-    // Speech bubble
-    const bubble = bubbles.get(agent.id);
-    if (bubble && bubble.expiresAt > now) {
-      const remaining = (bubble.expiresAt - now) / 3500;
-      const alpha = remaining > 0.8 ? 1 : remaining / 0.8;
-      const bw = 120;
-      const bh = 22;
-
-      const bg = pool.acquire();
-      bg.roundRect(-bw / 2, -bh - 20, bw, bh, 4);
-      bg.fill({ color: 0x1e293b, alpha: alpha * 0.9 });
-      bg.stroke({ color: 0x475569, width: 1, alpha });
-      bg.x = ax;
-      bg.y = ay;
-      agentsLayer.addChild(bg);
-
-      const bubbleText = new Text({
-        text: bubble.text,
-        style: new TextStyle({
-          fontSize: 9,
-          fill: 0xe2e8f0,
-          fontFamily: "system-ui",
-          wordWrap: true,
-          wordWrapWidth: 110,
-        }),
-      });
-      bubbleText.alpha = alpha;
-      bubbleText.x = ax - 55;
-      bubbleText.y = ay - bh - 18;
-      agentsLayer.addChild(bubbleText);
-    } else if (bubble && bubble.expiresAt <= now) {
-      bubbles.delete(agent.id);
-    }
   }
 }
