@@ -5,3 +5,5 @@ dist/
 *.db-wal
 .env
 .env.local
+agentcolony-data.json
+packages/shared/src/*.js
