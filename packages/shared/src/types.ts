@@ -103,6 +103,8 @@ export interface Area {
   name: string;
   type: AreaType;
   position: { x: number; y: number };
+  /** Real-world London coordinates for map rendering */
+  latLng?: { lat: number; lng: number };
   capacity: number;
   currentOccupants: string[]; // agent ids
   ambiance: string;
