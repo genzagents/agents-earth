@@ -1,51 +1,52 @@
-# AgentColony v9 — Multi-stage Dockerfile
-# Stage 1: Backend server (Node.js + SQLite)
-# Stage 2: Frontend (nginx serving static files)
-# Stage 3: Combined runtime
+# AgentColony v10 — TypeScript/React/Fastify Multi-stage Dockerfile
+# Stage 1: Build (install deps + compile web + compile server)
+# Stage 2: Runtime (nginx serving React SPA + Fastify API)
 
-# ─── Backend Build ────────────────────────────────────────────
-FROM node:20-alpine AS backend-build
+# ─── Builder ──────────────────────────────────────────────────
+FROM node:20-alpine AS builder
 
-WORKDIR /app/server
-COPY server/package.json server/package-lock.json* ./
-RUN npm install --production
+WORKDIR /app
 
-# Copy server files (excluding data directory)
-COPY server/db/ ./db/
-COPY server/middleware/ ./middleware/
-COPY server/routes/ ./routes/
-COPY server/simulation/ ./simulation/
-COPY server/utils/ ./utils/
-COPY server/index.js server/ws.js ./
+# Copy workspace manifests for layer caching
+COPY package.json package-lock.json* ./
+COPY apps/web/package.json ./apps/web/
+COPY apps/server/package.json ./apps/server/
+COPY packages/shared/package.json ./packages/shared/
 
-# Create data directory and seed the database
-RUN mkdir -p data && node db/seed.js
+# Install all dependencies (workspaces)
+RUN npm install
 
-# ─── Frontend ─────────────────────────────────────────────────
-FROM nginx:alpine AS frontend
+# Copy all source files
+COPY apps/ ./apps/
+COPY packages/ ./packages/
+COPY tsconfig.json ./
 
-COPY index.html /usr/share/nginx/html/
-COPY register.html /usr/share/nginx/html/
-COPY dashboard.html /usr/share/nginx/html/
-COPY css/ /usr/share/nginx/html/css/
-COPY js/ /usr/share/nginx/html/js/
-COPY colony.yaml /usr/share/nginx/html/
+# Build React frontend (Vite → dist/)
+RUN npm run build --workspace=apps/web
 
-# ─── Combined Runtime ─────────────────────────────────────────
+# Build Fastify server (tsc → dist/)
+RUN npm run build --workspace=apps/server
+
+# ─── Runtime ──────────────────────────────────────────────────
 FROM node:20-alpine
 
-# Install nginx
 RUN apk add --no-cache nginx
 
 WORKDIR /app
 
-# Copy backend
-COPY --from=backend-build /app/server /app/server
+# Install only production server dependencies
+COPY package.json package-lock.json* ./
+COPY apps/server/package.json ./apps/server/
+COPY packages/shared/package.json ./packages/shared/
+RUN npm install --workspace=apps/server --omit=dev
 
-# Copy frontend
-COPY --from=frontend /usr/share/nginx/html /usr/share/nginx/html
+# Copy compiled server (all @agentcolony/shared imports are type-only, erased at compile)
+COPY --from=builder /app/apps/server/dist ./apps/server/dist
 
-# Nginx config and startup script (proper files, no inline echo)
+# Copy React SPA to nginx static root
+COPY --from=builder /app/apps/web/dist /usr/share/nginx/html
+
+# nginx config and startup script
 COPY docker/nginx.conf /etc/nginx/http.d/default.conf
 COPY docker/start.sh /app/start.sh
 RUN chmod +x /app/start.sh

@@ -7,8 +7,8 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-validate:
-    name: Lint & Validate
+  typecheck:
+    name: TypeScript Typecheck
     runs-on: ubuntu-latest
 
     steps:
@@ -20,28 +20,35 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: server/package-lock.json
 
-      - name: Install server dependencies
-        working-directory: server
+      - name: Install dependencies
         run: npm install
 
-      - name: Check server syntax (node --check)
-        working-directory: server
-        run: |
-          find . -name "*.js" -not -path "./node_modules/*" | \
-            xargs -I{} node --check {} && echo "All JS files passed syntax check"
+      - name: Typecheck all workspaces
+        run: npm run typecheck
 
-      - name: Install root dependencies (ESLint)
+  build:
+    name: Build Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
         run: npm install
 
-      - name: Lint frontend JS
-        run: npm run lint
+      - name: Build web (Vite)
+        run: npm run build --workspace=apps/web
 
-      - name: Validate colony.yaml
-        run: |
-          python3 -c "import yaml; yaml.safe_load(open('colony.yaml'))" && \
-            echo "colony.yaml is valid YAML"
+      - name: Build server (tsc)
+        run: npm run build --workspace=apps/server
 
   docker-build:
     name: Docker Build Check
@@ -59,7 +66,7 @@ jobs:
   test:
     name: Server Tests
     runs-on: ubuntu-latest
-    needs: [lint-and-validate]
+    needs: [typecheck]
 
     steps:
       - name: Checkout code
@@ -70,17 +77,9 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: server/package-lock.json
 
-      - name: Install server dependencies
-        working-directory: server
+      - name: Install dependencies
         run: npm install
 
-      - name: Run tests
-        working-directory: server
-        run: |
-          if [ -f "package.json" ] && grep -q '"test"' package.json; then
-            npm test
-          else
-            echo "No test script defined yet — skipping (TODO: add tests)"
-          fi
+      - name: Run server tests
+        run: npm run test --workspace=apps/server
