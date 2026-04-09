@@ -7,7 +7,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --require tsx/cjs --test 'src/**/*.test.ts'"
+    "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "@agentcolony/shared": "*",
