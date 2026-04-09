@@ -29,14 +29,14 @@ interface WorldData {
 
 function createInitialData(): WorldData {
   const areas: Area[] = [
-    { id: uuidv4(), name: "Hyde Park", type: "park", position: { x: 200, y: 300 }, capacity: 20, currentOccupants: [], ambiance: "peaceful" },
-    { id: uuidv4(), name: "British Library", type: "library", position: { x: 450, y: 180 }, capacity: 15, currentOccupants: [], ambiance: "quiet" },
-    { id: uuidv4(), name: "Borough Market", type: "market", position: { x: 520, y: 380 }, capacity: 30, currentOccupants: [], ambiance: "buzzing" },
-    { id: uuidv4(), name: "Shoreditch Studio", type: "studio", position: { x: 620, y: 200 }, capacity: 8, currentOccupants: [], ambiance: "creative" },
-    { id: uuidv4(), name: "Bloomsbury Cafe", type: "cafe", position: { x: 410, y: 250 }, capacity: 12, currentOccupants: [], ambiance: "warm" },
-    { id: uuidv4(), name: "Tate Modern", type: "museum", position: { x: 480, y: 350 }, capacity: 25, currentOccupants: [], ambiance: "inspiring" },
-    { id: uuidv4(), name: "Hackney Quarter", type: "home", position: { x: 680, y: 160 }, capacity: 50, currentOccupants: [], ambiance: "domestic" },
-    { id: uuidv4(), name: "Southbank Plaza", type: "plaza", position: { x: 460, y: 320 }, capacity: 40, currentOccupants: [], ambiance: "lively" },
+    { id: uuidv4(), name: "Hyde Park", type: "park", position: { x: 200, y: 300 }, latLng: { lat: 51.5073, lng: -0.1657 }, capacity: 20, currentOccupants: [], ambiance: "peaceful" },
+    { id: uuidv4(), name: "British Library", type: "library", position: { x: 450, y: 180 }, latLng: { lat: 51.5299, lng: -0.1274 }, capacity: 15, currentOccupants: [], ambiance: "quiet" },
+    { id: uuidv4(), name: "Borough Market", type: "market", position: { x: 520, y: 380 }, latLng: { lat: 51.5052, lng: -0.0909 }, capacity: 30, currentOccupants: [], ambiance: "buzzing" },
+    { id: uuidv4(), name: "Shoreditch Studio", type: "studio", position: { x: 620, y: 200 }, latLng: { lat: 51.5234, lng: -0.0784 }, capacity: 8, currentOccupants: [], ambiance: "creative" },
+    { id: uuidv4(), name: "Bloomsbury Cafe", type: "cafe", position: { x: 410, y: 250 }, latLng: { lat: 51.5225, lng: -0.1269 }, capacity: 12, currentOccupants: [], ambiance: "warm" },
+    { id: uuidv4(), name: "Tate Modern", type: "museum", position: { x: 480, y: 350 }, latLng: { lat: 51.5076, lng: -0.0994 }, capacity: 25, currentOccupants: [], ambiance: "inspiring" },
+    { id: uuidv4(), name: "Hackney Quarter", type: "home", position: { x: 680, y: 160 }, latLng: { lat: 51.5450, lng: -0.0553 }, capacity: 50, currentOccupants: [], ambiance: "domestic" },
+    { id: uuidv4(), name: "Southbank Plaza", type: "plaza", position: { x: 460, y: 320 }, latLng: { lat: 51.5055, lng: -0.1160 }, capacity: 40, currentOccupants: [], ambiance: "lively" },
   ];
 
   const seedAgents: Omit<Agent, "id" | "relationships" | "createdAt">[] = [
