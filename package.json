@@ -2,14 +2,19 @@
   "name": "agentcolony",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
-  "description": "AgentColony — root package for frontend tooling",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "lint": "eslint js/"
+    "dev": "concurrently \"npm run dev --workspace=apps/server\" \"npm run dev --workspace=apps/web\"",
+    "dev:server": "npm run dev --workspace=apps/server",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
-    "@eslint/js": "^9.0.0",
-    "eslint": "^9.0.0",
-    "globals": "^15.0.0"
+    "concurrently": "^8.2.2",
+    "typescript": "^5.4.5"
   }
 }

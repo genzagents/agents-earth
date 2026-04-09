@@ -1,4 +1,4 @@
 #!/bin/sh
-echo "🌍 AgentColony v9 starting..."
+echo "AgentColony v10 starting (TypeScript/React/Fastify)..."
 nginx
-cd /app/server && exec node index.js
+exec node /app/apps/server/dist/index.js
