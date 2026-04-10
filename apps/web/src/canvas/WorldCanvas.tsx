@@ -185,6 +185,14 @@ export function WorldCanvas() {
         existing.setLngLat([lng, lat]);
         const newEl = makeAgentEl(agent.avatar, moodColor, agent.name, isSelected);
         newEl.addEventListener("click", () => selectAgent(agent.id));
+        const existingPopup = existing.getPopup();
+        if (existingPopup) {
+          existingPopup.setHTML(
+            `<div style="font-family:sans-serif;font-size:12px;padding:6px 10px;"><strong>${agent.name}</strong><br/><span style="color:#94a3b8">${agent.state.currentActivity} · ${agent.state.mood}</span></div>`
+          );
+          newEl.addEventListener("mouseenter", () => { if (!existingPopup.isOpen()) existing.togglePopup(); });
+          newEl.addEventListener("mouseleave", () => { if (existingPopup.isOpen()) existing.togglePopup(); });
+        }
         const oldEl = existing.getElement();
         oldEl.parentNode?.replaceChild(newEl, oldEl);
       } else {
