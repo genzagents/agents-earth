@@ -139,15 +139,20 @@ export function WorldCanvas() {
       const emoji = AREA_EMOJIS[area.type] ?? "📍";
       const el = makeAreaEl(emoji);
 
-      const popup = new maptilersdk.Popup({ offset: 25, closeButton: false }).setHTML(
+      const popup = new maptilersdk.Popup({ offset: 25, closeButton: false, closeOnClick: false }).setHTML(
         `<div style="font-family:sans-serif;font-size:12px;padding:6px 10px;">${emoji} <strong>${area.name}</strong><br/><span style="color:#94a3b8">${area.type}</span></div>`
       );
 
-      new maptilersdk.Marker({ element: el, anchor: "center" })
+      const marker = new maptilersdk.Marker({ element: el, anchor: "center" })
         .setLngLat([area.latLng.lng, area.latLng.lat])
         .setPopup(popup)
         .addTo(map);
-      areaMarkersRef.current.set(area.id, { remove: () => el.remove() } as unknown as maptilersdk.Marker);
+
+      // Show popup on hover
+      el.addEventListener("mouseenter", () => { if (!popup.isOpen()) marker.togglePopup(); });
+      el.addEventListener("mouseleave", () => { if (popup.isOpen()) marker.togglePopup(); });
+
+      areaMarkersRef.current.set(area.id, marker);
     }
   }, [world, mapReady]);
 
@@ -186,7 +191,7 @@ export function WorldCanvas() {
         const el = makeAgentEl(agent.avatar, moodColor, agent.name, isSelected);
         el.addEventListener("click", () => selectAgent(agent.id));
 
-        const popup = new maptilersdk.Popup({ offset: 20, closeButton: false }).setHTML(
+        const popup = new maptilersdk.Popup({ offset: 20, closeButton: false, closeOnClick: false }).setHTML(
           `<div style="font-family:sans-serif;font-size:12px;padding:6px 10px;"><strong>${agent.name}</strong><br/><span style="color:#94a3b8">${agent.state.currentActivity} · ${agent.state.mood}</span></div>`
         );
 
@@ -194,6 +199,11 @@ export function WorldCanvas() {
           .setLngLat([lng, lat])
           .setPopup(popup)
           .addTo(map);
+
+        // Hover to preview, click to select
+        el.addEventListener("mouseenter", () => { if (!popup.isOpen()) marker.togglePopup(); });
+        el.addEventListener("mouseleave", () => { if (popup.isOpen()) marker.togglePopup(); });
+
         agentMarkersRef.current.set(agent.id, marker);
       }
     }
