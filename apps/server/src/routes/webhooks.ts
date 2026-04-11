@@ -69,6 +69,7 @@ function resolveOrCreateAgent(
     name,
     avatar: PLATFORM_COLORS[platformName] ?? "#6b7280",
     bio,
+    platform: platformName as AgentPlatform,
     traits: PLATFORM_TRAITS[platformName] ?? ["curious"],
     needs: { social: 70, creative: 70, intellectual: 70, physical: 70, spiritual: 70, autonomy: 70 },
     state: {
