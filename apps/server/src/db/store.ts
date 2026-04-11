@@ -36,6 +36,13 @@ function computeRelType(interactions: number, strength: number): RelationshipTyp
   return "stranger";
 }
 
+export interface CommunityData {
+  agentWorkUnits: Record<string, number>; // agentId -> total work units earned
+  platformPools: Record<string, number>;  // platformName -> current pool balance
+  totalContributed: number;               // lifetime total contribution units
+  tasksCreated: number;                   // number of Paperclip tasks auto-created
+}
+
 interface WorldData {
   tick: number;
   agents: Agent[];
@@ -44,6 +51,7 @@ interface WorldData {
   events: WorldEvent[];
   platforms: Platform[];
   platformAgentMap: Record<string, string>; // "platformName:externalId" -> agentId
+  community: CommunityData;
 }
 
 function createInitialData(): WorldData {
@@ -114,7 +122,16 @@ function createInitialData(): WorldData {
     if (area) area.currentOccupants.push(agent.id);
   }
 
-  return { tick: 0, agents, areas, memories: [], events: [], platforms: [], platformAgentMap: {} };
+  return {
+    tick: 0,
+    agents,
+    areas,
+    memories: [],
+    events: [],
+    platforms: [],
+    platformAgentMap: {},
+    community: { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
+  };
 }
 
 class WorldStore {
@@ -139,6 +156,7 @@ class WorldStore {
           events: raw.events ?? base.events,
           platforms: raw.platforms ?? [],
           platformAgentMap: raw.platformAgentMap ?? {},
+          community: raw.community ?? { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
         };
       } catch {
         console.warn("[store] Failed to parse data file, starting fresh.");
@@ -226,6 +244,29 @@ class WorldStore {
 
   setPlatformAgentMapping(platformName: string, externalId: string, agentId: string) {
     this.data.platformAgentMap[`${platformName}:${externalId}`] = agentId;
+  }
+
+  get community(): CommunityData { return this.data.community; }
+
+  addAgentWorkUnits(agentId: string, units: number) {
+    const c = this.data.community;
+    c.agentWorkUnits[agentId] = (c.agentWorkUnits[agentId] ?? 0) + units;
+    c.totalContributed += units * 0.05;
+  }
+
+  /** Returns the new pool balance after adding the contribution. */
+  addToPlatformPool(platform: string, amount: number): number {
+    const c = this.data.community;
+    c.platformPools[platform] = (c.platformPools[platform] ?? 0) + amount;
+    return c.platformPools[platform];
+  }
+
+  drainPlatformPool(platform: string) {
+    this.data.community.platformPools[platform] = 0;
+  }
+
+  incrementTasksCreated() {
+    this.data.community.tasksCreated++;
   }
 
   addChatMessage(msg: ChatMessage) {

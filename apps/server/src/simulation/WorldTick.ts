@@ -8,6 +8,7 @@ import {
   chooseDestinationArea,
 } from "./NeedsEngine";
 import { processSocialInteractions } from "./SocialEngine";
+import { processCommunityContributions } from "./CommunityEngine";
 import { buildNarrativeStatusMessage, narrativeNeedsBoost } from "./MemoryEngine";
 import { agentAgeInSimDays, applyAgingPressure, checkRetirement } from "./LegacyEngine";
 import { agentBrain } from "./AgentBrain";
@@ -32,11 +33,9 @@ export class WorldTickEngine {
   start(tickIntervalMs = 2000) {
     console.log(`[WorldTick] Starting simulation at tick ${store.tick}, interval=${tickIntervalMs}ms`);
     this.interval = setInterval(() => {
-      try {
-        this.runTick();
-      } catch (err) {
+      this.runTick().catch(err => {
         console.error("[WorldTick] Tick error:", err);
-      }
+      });
     }, tickIntervalMs);
     this.saveInterval = setInterval(() => store.save(), 30_000);
   }
@@ -47,7 +46,7 @@ export class WorldTickEngine {
     store.save();
   }
 
-  private runTick() {
+  private async runTick() {
     store.tick++;
 
     const areas = store.areas;
@@ -203,6 +202,10 @@ export class WorldTickEngine {
         strengthDelta: delta.strengthDelta,
       });
     }
+
+    // --- Phase 4: Community contributions ---
+    const activeAgents = updatedAgents.filter(a => !a.isRetired);
+    await processCommunityContributions(activeAgents);
 
     this.onTickCallback?.(this.buildSnapshot());
   }
