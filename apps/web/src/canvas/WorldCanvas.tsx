@@ -75,7 +75,7 @@ export function WorldCanvas() {
   const agentMarkersRef = useRef<Map<string, maptilersdk.Marker>>(new Map());
   const [mapReady, setMapReady] = useState(false);
 
-  const { world, selectAgent, selectedAgentId } = useWorldStore();
+  const { world, selectAgent, selectedAgentId, showAgents, show3dBuildings, globeView } = useWorldStore();
   const [speechBubbles, setSpeechBubbles] = useState<{ agentId: string; text: string; expiresAt: number }[]>([]);
   const lastEventIdsRef = useRef<Set<string>>(new Set());
 
@@ -123,6 +123,34 @@ export function WorldCanvas() {
       map.remove();
     };
   }, []);
+
+  // Globe view toggle — fly out to globe or back to London
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    if (globeView) {
+      map.flyTo({ center: [0, 20], zoom: 1.5, pitch: 0, bearing: 0, duration: 2000, essential: true });
+    } else {
+      map.flyTo({ center: LONDON, zoom: 12.5, pitch: 45, bearing: -10, duration: 2500, essential: true });
+    }
+  }, [globeView, mapReady]);
+
+  // Agent markers visibility toggle
+  useEffect(() => {
+    for (const marker of agentMarkersRef.current.values()) {
+      const el = marker.getElement();
+      el.style.display = showAgents ? "" : "none";
+    }
+  }, [showAgents]);
+
+  // 3D buildings layer visibility toggle
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    if (map.getLayer("3d-buildings")) {
+      map.setLayoutProperty("3d-buildings", "visibility", show3dBuildings ? "visible" : "none");
+    }
+  }, [show3dBuildings, mapReady]);
 
   // Sync area markers when map is ready and world data arrives
   useEffect(() => {
