@@ -25,10 +25,10 @@ function emitAgentUpdate(io: IO, agent: Agent, platform: AgentPlatform) {
 }
 
 const PLATFORM_COLORS: Record<string, string> = {
-  openclaw: "#f59e0b",
-  nemoclaw: "#8b5cf6",
-  openfang: "#10b981",
-  moltbook: "#ef4444",
+  openclaw: "#22c55e",
+  nemoclaw: "#f59e0b",
+  openfang: "#ef4444",
+  moltbook: "#8b5cf6",
 };
 
 const PLATFORM_TRAITS: Record<string, AgentTrait[]> = {
