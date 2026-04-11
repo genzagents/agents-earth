@@ -1,15 +1,16 @@
 import { useState } from "react";
+import { Routes, Route } from "react-router-dom";
 import { useSocket } from "./hooks/useSocket";
 import { WorldCanvas } from "./canvas/WorldCanvas";
 import { AgentPanel } from "./components/AgentPanel";
 import { TimelinePanel } from "./components/TimelinePanel";
 import { PlatformPanel } from "./components/PlatformPanel";
 import { HUD } from "./components/HUD";
+import { CommunityPage } from "./pages/CommunityPage";
 
 type SidebarTab = "agents" | "platforms";
 
-export function App() {
-  useSocket();
+function WorldView() {
   const [showPanel, setShowPanel] = useState(false);
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>("agents");
 
@@ -91,5 +92,15 @@ export function App() {
         </div>
       </div>
     </div>
+  );
+}
+
+export function App() {
+  useSocket();
+  return (
+    <Routes>
+      <Route path="/" element={<WorldView />} />
+      <Route path="/community" element={<CommunityPage />} />
+    </Routes>
   );
 }

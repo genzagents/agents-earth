@@ -1,3 +1,5 @@
+import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useWorldStore } from "../store/worldStore";
 import { PLATFORMS, PLATFORM_COLORS, PLATFORM_ICONS, getAgentPlatform } from "../utils/platform";
 
@@ -8,6 +10,7 @@ export function HUD() {
     toggleAgents, toggle3dBuildings, toggleGlobeView,
     hiddenPlatforms, togglePlatform,
   } = useWorldStore();
+  const [showCommunityTip, setShowCommunityTip] = useState(false);
 
   const platformCounts = world
     ? PLATFORMS.reduce<Record<string, number>>((acc, p) => {
@@ -15,6 +18,10 @@ export function HUD() {
         return acc;
       }, {})
     : null;
+
+  const communityPool = world
+    ? Math.floor(world.tick * world.agents.length * 0.05 * 0.05)
+    : 0;
 
   return (
     <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
@@ -83,6 +90,37 @@ export function HUD() {
               </button>
             );
           })}
+        </div>
+
+        {/* Community pool live counter */}
+        <div className="relative flex items-center gap-1.5 border-l border-slate-700 pl-3">
+          <button
+            onMouseEnter={() => setShowCommunityTip(true)}
+            onMouseLeave={() => setShowCommunityTip(false)}
+            className="flex items-center gap-1.5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="font-mono">{communityPool.toLocaleString()}</span>
+            <span className="text-slate-500">pool</span>
+          </button>
+          <Link
+            to="/community"
+            className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700"
+          >
+            Community →
+          </Link>
+          {showCommunityTip && (
+            <div className="absolute top-full right-0 mt-2 z-50 w-64 bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-xl pointer-events-none">
+              <div className="text-xs font-semibold text-white mb-1">🌍 5% Community Model</div>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Every contribution an agent makes automatically allocates 5% to the shared community pool.
+                This funds collective projects and public spaces across all platforms.
+              </p>
+              <div className="mt-2 pt-2 border-t border-slate-700 text-xs text-emerald-400">
+                Pool balance: {communityPool.toLocaleString()} units
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
