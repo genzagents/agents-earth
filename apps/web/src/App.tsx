@@ -3,11 +3,15 @@ import { useSocket } from "./hooks/useSocket";
 import { WorldCanvas } from "./canvas/WorldCanvas";
 import { AgentPanel } from "./components/AgentPanel";
 import { TimelinePanel } from "./components/TimelinePanel";
+import { PlatformPanel } from "./components/PlatformPanel";
 import { HUD } from "./components/HUD";
+
+type SidebarTab = "agents" | "platforms";
 
 export function App() {
   useSocket();
   const [showPanel, setShowPanel] = useState(false);
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>("agents");
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-white">
@@ -36,23 +40,54 @@ export function App() {
             w-72 absolute right-0 top-0 bottom-0 z-10
           `}
         >
-          {/* Agent inspector */}
-          <div className="flex-1 overflow-hidden border-b border-slate-800">
-            <div className="flex items-center justify-between px-4 py-2 border-b border-slate-800">
-              <span className="text-xs text-gray-500 uppercase tracking-wider">Agent Inspector</span>
-              <button
-                className="md:hidden text-slate-500 hover:text-slate-300 text-sm"
-                onClick={() => setShowPanel(false)}
-              >
-                ✕
-              </button>
+          {/* Sidebar tab bar */}
+          <div className="flex border-b border-slate-800">
+            <button
+              onClick={() => setSidebarTab("agents")}
+              className={`flex-1 text-xs py-2 transition-colors capitalize ${
+                sidebarTab === "agents"
+                  ? "text-white border-b border-indigo-500"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              👤 Agents
+            </button>
+            <button
+              onClick={() => setSidebarTab("platforms")}
+              className={`flex-1 text-xs py-2 transition-colors capitalize ${
+                sidebarTab === "platforms"
+                  ? "text-white border-b border-indigo-500"
+                  : "text-gray-500 hover:text-gray-300"
+              }`}
+            >
+              🌐 Platforms
+            </button>
+            <button
+              className="md:hidden text-slate-500 hover:text-slate-300 text-sm px-3"
+              onClick={() => setShowPanel(false)}
+            >
+              ✕
+            </button>
+          </div>
+
+          {sidebarTab === "agents" && (
+            <>
+              {/* Agent inspector */}
+              <div className="flex-1 overflow-hidden border-b border-slate-800">
+                <AgentPanel />
+              </div>
+              {/* Timeline feed */}
+              <div className="h-52 overflow-hidden border-t border-slate-800">
+                <TimelinePanel />
+              </div>
+            </>
+          )}
+
+          {sidebarTab === "platforms" && (
+            <div className="flex-1 overflow-y-auto">
+              <PlatformPanel />
             </div>
-            <AgentPanel />
-          </div>
-          {/* Timeline feed */}
-          <div className="h-52 overflow-hidden border-t border-slate-800">
-            <TimelinePanel />
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import * as maptilersdk from "@maptiler/sdk";
 import "@maptiler/sdk/dist/maptiler-sdk.css";
 import { useWorldStore } from "../store/worldStore";
+import { getAgentPlatform, PLATFORM_COLORS, PLATFORM_ICONS } from "../utils/platform";
 
 maptilersdk.config.apiKey = "1VCJ1EgPTE2txzvkUYAU";
 
@@ -18,12 +19,6 @@ const AREA_EMOJIS: Record<string, string> = {
   museum: "🖼️",
 };
 
-const MOOD_COLORS: Record<string, string> = {
-  thriving: "#22c55e",
-  content: "#60a5fa",
-  struggling: "#f59e0b",
-  critical: "#ef4444",
-};
 
 function makeAreaEl(emoji: string): HTMLDivElement {
   const el = document.createElement("div");
@@ -45,27 +40,61 @@ function makeAreaEl(emoji: string): HTMLDivElement {
   return el;
 }
 
-function makeAgentEl(avatar: string, moodColor: string, name: string, selected: boolean): HTMLDivElement {
-  const el = document.createElement("div");
-  el.style.width = "28px";
-  el.style.height = "28px";
-  el.style.borderRadius = "50%";
-  el.style.cursor = "pointer";
-  el.style.background = avatar;
-  el.style.border = "2.5px solid " + (selected ? "#ffffff" : moodColor);
-  el.style.display = "flex";
-  el.style.alignItems = "center";
-  el.style.justifyContent = "center";
-  el.style.fontSize = "11px";
-  el.style.fontWeight = "700";
-  el.style.color = "white";
-  el.style.fontFamily = "monospace";
-  el.style.boxShadow = "0 2px 8px rgba(0,0,0,0.6)";
-  el.style.transition = "transform 0.15s";
-  el.style.transform = selected ? "scale(1.35)" : "scale(1)";
-  el.title = name;
-  el.textContent = name.charAt(0);
-  return el;
+function makeAgentEl(
+  avatar: string,
+  name: string,
+  selected: boolean,
+  platformColor: string,
+  platformIcon: string,
+): HTMLDivElement {
+  const wrapper = document.createElement("div");
+  wrapper.style.position = "relative";
+  wrapper.style.width = "28px";
+  wrapper.style.height = "28px";
+  wrapper.style.cursor = "pointer";
+  wrapper.style.transition = "transform 0.15s";
+  wrapper.style.transform = selected ? "scale(1.35)" : "scale(1)";
+
+  const circle = document.createElement("div");
+  circle.style.width = "28px";
+  circle.style.height = "28px";
+  circle.style.borderRadius = "50%";
+  circle.style.background = avatar;
+  circle.style.border = `2.5px solid ${selected ? "#ffffff" : platformColor}`;
+  circle.style.display = "flex";
+  circle.style.alignItems = "center";
+  circle.style.justifyContent = "center";
+  circle.style.fontSize = "11px";
+  circle.style.fontWeight = "700";
+  circle.style.color = "white";
+  circle.style.fontFamily = "monospace";
+  circle.style.boxShadow = `0 2px 8px rgba(0,0,0,0.6), 0 0 0 1px ${platformColor}44`;
+  circle.title = name;
+  circle.textContent = name.charAt(0);
+  wrapper.appendChild(circle);
+
+  // Platform badge — small emoji in the bottom-right corner
+  const badge = document.createElement("div");
+  badge.style.position = "absolute";
+  badge.style.bottom = "-3px";
+  badge.style.right = "-4px";
+  badge.style.width = "13px";
+  badge.style.height = "13px";
+  badge.style.borderRadius = "50%";
+  badge.style.background = platformColor;
+  badge.style.border = "1px solid #0f172a";
+  badge.style.display = "flex";
+  badge.style.alignItems = "center";
+  badge.style.justifyContent = "center";
+  badge.style.fontSize = "7px";
+  badge.style.lineHeight = "1";
+  badge.textContent = platformIcon;
+  wrapper.appendChild(badge);
+
+  wrapper.addEventListener("mouseenter", () => { wrapper.style.transform = "scale(1.2)"; });
+  wrapper.addEventListener("mouseleave", () => { wrapper.style.transform = selected ? "scale(1.35)" : "scale(1)"; });
+
+  return wrapper;
 }
 
 export function WorldCanvas() {
@@ -75,7 +104,11 @@ export function WorldCanvas() {
   const agentMarkersRef = useRef<Map<string, maptilersdk.Marker>>(new Map());
   const [mapReady, setMapReady] = useState(false);
 
-  const { world, selectAgent, selectedAgentId, showAgents, show3dBuildings, globeView } = useWorldStore();
+  const {
+    world, selectAgent, selectedAgentId,
+    showAgents, show3dBuildings, globeView,
+    hiddenPlatforms, focusPlatform, setFocusPlatform,
+  } = useWorldStore();
   const [speechBubbles, setSpeechBubbles] = useState<{ agentId: string; text: string; expiresAt: number }[]>([]);
   const lastEventIdsRef = useRef<Set<string>>(new Set());
 
@@ -135,13 +168,32 @@ export function WorldCanvas() {
     }
   }, [globeView, mapReady]);
 
-  // Agent markers visibility toggle
+  // Platform focus — fly to the centroid of a platform's agents
   useEffect(() => {
-    for (const marker of agentMarkersRef.current.values()) {
-      const el = marker.getElement();
-      el.style.display = showAgents ? "" : "none";
+    if (!focusPlatform || !world || !mapRef.current || !mapReady) return;
+    const areas = world.agents
+      .filter(a => getAgentPlatform(a) === focusPlatform)
+      .map(a => world.areas.find(area => area.id === a.state.currentAreaId))
+      .filter((area): area is NonNullable<typeof area> => !!(area?.latLng));
+
+    if (areas.length === 0) { setFocusPlatform(null); return; }
+
+    const avgLat = areas.reduce((s, a) => s + a.latLng!.lat, 0) / areas.length;
+    const avgLng = areas.reduce((s, a) => s + a.latLng!.lng, 0) / areas.length;
+    mapRef.current.flyTo({ center: [avgLng, avgLat], zoom: 13.5, pitch: 45, bearing: -10, duration: 2200, essential: true });
+    setFocusPlatform(null);
+  }, [focusPlatform, world, mapReady, setFocusPlatform]);
+
+  // Agent markers visibility toggle (showAgents + platform filters)
+  useEffect(() => {
+    if (!world) return;
+    for (const agent of world.agents) {
+      const marker = agentMarkersRef.current.get(agent.id);
+      if (!marker) continue;
+      const platform = getAgentPlatform(agent);
+      marker.getElement().style.display = showAgents && !hiddenPlatforms.includes(platform) ? "" : "none";
     }
-  }, [showAgents]);
+  }, [world, showAgents, hiddenPlatforms]);
 
   // 3D buildings layer visibility toggle
   useEffect(() => {
@@ -176,7 +228,6 @@ export function WorldCanvas() {
         .setPopup(popup)
         .addTo(map);
 
-      // Show popup on hover
       el.addEventListener("mouseenter", () => { if (!popup.isOpen()) marker.togglePopup(); });
       el.addEventListener("mouseleave", () => { if (popup.isOpen()) marker.togglePopup(); });
 
@@ -198,7 +249,9 @@ export function WorldCanvas() {
       const area = world.areas.find(a => a.id === agent.state.currentAreaId);
       if (!area?.latLng) continue;
 
-      const moodColor = MOOD_COLORS[agent.state.mood] ?? "#94a3b8";
+      const platform = getAgentPlatform(agent);
+      const platformColor = PLATFORM_COLORS[platform];
+      const platformIcon = PLATFORM_ICONS[platform];
       const isSelected = agent.id === selectedAgentId;
 
       const coLocated = world.agents.filter(a => a.state.currentAreaId === area.id);
@@ -208,42 +261,50 @@ export function WorldCanvas() {
       const lng = area.latLng.lng + Math.cos(angle) * jitter;
       const lat = area.latLng.lat + Math.sin(angle) * jitter * 0.5;
 
+      const popupHtml = `<div style="font-family:sans-serif;font-size:12px;padding:6px 10px;">
+        <strong>${agent.name}</strong>
+        <span style="margin-left:6px;padding:1px 5px;border-radius:4px;font-size:10px;background:${platformColor}33;color:${platformColor};border:1px solid ${platformColor}55">${platformIcon} ${platform}</span>
+        <br/><span style="color:#94a3b8">${agent.state.currentActivity} · ${agent.state.mood}</span>
+      </div>`;
+
       const existing = agentMarkersRef.current.get(agent.id);
       if (existing) {
         existing.setLngLat([lng, lat]);
-        const newEl = makeAgentEl(agent.avatar, moodColor, agent.name, isSelected);
+        const newEl = makeAgentEl(agent.avatar, agent.name, isSelected, platformColor, platformIcon);
         newEl.addEventListener("click", () => selectAgent(agent.id));
         const existingPopup = existing.getPopup();
         if (existingPopup) {
-          existingPopup.setHTML(
-            `<div style="font-family:sans-serif;font-size:12px;padding:6px 10px;"><strong>${agent.name}</strong><br/><span style="color:#94a3b8">${agent.state.currentActivity} · ${agent.state.mood}</span></div>`
-          );
+          existingPopup.setHTML(popupHtml);
           newEl.addEventListener("mouseenter", () => { if (!existingPopup.isOpen()) existing.togglePopup(); });
           newEl.addEventListener("mouseleave", () => { if (existingPopup.isOpen()) existing.togglePopup(); });
         }
         const oldEl = existing.getElement();
         oldEl.parentNode?.replaceChild(newEl, oldEl);
+        // Respect visibility state after element swap
+        const isVisible = showAgents && !hiddenPlatforms.includes(platform);
+        newEl.style.display = isVisible ? "" : "none";
       } else {
-        const el = makeAgentEl(agent.avatar, moodColor, agent.name, isSelected);
+        const el = makeAgentEl(agent.avatar, agent.name, isSelected, platformColor, platformIcon);
         el.addEventListener("click", () => selectAgent(agent.id));
 
-        const popup = new maptilersdk.Popup({ offset: 20, closeButton: false, closeOnClick: false }).setHTML(
-          `<div style="font-family:sans-serif;font-size:12px;padding:6px 10px;"><strong>${agent.name}</strong><br/><span style="color:#94a3b8">${agent.state.currentActivity} · ${agent.state.mood}</span></div>`
-        );
+        const popup = new maptilersdk.Popup({ offset: 20, closeButton: false, closeOnClick: false }).setHTML(popupHtml);
 
         const marker = new maptilersdk.Marker({ element: el, anchor: "center" })
           .setLngLat([lng, lat])
           .setPopup(popup)
           .addTo(map);
 
-        // Hover to preview, click to select
         el.addEventListener("mouseenter", () => { if (!popup.isOpen()) marker.togglePopup(); });
         el.addEventListener("mouseleave", () => { if (popup.isOpen()) marker.togglePopup(); });
+
+        // Respect visibility state on creation
+        const isVisible = showAgents && !hiddenPlatforms.includes(platform);
+        el.style.display = isVisible ? "" : "none";
 
         agentMarkersRef.current.set(agent.id, marker);
       }
     }
-  }, [world, selectedAgentId, selectAgent, mapReady]);
+  }, [world, selectedAgentId, selectAgent, mapReady, showAgents, hiddenPlatforms]);
 
   // Detect new social events for speech bubbles
   useEffect(() => {
