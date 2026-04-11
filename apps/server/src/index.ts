@@ -6,6 +6,7 @@ import { WorldTickEngine } from "./simulation/WorldTick";
 import { worldRoutes } from "./routes/world";
 import { platformRoutes } from "./routes/platforms";
 import { webhookRoutes } from "./routes/webhooks";
+import { createOpenClawBridge } from "./socket/openclawBridge";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -23,10 +24,9 @@ async function main() {
   // Create simulation engine
   const engine = new WorldTickEngine();
 
-  // Register routes
+  // Register routes (webhook routes registered after io is created below)
   await fastify.register(worldRoutes, { engine });
   await fastify.register(platformRoutes);
-  await fastify.register(webhookRoutes);
 
   // Start HTTP server
   const address = await fastify.listen({ port: PORT, host: HOST });
@@ -42,6 +42,12 @@ async function main() {
       },
     }
   );
+
+  // Register webhook routes with io reference for real-time event emission
+  await fastify.register(webhookRoutes, { io });
+
+  // Initialize OpenClaw WebSocket chat bridge
+  createOpenClawBridge(io);
 
   io.on("connection", (socket) => {
     console.log(`[socket] Client connected: ${socket.id}`);

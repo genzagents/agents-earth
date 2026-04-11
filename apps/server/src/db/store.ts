@@ -22,6 +22,14 @@ export interface Platform {
   registeredAt: number;
 }
 
+export interface ChatMessage {
+  id: string;
+  agentId: string;
+  platform: string;
+  message: string;
+  tick: number;
+}
+
 function computeRelType(interactions: number, strength: number): RelationshipType {
   if (strength > 70) return "friend";
   if (interactions >= 5) return "collaborator";
@@ -111,6 +119,8 @@ function createInitialData(): WorldData {
 
 class WorldStore {
   private data: WorldData;
+  /** In-memory only: ring buffer of last 100 chat messages per agent */
+  private chatMessages: Map<string, ChatMessage[]> = new Map();
 
   constructor() {
     this.data = this.load();
@@ -216,6 +226,20 @@ class WorldStore {
 
   setPlatformAgentMapping(platformName: string, externalId: string, agentId: string) {
     this.data.platformAgentMap[`${platformName}:${externalId}`] = agentId;
+  }
+
+  addChatMessage(msg: ChatMessage) {
+    let msgs = this.chatMessages.get(msg.agentId);
+    if (!msgs) {
+      msgs = [];
+      this.chatMessages.set(msg.agentId, msgs);
+    }
+    msgs.push(msg);
+    if (msgs.length > 100) msgs.shift();
+  }
+
+  getChatMessages(agentId: string): ChatMessage[] {
+    return this.chatMessages.get(agentId) ?? [];
   }
 
   /**

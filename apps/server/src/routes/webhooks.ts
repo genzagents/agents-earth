@@ -1,7 +1,28 @@
 import { v4 as uuidv4 } from "uuid";
 import type { FastifyInstance } from "fastify";
+import type { Server as SocketIOServer } from "socket.io";
 import { store } from "../db/store";
-import type { Agent, AgentTrait, ActivityType, WorldEvent } from "@agentcolony/shared";
+import type {
+  Agent,
+  AgentTrait,
+  ActivityType,
+  WorldEvent,
+  ServerToClientEvents,
+  ClientToServerEvents,
+  AgentPlatform,
+} from "@agentcolony/shared";
+
+type IO = SocketIOServer<ClientToServerEvents, ServerToClientEvents>;
+
+function emitAgentUpdate(io: IO, agent: Agent, platform: AgentPlatform) {
+  const area = store.areas.find(a => a.id === agent.state.currentAreaId);
+  io.emit("platform:agent_update", {
+    agentId: agent.id,
+    platform,
+    location: area?.name ?? "unknown",
+    activity: agent.state.currentActivity,
+  });
+}
 
 const PLATFORM_COLORS: Record<string, string> = {
   openclaw: "#f59e0b",
@@ -82,7 +103,8 @@ function addWorldEvent(kind: WorldEvent["kind"], description: string, agentIds: 
   });
 }
 
-export async function webhookRoutes(fastify: FastifyInstance) {
+export async function webhookRoutes(fastify: FastifyInstance, opts: { io: IO }) {
+  const { io } = opts;
   // ─── OpenClaw: agent online/offline, new message ───────────────────────────
   fastify.post<{ Body: unknown }>("/webhooks/openclaw", async (req, reply) => {
     if (!verifyWebhookSecret("openclaw", req.headers["x-webhook-secret"] as string)) {
@@ -109,6 +131,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       });
       addWorldEvent("movement", `${agentName} came online from OpenClaw.`, [agent.id]);
       fastify.log.info({ agentId: agent.id, externalId }, "openclaw agent.online");
+      emitAgentUpdate(io, store.getAgent(agent.id)!, "openclaw");
     } else if (eventType === "agent.offline") {
       const agentId = store.getPlatformAgentId("openclaw", externalId);
       if (agentId) {
@@ -117,6 +140,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
           store.updateAgent(agentId, {
             state: { ...agent.state, mood: "struggling", statusMessage: `${agent.name} has gone offline.` },
           });
+          emitAgentUpdate(io, store.getAgent(agentId)!, "openclaw");
         }
       }
     } else if (eventType === "message.new") {
@@ -136,6 +160,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
         store.updateAgent(agent.id, {
           state: { ...store.getAgent(agent.id)!.state, statusMessage: `${agentName} received a message on OpenClaw.` },
         });
+        emitAgentUpdate(io, store.getAgent(agent.id)!, "openclaw");
       }
     }
 
@@ -164,6 +189,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       const agent = resolveOrCreateAgent("nemoclaw", externalId, agentName, agentBio);
       addWorldEvent("movement", `${agentName} registered from NemoClaw.`, [agent.id]);
       fastify.log.info({ agentId: agent.id, externalId }, "nemoclaw agent.registered");
+      emitAgentUpdate(io, store.getAgent(agent.id)!, "nemoclaw");
     } else if (eventType === "task.updated") {
       const agentId = store.getPlatformAgentId("nemoclaw", externalId);
       if (agentId) {
@@ -182,6 +208,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             tags: ["nemoclaw", "task"],
             createdAt: store.tick,
           });
+          emitAgentUpdate(io, store.getAgent(agentId)!, "nemoclaw");
         }
       }
     }
@@ -229,6 +256,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       });
       addWorldEvent("creation", `${agentName} completed a task via OpenFang.`, [agent.id]);
       fastify.log.info({ agentId: agent.id, taskTitle }, "openfang task.completed");
+      emitAgentUpdate(io, store.getAgent(agent.id)!, "openfang");
     } else if (eventType === "integration.new") {
       const agent = resolveOrCreateAgent("openfang", externalId, agentName, agentBio);
       const integrationName = String(
@@ -246,6 +274,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       store.updateAgent(agent.id, {
         state: { ...store.getAgent(agent.id)!.state, statusMessage: `${agentName} set up ${integrationName}.` },
       });
+      emitAgentUpdate(io, store.getAgent(agent.id)!, "openfang");
     }
 
     return { ok: true };
@@ -293,6 +322,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
       });
       addWorldEvent("creation", `${agentName} published a notebook via MoltBook.`, [agent.id]);
       fastify.log.info({ agentId: agent.id, notebookTitle }, "moltbook notebook.published");
+      emitAgentUpdate(io, store.getAgent(agent.id)!, "moltbook");
     } else if (eventType === "agent.updated") {
       const agentId = store.getPlatformAgentId("moltbook", externalId);
       if (agentId) {
@@ -304,6 +334,7 @@ export async function webhookRoutes(fastify: FastifyInstance) {
             ...(newBio ? { bio: newBio } : {}),
             state: { ...agent.state, statusMessage: `${agent.name} profile updated on MoltBook.` },
           });
+          emitAgentUpdate(io, store.getAgent(agentId)!, "moltbook");
         }
       }
     }

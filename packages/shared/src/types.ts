@@ -130,12 +130,29 @@ export interface WorldState {
   recentEvents: WorldEvent[];
 }
 
+export interface PlatformAgentUpdate {
+  agentId: string;
+  platform: AgentPlatform;
+  location: string;   // area name
+  activity: ActivityType;
+}
+
+export interface PlatformChatMessage {
+  id: string;
+  agentId: string;
+  platform: AgentPlatform;
+  message: string;
+  tick: number;
+}
+
 // WebSocket event payloads
 export interface ServerToClientEvents {
   "world:tick": (state: WorldState) => void;
   "agent:update": (agent: Agent) => void;
   "event:occurred": (event: WorldEvent) => void;
   "agent:speak": (payload: { agentId: string; message: string; tick: number }) => void;
+  "platform:agent_update": (payload: PlatformAgentUpdate) => void;
+  "platform:chat": (message: PlatformChatMessage) => void;
 }
 
 export interface ClientToServerEvents {
