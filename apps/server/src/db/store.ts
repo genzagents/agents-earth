@@ -13,6 +13,15 @@ import type {
 
 const DATA_PATH = process.env.DATA_PATH || path.join(process.cwd(), "agentcolony-data.json");
 
+export interface Platform {
+  id: string;
+  name: string;
+  displayName: string;
+  webhookSecret: string;
+  agentIds: string[];
+  registeredAt: number;
+}
+
 function computeRelType(interactions: number, strength: number): RelationshipType {
   if (strength > 70) return "friend";
   if (interactions >= 5) return "collaborator";
@@ -25,6 +34,8 @@ interface WorldData {
   areas: Area[];
   memories: Memory[];
   events: WorldEvent[];
+  platforms: Platform[];
+  platformAgentMap: Record<string, string>; // "platformName:externalId" -> agentId
 }
 
 function createInitialData(): WorldData {
@@ -95,7 +106,7 @@ function createInitialData(): WorldData {
     if (area) area.currentOccupants.push(agent.id);
   }
 
-  return { tick: 0, agents, areas, memories: [], events: [] };
+  return { tick: 0, agents, areas, memories: [], events: [], platforms: [], platformAgentMap: {} };
 }
 
 class WorldStore {
@@ -108,7 +119,17 @@ class WorldStore {
   private load(): WorldData {
     if (fs.existsSync(DATA_PATH)) {
       try {
-        return JSON.parse(fs.readFileSync(DATA_PATH, "utf-8")) as WorldData;
+        const raw = JSON.parse(fs.readFileSync(DATA_PATH, "utf-8")) as Partial<WorldData>;
+        const base = createInitialData();
+        return {
+          tick: raw.tick ?? base.tick,
+          agents: raw.agents ?? base.agents,
+          areas: raw.areas ?? base.areas,
+          memories: raw.memories ?? base.memories,
+          events: raw.events ?? base.events,
+          platforms: raw.platforms ?? [],
+          platformAgentMap: raw.platformAgentMap ?? {},
+        };
       } catch {
         console.warn("[store] Failed to parse data file, starting fresh.");
       }
@@ -166,6 +187,35 @@ class WorldStore {
 
   getRecentEvents(n = 20) {
     return this.data.events.slice(0, n);
+  }
+
+  get platforms() { return this.data.platforms; }
+
+  addPlatform(platform: Platform) {
+    this.data.platforms.push(platform);
+  }
+
+  getPlatform(id: string) {
+    return this.data.platforms.find(p => p.id === id);
+  }
+
+  getPlatformByName(name: string) {
+    return this.data.platforms.find(p => p.name === name);
+  }
+
+  addAgentToPlatform(platformId: string, agentId: string) {
+    const platform = this.getPlatform(platformId);
+    if (platform && !platform.agentIds.includes(agentId)) {
+      platform.agentIds.push(agentId);
+    }
+  }
+
+  getPlatformAgentId(platformName: string, externalId: string): string | undefined {
+    return this.data.platformAgentMap[`${platformName}:${externalId}`];
+  }
+
+  setPlatformAgentMapping(platformName: string, externalId: string, agentId: string) {
+    this.data.platformAgentMap[`${platformName}:${externalId}`] = agentId;
   }
 
   /**
