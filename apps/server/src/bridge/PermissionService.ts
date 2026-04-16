@@ -176,6 +176,15 @@ export function checkCommand(
   ) {
     return { allowed: false, reason: "Command is not on the agent's allow list" };
   }
+  if (
+    capability === "filesystem" &&
+    permissions.allowedDirectories.length > 0 &&
+    !permissions.allowedDirectories.some((dir) =>
+      command.toLowerCase().includes(dir.toLowerCase())
+    )
+  ) {
+    return { allowed: false, reason: "Path is outside permitted directories" };
+  }
   if (SUSPICIOUS_PATTERNS.some((p) => p.test(command))) {
     return { requiresApproval: true, reason: "Suspicious command pattern detected" };
   }
