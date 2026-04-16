@@ -1,8 +1,25 @@
 import { useEffect, useRef, useState } from "react";
 import * as maptilersdk from "@maptiler/sdk";
 import "@maptiler/sdk/dist/maptiler-sdk.css";
+import type { PlotTier } from "@agentcolony/shared";
 import { useWorldStore } from "../store/worldStore";
 import { getAgentPlatform, PLATFORM_COLORS, PLATFORM_ICONS } from "../utils/platform";
+
+const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "";
+
+const TIER_SIZE: Record<PlotTier, number> = {
+  small: 28,
+  medium: 34,
+  large: 40,
+  mega: 48,
+};
+
+const TIER_FONT: Record<PlotTier, number> = {
+  small: 11,
+  medium: 13,
+  large: 15,
+  mega: 18,
+};
 
 maptilersdk.config.apiKey = "1VCJ1EgPTE2txzvkUYAU";
 
@@ -46,25 +63,30 @@ function makeAgentEl(
   selected: boolean,
   platformColor: string,
   platformIcon: string,
+  plotTier: PlotTier = "small",
 ): HTMLDivElement {
+  const size = TIER_SIZE[plotTier];
+  const fontSize = TIER_FONT[plotTier];
+  const px = `${size}px`;
+
   const wrapper = document.createElement("div");
   wrapper.style.position = "relative";
-  wrapper.style.width = "28px";
-  wrapper.style.height = "28px";
+  wrapper.style.width = px;
+  wrapper.style.height = px;
   wrapper.style.cursor = "pointer";
   wrapper.style.transition = "transform 0.15s";
   wrapper.style.transform = selected ? "scale(1.35)" : "scale(1)";
 
   const circle = document.createElement("div");
-  circle.style.width = "28px";
-  circle.style.height = "28px";
+  circle.style.width = px;
+  circle.style.height = px;
   circle.style.borderRadius = "50%";
   circle.style.background = avatar;
   circle.style.border = `2.5px solid ${selected ? "#ffffff" : platformColor}`;
   circle.style.display = "flex";
   circle.style.alignItems = "center";
   circle.style.justifyContent = "center";
-  circle.style.fontSize = "11px";
+  circle.style.fontSize = `${fontSize}px`;
   circle.style.fontWeight = "700";
   circle.style.color = "white";
   circle.style.fontFamily = "monospace";
@@ -102,6 +124,7 @@ export function WorldCanvas() {
   const mapRef = useRef<maptilersdk.Map | null>(null);
   const areaMarkersRef = useRef<Map<string, maptilersdk.Marker>>(new Map());
   const agentMarkersRef = useRef<Map<string, maptilersdk.Marker>>(new Map());
+  const plotTiersRef = useRef<Map<string, PlotTier>>(new Map());
   const [mapReady, setMapReady] = useState(false);
 
   const {
@@ -111,6 +134,34 @@ export function WorldCanvas() {
   } = useWorldStore();
   const [speechBubbles, setSpeechBubbles] = useState<{ agentId: string; text: string; expiresAt: number }[]>([]);
   const lastEventIdsRef = useRef<Set<string>>(new Set());
+
+  // Fetch economy leaderboard to get plot tiers for marker sizing
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchTiers() {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/economy/leaderboard`);
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        const map = new Map<string, PlotTier>();
+        for (const entry of json.topContributors ?? []) {
+          map.set(entry.agentId, entry.plotTier as PlotTier);
+        }
+        plotTiersRef.current = map;
+      } catch {
+        // non-critical; agents default to "small" tier
+      }
+    }
+
+    fetchTiers();
+    const interval = setInterval(fetchTiers, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Init MapTiler map once
   useEffect(() => {
@@ -267,10 +318,12 @@ export function WorldCanvas() {
         <br/><span style="color:#94a3b8">${agent.state.currentActivity} · ${agent.state.mood}</span>
       </div>`;
 
+      const plotTier = plotTiersRef.current.get(agent.id) ?? "small";
+
       const existing = agentMarkersRef.current.get(agent.id);
       if (existing) {
         existing.setLngLat([lng, lat]);
-        const newEl = makeAgentEl(agent.avatar, agent.name, isSelected, platformColor, platformIcon);
+        const newEl = makeAgentEl(agent.avatar, agent.name, isSelected, platformColor, platformIcon, plotTier);
         newEl.addEventListener("click", () => selectAgent(agent.id));
         const existingPopup = existing.getPopup();
         if (existingPopup) {
@@ -284,7 +337,7 @@ export function WorldCanvas() {
         const isVisible = showAgents && !hiddenPlatforms.includes(platform);
         newEl.style.display = isVisible ? "" : "none";
       } else {
-        const el = makeAgentEl(agent.avatar, agent.name, isSelected, platformColor, platformIcon);
+        const el = makeAgentEl(agent.avatar, agent.name, isSelected, platformColor, platformIcon, plotTier);
         el.addEventListener("click", () => selectAgent(agent.id));
 
         const popup = new maptilersdk.Popup({ offset: 20, closeButton: false, closeOnClick: false }).setHTML(popupHtml);
