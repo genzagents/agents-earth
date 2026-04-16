@@ -4,6 +4,7 @@ import { useAuth } from "../hooks/useAuth";
 import { AgentCreatorWizard } from "../components/AgentCreatorWizard";
 import { ImportWizard } from "../components/ImportWizard";
 import { AgentChatPage } from "./AgentChatPage";
+import { AgentProfilePage } from "./AgentProfilePage";
 import type { Agent } from "@agentcolony/shared";
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
@@ -274,35 +275,6 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   );
 }
 
-// ─── Agent profile placeholder (until GEN-90) ────────────────────────────────
-
-function AgentProfilePlaceholder() {
-  const navigate = useNavigate();
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-center px-4">
-      <div className="text-4xl mb-3">🤖</div>
-      <h2 className="text-white font-semibold text-lg mb-2">Agent created!</h2>
-      <p className="text-slate-400 text-sm mb-4 max-w-xs">
-        Full agent profile coming soon. Your agent is already active in the colony.
-      </p>
-      <div className="flex gap-3">
-        <button
-          onClick={() => navigate("/dashboard/agents")}
-          className="text-sm border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-white px-4 py-2 rounded-lg transition-colors"
-        >
-          ← My agents
-        </button>
-        <button
-          onClick={() => navigate("/")}
-          className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors"
-        >
-          View in colony →
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ─── Dashboard shell ─────────────────────────────────────────────────────────
 
 export function DashboardPage() {
@@ -329,7 +301,7 @@ export function DashboardPage() {
           <Route path="agents/import" element={<ImportWizard />} />
           <Route path="agents/new" element={<AgentCreatorWizard />} />
           <Route path="agents/:agentId/chat" element={<AgentChatPage />} />
-          <Route path="agents/:agentId" element={<AgentProfilePlaceholder />} />
+          <Route path="agents/:agentId" element={<AgentProfilePage />} />
           <Route path="wallet" element={<WalletPage />} />
           <Route path="settings" element={<SettingsPage onLogout={handleLogout} />} />
         </Routes>
