@@ -1,7 +1,23 @@
 import { store } from "../db/store";
-import type { Agent } from "@agentcolony/shared";
+import type { Agent, PlotTier } from "@agentcolony/shared";
 
 const PRODUCTIVE_ACTIVITIES = new Set(["working", "creating", "writing", "reading"]);
+
+/**
+ * Derives the plot size tier for an agent from their total accumulated work units.
+ *
+ * Thresholds:
+ *  small  —    0–99  units (default)
+ *  medium — 100–499  units
+ *  large  — 500–999  units
+ *  mega   — 1 000+   units
+ */
+export function computePlotTier(workUnits: number): PlotTier {
+  if (workUnits >= 1000) return "mega";
+  if (workUnits >= 500)  return "large";
+  if (workUnits >= 100)  return "medium";
+  return "small";
+}
 const POOL_THRESHOLD = 100;
 
 export async function processCommunityContributions(activeAgents: Agent[]): Promise<void> {
