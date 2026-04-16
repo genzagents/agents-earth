@@ -23,12 +23,14 @@
     "nodemailer": "^7.0.13",
     "pg": "^8.20.0",
     "socket.io": "^4.7.5",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^20.12.7",
     "@types/uuid": "^9.0.8",
     "tsx": "^4.7.3",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "@types/ws": "^8.5.14"
   }
 }

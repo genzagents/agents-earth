@@ -176,7 +176,7 @@ fn main() {
             tray::setup_tray(&handle)?;
 
             // Spawn WebSocket loop
-            let _ws_tx = bridge_ws::spawn_ws_loop(handle.clone(), app_state.clone());
+            bridge_ws::spawn_ws_loop(handle.clone(), app_state.clone());
 
             // On first launch, load auth token from env / secure store
             // (In production this comes from the user's web login session stored
