@@ -7,6 +7,10 @@ import { TimelinePanel } from "./components/TimelinePanel";
 import { PlatformPanel } from "./components/PlatformPanel";
 import { HUD } from "./components/HUD";
 import { CommunityPage } from "./pages/CommunityPage";
+import { LoginPage } from "./pages/LoginPage";
+import { AuthCallbackPage } from "./pages/AuthCallbackPage";
+import { DashboardPage } from "./pages/DashboardPage";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 
 type SidebarTab = "agents" | "platforms";
 
@@ -101,6 +105,16 @@ export function App() {
     <Routes>
       <Route path="/" element={<WorldView />} />
       <Route path="/community" element={<CommunityPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
+      <Route
+        path="/dashboard/*"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }
