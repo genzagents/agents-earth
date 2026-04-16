@@ -93,7 +93,7 @@ function resolveOrCreateAgent(
 
   // Auto-provision EVM wallet on Base for the new agent (fire-and-forget)
   provisionWallet(agent.id, `agent-${agent.id}@genzagents.io`).then((address) => {
-    if (address) store.updateAgentField(agent.id, { walletAddress: address });
+    if (address) store.updateAgent(agent.id, { walletAddress: address });
   }).catch(() => {/* provisioning is best-effort */});
 
   return agent;
