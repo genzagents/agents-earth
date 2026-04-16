@@ -109,6 +109,12 @@ export function HUD() {
           >
             Community →
           </Link>
+          <Link
+            to="/directory"
+            className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700"
+          >
+            Directory →
+          </Link>
           {showCommunityTip && (
             <div className="absolute top-full right-0 mt-2 z-50 w-64 bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-xl pointer-events-none">
               <div className="text-xs font-semibold text-white mb-1">🌍 5% Community Model</div>
