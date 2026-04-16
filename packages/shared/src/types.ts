@@ -89,6 +89,7 @@ export interface Agent {
   isRetired?: boolean;
   legacyNote?: string;
   platform?: AgentPlatform;
+  walletAddress?: string; // EVM wallet on Base (Privy-provisioned)
 }
 
 export interface Memory {
