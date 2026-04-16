@@ -43,45 +43,6 @@ export interface SemanticFact {
   updatedAt: Date;
 }
 
-// ---- Schema init ----
-
-export async function initMemorySchema(): Promise<void> {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS memory_working (
-      agent_id      UUID NOT NULL,
-      user_id       UUID NOT NULL,
-      current_task  TEXT,
-      recent_msgs   JSONB NOT NULL DEFAULT '[]',
-      active_files  JSONB NOT NULL DEFAULT '[]',
-      updated_at    TIMESTAMPTZ DEFAULT NOW(),
-      PRIMARY KEY (agent_id, user_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS memory_episodes (
-      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      agent_id   UUID NOT NULL,
-      user_id    UUID NOT NULL,
-      summary    TEXT NOT NULL,
-      messages   JSONB NOT NULL DEFAULT '[]',
-      tags       JSONB NOT NULL DEFAULT '[]',
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    );
-    CREATE INDEX IF NOT EXISTS idx_episodes_agent ON memory_episodes(agent_id, user_id);
-
-    CREATE TABLE IF NOT EXISTS memory_semantic (
-      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      agent_id   UUID NOT NULL,
-      user_id    UUID NOT NULL,
-      key        TEXT NOT NULL,
-      value      TEXT NOT NULL,
-      confidence REAL NOT NULL DEFAULT 1.0,
-      updated_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE (agent_id, user_id, key)
-    );
-    CREATE INDEX IF NOT EXISTS idx_semantic_agent ON memory_semantic(agent_id, user_id);
-  `);
-}
-
 // ---- Tier 1: Working memory ----
 
 const WORKING_MAX_MESSAGES = 20;

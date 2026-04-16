@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import { findSession } from "../auth/sessions";
 import { findUserById } from "../auth/userStore";
+import { findAgentById, getConversation } from "../db/ownedAgentStore";
 import { runtimeService } from "../runtime/RuntimeService";
 
 const SESSION_COOKIE = "agentcolony_session";
@@ -94,6 +95,11 @@ export const runtimeRoutes: FastifyPluginAsync = async (fastify) => {
       const auth = await requireAuth(request, reply);
       if (!auth) return;
 
+      // Pre-validate agent existence and ownership before committing to SSE
+      const agent = await findAgentById(request.body.agentId);
+      if (!agent) return reply.code(404).send({ error: `Agent ${request.body.agentId} not found` });
+      if (agent.userId !== auth.userId) return reply.code(403).send({ error: "Forbidden: agent does not belong to user" });
+
       reply.raw.writeHead(200, {
         "Content-Type": "text/event-stream",
         "Cache-Control": "no-cache",
@@ -115,6 +121,30 @@ export const runtimeRoutes: FastifyPluginAsync = async (fastify) => {
       } finally {
         reply.raw.end();
       }
+    }
+  );
+
+  /**
+   * GET /api/agents/:id/conversation
+   * Returns the full conversation history for the specified agent.
+   * Response: { messages: Array<{ role: "user" | "assistant", content: string }> }
+   */
+  fastify.get(
+    "/api/agents/:id/conversation",
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply
+    ) => {
+      const auth = await requireAuth(request, reply);
+      if (!auth) return;
+
+      const agent = await findAgentById(request.params.id);
+      if (!agent || agent.userId !== auth.userId) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      const messages = await getConversation(request.params.id, auth.userId);
+      return reply.send({ messages });
     }
   );
 };

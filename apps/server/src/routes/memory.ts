@@ -18,7 +18,13 @@ import {
 const SESSION_COOKIE = "agentcolony_session";
 
 async function requireAuth(request: FastifyRequest, reply: FastifyReply): Promise<{ userId: string } | null> {
-  const token = request.cookies?.[SESSION_COOKIE];
+  let token: string | undefined;
+  const authHeader = request.headers["authorization"];
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else {
+    token = request.cookies?.[SESSION_COOKIE];
+  }
   if (!token) { reply.code(401).send({ error: "Not authenticated" }); return null; }
   const session = await findSession(token);
   if (!session) { reply.code(401).send({ error: "Session expired" }); return null; }
