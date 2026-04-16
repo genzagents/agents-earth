@@ -49,5 +49,28 @@ export async function initAuthSchema(): Promise<void> {
       session_token TEXT NOT NULL UNIQUE,
       created_at    TIMESTAMPTZ DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS owned_agents (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id       UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      name          TEXT NOT NULL,
+      description   TEXT,
+      system_prompt TEXT NOT NULL DEFAULT '',
+      model         TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
+      avatar_color  TEXT,
+      source_type   TEXT DEFAULT 'manual',
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS conversations (
+      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      agent_id   UUID NOT NULL REFERENCES owned_agents(id) ON DELETE CASCADE,
+      user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      messages   JSONB NOT NULL DEFAULT '[]',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (agent_id, user_id)
+    );
   `);
 }
