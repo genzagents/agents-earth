@@ -23,6 +23,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .build()?;
 
     let _tray = TrayIconBuilder::new()
+        .id("main")
         .icon(app.default_window_icon().unwrap().clone())
         .menu(&menu)
         .tooltip("GenZ Bridge — Disconnected")

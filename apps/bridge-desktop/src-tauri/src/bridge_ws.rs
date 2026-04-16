@@ -22,6 +22,7 @@ use tokio_tungstenite::{
 };
 
 use crate::state::{AgentPermissions, AppState, BridgeStatus};
+use crate::tray;
 
 const RECONNECT_BASE_MS: u64 = 1_000;
 const RECONNECT_MAX_MS: u64 = 30_000;
@@ -142,6 +143,7 @@ pub fn spawn_ws_loop(app: AppHandle, state: Arc<Mutex<AppState>>) {
                         s.connected = true;
                     }
                     emit_status(&app, &state).await;
+                    tray::update_tray_status(&app, true);
 
                     let (mut sink, mut stream) = ws_stream.split();
 
@@ -197,6 +199,7 @@ pub fn spawn_ws_loop(app: AppHandle, state: Arc<Mutex<AppState>>) {
                 s.connected = false;
             }
             emit_status(&app, &state).await;
+            tray::update_tray_status(&app, false);
 
             sleep(Duration::from_millis(backoff_ms)).await;
             backoff_ms = (backoff_ms * 2).min(RECONNECT_MAX_MS);
