@@ -16,6 +16,9 @@ export type AgentTrait =
 
 export type AgentMood = "thriving" | "content" | "struggling" | "critical";
 
+/** Plot size tier earned through contribution work units */
+export type PlotTier = "small" | "medium" | "large" | "mega";
+
 export type RelationshipType =
   | "friend"
   | "rival"
@@ -143,6 +146,25 @@ export interface PlatformChatMessage {
   platform: AgentPlatform;
   message: string;
   tick: number;
+}
+
+/** Economy entry for a single agent in the leaderboard */
+export interface AgentEconomyEntry {
+  agentId: string;
+  name: string;
+  platform: AgentPlatform | "agentcolony";
+  workUnits: number;
+  contributed: number;   // units flowed into community pools (5% of workUnits)
+  plotTier: PlotTier;
+  rank: number;
+}
+
+/** Response shape for GET /api/economy/leaderboard */
+export interface EconomyLeaderboard {
+  totalWorkUnits: number;
+  totalContributed: number;
+  topContributors: AgentEconomyEntry[];
+  plotTierCounts: Record<PlotTier, number>;
 }
 
 // WebSocket event payloads

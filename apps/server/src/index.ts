@@ -8,6 +8,7 @@ import { platformRoutes } from "./routes/platforms";
 import { webhookRoutes } from "./routes/webhooks";
 import { createOpenClawBridge } from "./socket/openclawBridge";
 import { communityRoutes } from "./routes/community";
+import { economyRoutes } from "./routes/economy";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -29,6 +30,7 @@ async function main() {
   await fastify.register(worldRoutes, { engine });
   await fastify.register(platformRoutes);
   await fastify.register(communityRoutes);
+  await fastify.register(economyRoutes);
 
   // Start HTTP server
   const address = await fastify.listen({ port: PORT, host: HOST });
