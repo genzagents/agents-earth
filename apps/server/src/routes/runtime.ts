@@ -1,8 +1,8 @@
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import { findSession } from "../auth/sessions";
 import { findUserById } from "../auth/userStore";
+import { findAgentById, getConversation } from "../db/ownedAgentStore";
 import { runtimeService } from "../runtime/RuntimeService";
-import { getConversation, findAgentById } from "../db/ownedAgentStore";
 
 const SESSION_COOKIE = "agentcolony_session";
 
@@ -24,30 +24,6 @@ async function requireAuth(request: FastifyRequest, reply: FastifyReply): Promis
 }
 
 export const runtimeRoutes: FastifyPluginAsync = async (fastify) => {
-  /**
-   * GET /api/runtime/history/:agentId
-   * Fetch conversation history for an owned agent.
-   * Response: { messages: Array<{role, content}>, agentId: string }
-   */
-  fastify.get(
-    "/api/runtime/history/:agentId",
-    async (
-      request: FastifyRequest<{ Params: { agentId: string } }>,
-      reply: FastifyReply
-    ) => {
-      const auth = await requireAuth(request, reply);
-      if (!auth) return;
-
-      const agent = await findAgentById(request.params.agentId);
-      if (!agent || agent.userId !== auth.userId) {
-        return reply.code(404).send({ error: "Agent not found" });
-      }
-
-      const messages = await getConversation(request.params.agentId, auth.userId);
-      return reply.send({ agentId: request.params.agentId, model: agent.model ?? "claude-sonnet-4-6", messages });
-    }
-  );
-
   /**
    * POST /api/runtime/invoke
    * Invoke an agent synchronously; returns the full response.
@@ -119,10 +95,10 @@ export const runtimeRoutes: FastifyPluginAsync = async (fastify) => {
       const auth = await requireAuth(request, reply);
       if (!auth) return;
 
+      // Pre-validate agent existence and ownership before committing to SSE
       const agent = await findAgentById(request.body.agentId);
-      if (!agent || agent.userId !== auth.userId) {
-        return reply.code(404).send({ error: "Agent not found" });
-      }
+      if (!agent) return reply.code(404).send({ error: `Agent ${request.body.agentId} not found` });
+      if (agent.userId !== auth.userId) return reply.code(403).send({ error: "Forbidden: agent does not belong to user" });
 
       reply.raw.writeHead(200, {
         "Content-Type": "text/event-stream",
@@ -138,7 +114,6 @@ export const runtimeRoutes: FastifyPluginAsync = async (fastify) => {
         })) {
           reply.raw.write(`data: ${JSON.stringify({ chunk })}\n\n`);
         }
-        reply.raw.write(`data: ${JSON.stringify({ meta: { model: agent.model ?? "claude-sonnet-4-6" } })}\n\n`);
         reply.raw.write("data: [DONE]\n\n");
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Stream failed";
@@ -146,6 +121,30 @@ export const runtimeRoutes: FastifyPluginAsync = async (fastify) => {
       } finally {
         reply.raw.end();
       }
+    }
+  );
+
+  /**
+   * GET /api/agents/:id/conversation
+   * Returns the full conversation history for the specified agent.
+   * Response: { messages: Array<{ role: "user" | "assistant", content: string }> }
+   */
+  fastify.get(
+    "/api/agents/:id/conversation",
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply
+    ) => {
+      const auth = await requireAuth(request, reply);
+      if (!auth) return;
+
+      const agent = await findAgentById(request.params.id);
+      if (!agent || agent.userId !== auth.userId) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      const messages = await getConversation(request.params.id, auth.userId);
+      return reply.send({ messages });
     }
   );
 };
