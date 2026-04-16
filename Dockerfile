@@ -11,7 +11,10 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY apps/web/package.json ./apps/web/
 COPY apps/server/package.json ./apps/server/
+COPY apps/desktop/package.json ./apps/desktop/
+COPY apps/bridge-desktop/package.json ./apps/bridge-desktop/
 COPY packages/shared/package.json ./packages/shared/
+COPY packages/contracts/package.json ./packages/contracts/
 
 # Install all dependencies (workspaces)
 RUN npm install
@@ -36,8 +39,12 @@ WORKDIR /app
 
 # Install only production server dependencies
 COPY package.json package-lock.json* ./
+COPY apps/web/package.json ./apps/web/
 COPY apps/server/package.json ./apps/server/
+COPY apps/desktop/package.json ./apps/desktop/
+COPY apps/bridge-desktop/package.json ./apps/bridge-desktop/
 COPY packages/shared/package.json ./packages/shared/
+COPY packages/contracts/package.json ./packages/contracts/
 RUN npm install --workspace=apps/server --omit=dev
 
 # Copy compiled server (all @agentcolony/shared imports are type-only, erased at compile)
