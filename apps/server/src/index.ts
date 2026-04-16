@@ -10,6 +10,7 @@ import { webhookRoutes } from "./routes/webhooks";
 import { createOpenClawBridge } from "./socket/openclawBridge";
 import { communityRoutes } from "./routes/community";
 import { authRoutes } from "./routes/auth";
+import { agentRoutes } from "./routes/agents";
 import { initAuthSchema } from "./auth/db";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -43,6 +44,7 @@ async function main() {
   await fastify.register(platformRoutes);
   await fastify.register(communityRoutes);
   await fastify.register(authRoutes);
+  await fastify.register(agentRoutes);
 
   // Start HTTP server
   const address = await fastify.listen({ port: PORT, host: HOST });

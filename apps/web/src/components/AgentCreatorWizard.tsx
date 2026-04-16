@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { AgentTrait } from "@agentcolony/shared";
+import { getStoredSession } from "../hooks/useAuth";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -414,14 +415,21 @@ export function AgentCreatorWizard() {
     setSubmitting(true);
     setError(null);
     try {
+      const session = getStoredSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.token) headers["Authorization"] = `Bearer ${session.token}`;
+
       const res = await fetch(`${SERVER_URL}/api/agents`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
+        credentials: "include",
         body: JSON.stringify({
           name: state.step1.name.trim(),
           bio: state.step2.bio.trim(),
           avatar: state.step1.avatar,
           traits: state.step2.traits,
+          model: state.model,
+          capabilities: state.capabilities,
         }),
       });
       if (!res.ok) {
