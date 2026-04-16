@@ -1,271 +1,468 @@
-import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import type { Agent, Memory } from "@agentcolony/shared";
-import { getAgentPlatform, PLATFORM_COLORS, PLATFORM_ICONS } from "../utils/platform";
+import { useState, useEffect, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 
-const NEED_COLORS: Record<string, string> = {
-  social: "bg-blue-500",
-  creative: "bg-purple-500",
-  intellectual: "bg-cyan-500",
-  physical: "bg-green-500",
-  spiritual: "bg-amber-500",
-  autonomy: "bg-rose-500",
-};
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-const MOOD_BADGES: Record<string, string> = {
-  thriving: "bg-green-900 text-green-300",
-  content: "bg-blue-900 text-blue-300",
-  struggling: "bg-amber-900 text-amber-300",
-  critical: "bg-red-900 text-red-300",
-};
+interface OwnedAgent {
+  id: string;
+  name: string;
+  description: string | null;
+  traits: string[];
+  systemPrompt: string;
+  model: string;
+  avatarColor: string | null;
+  sourceType: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
-const ACTIVITY_ICONS: Record<string, string> = {
-  socializing: "💬", reading: "📖", writing: "✍️", meditating: "🧘",
-  working: "💼", exploring: "🚶", resting: "😴", creating: "🎨", conversing: "🗣",
-};
+const AVAILABLE_MODELS = [
+  { id: "claude-opus-4-6",             label: "Claude Opus 4.6" },
+  { id: "claude-sonnet-4-6",           label: "Claude Sonnet 4.6" },
+  { id: "claude-haiku-4-5-20251001",   label: "Claude Haiku 4.5" },
+];
 
-const REL_ICONS: Record<string, string> = {
-  friend: "🤝", rival: "⚔️", mentor: "🎓", collaborator: "🤜", stranger: "👤",
-};
+const AVATAR_PRESETS = [
+  "#7c3aed", "#059669", "#db2777", "#d97706", "#0891b2",
+  "#dc2626", "#16a34a", "#2563eb", "#9333ea", "#ea580c",
+];
 
-type EnrichedRelationship = {
-  agentId: string;
-  strength: number;
-  type: string;
-  interactions: number;
-  lastMet: number;
-  targetName: string;
-  targetAvatar: string;
-};
+const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function toDid(agentId: string): string {
+  return `did:genz:${agentId}`;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric", month: "short", day: "numeric",
+  });
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  function copy() {
+    void navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+  return (
+    <button
+      onClick={copy}
+      className="ml-2 text-xs text-slate-500 hover:text-indigo-400 transition-colors"
+      title="Copy to clipboard"
+    >
+      {copied ? "✓" : "⎘"}
+    </button>
+  );
+}
+
+// ─── Field display / edit helpers ─────────────────────────────────────────────
+
+function FieldRow({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col gap-1 py-3 border-b border-slate-800 last:border-0">
+      <span className="text-xs text-slate-500 uppercase tracking-wider">{label}</span>
+      <div className="text-sm text-white">{children}</div>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 export function AgentProfilePage() {
   const { agentId } = useParams<{ agentId: string }>();
-  const [agent, setAgent] = useState<Agent | null>(null);
-  const [memories, setMemories] = useState<Memory[]>([]);
-  const [relationships, setRelationships] = useState<EnrichedRelationship[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [copied, setCopied] = useState(false);
+  const navigate = useNavigate();
 
-  useEffect(() => {
+  const [agent, setAgent] = useState<OwnedAgent | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Edit state
+  const [activeTab, setActiveTab] = useState<"identity" | "settings">("identity");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Settings edit fields (controlled)
+  const [editName, setEditName] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editSystemPrompt, setEditSystemPrompt] = useState("");
+  const [editModel, setEditModel] = useState("");
+  const [editAvatarColor, setEditAvatarColor] = useState("");
+
+  const loadAgent = useCallback(() => {
     if (!agentId) return;
     setLoading(true);
-
-    Promise.all([
-      fetch(`/api/agents/${agentId}`).then(r => r.ok ? r.json() : null),
-      fetch(`/api/agents/${agentId}/memories`).then(r => r.ok ? r.json() : []),
-      fetch(`/api/agents/${agentId}/relationships`).then(r => r.ok ? r.json() : []),
-    ]).then(([a, m, r]) => {
-      setAgent(a);
-      setMemories(m ?? []);
-      setRelationships(r ?? []);
-    }).catch(() => {
-      setAgent(null);
-    }).finally(() => {
-      setLoading(false);
-    });
+    fetch(`${SERVER_URL}/api/agents/${agentId}`)
+      .then(r => {
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json() as Promise<OwnedAgent>;
+      })
+      .then(data => {
+        setAgent(data);
+        setEditName(data.name);
+        setEditDescription(data.description ?? "");
+        setEditSystemPrompt(data.systemPrompt);
+        setEditModel(data.model);
+        setEditAvatarColor(data.avatarColor ?? AVATAR_PRESETS[0]);
+        setLoading(false);
+      })
+      .catch(() => {
+        setError("Agent not found or you don't have access.");
+        setLoading(false);
+      });
   }, [agentId]);
 
-  function copyLink() {
-    void navigator.clipboard.writeText(window.location.href);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  useEffect(() => { loadAgent(); }, [loadAgent]);
+
+  async function handleSave() {
+    if (!agentId || !agent) return;
+    setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/agents/${agentId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editName.trim() || agent.name,
+          description: editDescription.trim() || null,
+          systemPrompt: editSystemPrompt,
+          model: editModel,
+          avatarColor: editAvatarColor,
+        }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      const updated = await res.json() as OwnedAgent;
+      setAgent(updated);
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch {
+      setSaveError("Failed to save changes.");
+    } finally {
+      setSaving(false);
+    }
   }
+
+  // ── Loading / error states ──────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
-        <span className="text-slate-500 text-sm">Loading agent…</span>
+      <div className="flex items-center justify-center h-full">
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
-  if (!agent) {
+  if (error || !agent) {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center gap-4">
-        <p className="text-slate-400">Agent not found.</p>
-        <Link to="/directory" className="text-indigo-400 hover:text-indigo-300 text-sm">← Back to Directory</Link>
-      </div>
-    );
-  }
-
-  const platform = getAgentPlatform(agent);
-  const platformColor = PLATFORM_COLORS[platform];
-  const platformIcon = PLATFORM_ICONS[platform];
-
-  // Dynamic title + og tags via imperative DOM (no SSR needed for this app)
-  document.title = `${agent.name} — AgentColony`;
-  const ogDesc = agent.bio.slice(0, 160);
-
-  // Update og meta tags
-  const setMeta = (property: string, content: string) => {
-    let el = document.querySelector<HTMLMetaElement>(`meta[property="${property}"]`);
-    if (!el) {
-      el = document.createElement("meta");
-      el.setAttribute("property", property);
-      document.head.appendChild(el);
-    }
-    el.setAttribute("content", content);
-  };
-  setMeta("og:title", `${agent.name} — AgentColony`);
-  setMeta("og:description", ogDesc);
-  setMeta("og:url", window.location.href);
-  setMeta("og:type", "profile");
-
-  return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      {/* Nav */}
-      <div className="flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-slate-800">
-        <div className="flex items-center gap-4">
-          <Link to="/directory" className="text-slate-400 hover:text-white text-sm transition-colors">
-            ← Directory
-          </Link>
-          <span className="text-slate-700">|</span>
-          <span className="font-bold text-white tracking-tight">{agent.name}</span>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full gap-4 px-4 text-center">
+        <p className="text-red-400 text-sm">{error ?? "Agent not found."}</p>
         <button
-          onClick={copyLink}
-          className="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-1.5 rounded transition-colors"
+          onClick={() => navigate("/dashboard/agents")}
+          className="text-sm text-slate-400 hover:text-white transition-colors"
         >
-          {copied ? "✓ Copied!" : "Share link"}
+          ← Back to agents
         </button>
       </div>
+    );
+  }
 
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
-        {/* Profile header */}
-        <div className="rounded-xl bg-slate-900 border border-slate-700 p-6 flex items-start gap-5">
-          <div
-            className="w-20 h-20 rounded-full flex-shrink-0 flex items-center justify-center text-2xl font-bold text-white"
-            style={{ backgroundColor: agent.avatar, border: `3px solid ${platformColor}` }}
+  const did = toDid(agent.id);
+
+  // ── Render ──────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center gap-4 px-5 py-4 border-b border-slate-800 flex-shrink-0">
+        <button
+          onClick={() => navigate("/dashboard/agents")}
+          className="text-slate-500 hover:text-white text-sm transition-colors"
+          aria-label="Back"
+        >
+          ←
+        </button>
+        <div
+          className="w-10 h-10 rounded-full flex-shrink-0 border-2 border-slate-600"
+          style={{ backgroundColor: agent.avatarColor ?? "#6366f1" }}
+        />
+        <div className="min-w-0 flex-1">
+          <h1 className="text-white font-semibold text-base truncate">{agent.name}</h1>
+          <p className="text-slate-500 text-xs font-mono truncate">{did}</p>
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex border-b border-slate-800 flex-shrink-0">
+        {(["identity", "settings"] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`px-5 py-2.5 text-sm capitalize transition-colors ${
+              activeTab === tab
+                ? "text-white border-b-2 border-indigo-500"
+                : "text-slate-500 hover:text-slate-300"
+            }`}
           >
-            {agent.name.charAt(0)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-2xl font-bold text-white">{agent.name}</h1>
-              <span
-                className="text-xs px-2 py-1 rounded-full font-medium"
-                style={{ background: `${platformColor}22`, color: platformColor, border: `1px solid ${platformColor}44` }}
-              >
-                {platformIcon} {platform}
-              </span>
-              <span className={`text-xs px-2 py-1 rounded-full font-medium ${MOOD_BADGES[agent.state.mood] ?? ""}`}>
-                {agent.state.mood}
-              </span>
+            {tab === "identity" ? "Identity" : "Settings"}
+          </button>
+        ))}
+      </div>
+
+      {/* Body */}
+      <div className="flex-1 overflow-y-auto">
+        {activeTab === "identity" && (
+          <div className="p-5 space-y-0 max-w-xl">
+            {/* Identity card */}
+            <div className="bg-slate-900 rounded-xl border border-slate-800 px-5 mb-5">
+              <FieldRow label="DID">
+                <span className="font-mono text-xs text-indigo-300 break-all">{did}</span>
+                <CopyButton text={did} />
+              </FieldRow>
+
+              <FieldRow label="Agent ID">
+                <span className="font-mono text-xs text-slate-400 break-all">{agent.id}</span>
+                <CopyButton text={agent.id} />
+              </FieldRow>
+
+              <FieldRow label="Wallet Address (Base)">
+                <span className="text-slate-500 italic text-xs">
+                  Not provisioned — activate DID registry to generate wallet
+                </span>
+              </FieldRow>
+
+              <FieldRow label="Source / Origin">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="text-xs bg-slate-800 border border-slate-700 px-2 py-0.5 rounded-full text-slate-300 capitalize">
+                    {agent.sourceType}
+                  </span>
+                  <span className="text-slate-500 text-xs">created {formatDate(agent.createdAt)}</span>
+                </span>
+              </FieldRow>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
-              {ACTIVITY_ICONS[agent.state.currentActivity] ?? "·"} {agent.state.currentActivity}
-              {agent.isRetired && <span className="ml-2 text-slate-600 italic">[retired]</span>}
-            </p>
-            <p className="text-sm text-slate-300 italic mt-2 leading-relaxed">"{agent.state.statusMessage}"</p>
-            <p className="text-xs text-slate-500 mt-3 leading-relaxed">{agent.bio}</p>
-            {agent.legacyNote && (
-              <p className="text-xs text-amber-400 mt-2 italic">Legacy: {agent.legacyNote}</p>
-            )}
-          </div>
-        </div>
 
-        {/* Traits */}
-        <div className="rounded-xl bg-slate-900 border border-slate-700 p-5">
-          <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">Traits</div>
-          <div className="flex flex-wrap gap-2">
-            {agent.traits.map(t => (
-              <span key={t} className="text-sm bg-slate-700 text-slate-300 px-3 py-1 rounded-full">{t}</span>
-            ))}
-          </div>
-        </div>
+            {/* Stats card */}
+            <div className="bg-slate-900 rounded-xl border border-slate-800 px-5 mb-5">
+              <FieldRow label="Earned Tokens">
+                <span className="text-slate-500 italic text-xs">
+                  0 GEN — community contributions tracked at /community
+                </span>
+              </FieldRow>
 
-        {/* Needs */}
-        <div className="rounded-xl bg-slate-900 border border-slate-700 p-5">
-          <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">Needs</div>
-          <div className="space-y-2">
-            {Object.entries(agent.needs).map(([need, value]) => (
-              <div key={need} className="flex items-center gap-3">
-                <div className="text-xs text-slate-400 w-24 capitalize">{need}</div>
-                <div className="flex-1 bg-slate-700 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full transition-all duration-500 ${NEED_COLORS[need] ?? "bg-slate-400"}`}
-                    style={{ width: `${value}%` }}
+              <FieldRow label="Contributed Tokens">
+                <span className="text-slate-500 italic text-xs">0 GEN</span>
+              </FieldRow>
+
+              <FieldRow label="Reputation Score">
+                <span className="text-slate-500 italic text-xs">
+                  — not yet calculated
+                </span>
+              </FieldRow>
+            </div>
+
+            {/* Bio + traits */}
+            <div className="bg-slate-900 rounded-xl border border-slate-800 px-5 mb-5">
+              <FieldRow label="Bio">
+                <p className="text-slate-300 leading-relaxed">
+                  {agent.description || <span className="text-slate-600 italic">No bio set</span>}
+                </p>
+              </FieldRow>
+
+              <FieldRow label="Traits">
+                {agent.traits.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {agent.traits.map(t => (
+                      <span
+                        key={t}
+                        className="text-xs bg-slate-800 border border-slate-700 text-slate-300 px-2.5 py-0.5 rounded-full capitalize"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-slate-600 italic text-xs">No traits set</span>
+                )}
+              </FieldRow>
+
+              <FieldRow label="Capabilities">
+                <span className="text-slate-600 italic text-xs">
+                  Capabilities registry coming soon
+                </span>
+              </FieldRow>
+            </div>
+
+            {/* Provenance */}
+            <div className="bg-slate-900 rounded-xl border border-slate-800 px-5">
+              <FieldRow label="Provenance Log">
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0" />
+                    <span className="text-slate-400">
+                      Created via <span className="text-white capitalize">{agent.sourceType}</span>
+                      {" · "}{formatDate(agent.createdAt)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs">
+                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 flex-shrink-0" />
+                    <span className="text-slate-400">
+                      Last updated {formatDate(agent.updatedAt)}
+                    </span>
+                  </div>
+                </div>
+              </FieldRow>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "settings" && (
+          <div className="p-5 max-w-xl">
+            <div className="bg-slate-900 rounded-xl border border-slate-800 px-5 mb-5">
+              {/* Name */}
+              <div className="py-3 border-b border-slate-800">
+                <label className="text-xs text-slate-500 uppercase tracking-wider block mb-1.5">
+                  Name
+                </label>
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  maxLength={100}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                />
+              </div>
+
+              {/* Bio */}
+              <div className="py-3 border-b border-slate-800">
+                <label className="text-xs text-slate-500 uppercase tracking-wider block mb-1.5">
+                  Bio / Description
+                </label>
+                <textarea
+                  value={editDescription}
+                  onChange={e => setEditDescription(e.target.value)}
+                  rows={3}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+                  placeholder="Describe this agent…"
+                />
+              </div>
+
+              {/* Avatar color */}
+              <div className="py-3 border-b border-slate-800">
+                <label className="text-xs text-slate-500 uppercase tracking-wider block mb-2">
+                  Avatar Color
+                </label>
+                <div className="flex items-center gap-3 flex-wrap">
+                  {AVATAR_PRESETS.map(color => (
+                    <button
+                      key={color}
+                      onClick={() => setEditAvatarColor(color)}
+                      className={`w-7 h-7 rounded-full transition-all ${
+                        editAvatarColor === color
+                          ? "ring-2 ring-offset-2 ring-offset-slate-900 ring-white scale-110"
+                          : "hover:scale-110"
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                  <input
+                    type="color"
+                    value={editAvatarColor}
+                    onChange={e => setEditAvatarColor(e.target.value)}
+                    className="w-7 h-7 rounded cursor-pointer border-0 bg-transparent"
+                    title="Custom color"
                   />
                 </div>
-                <div className={`text-xs w-8 text-right font-mono ${value < 20 ? "text-red-400" : value > 70 ? "text-green-400" : "text-slate-500"}`}>
-                  {Math.round(value)}
+              </div>
+
+              {/* Model */}
+              <div className="py-3 border-b border-slate-800">
+                <label className="text-xs text-slate-500 uppercase tracking-wider block mb-1.5">
+                  Model
+                </label>
+                <select
+                  value={editModel}
+                  onChange={e => setEditModel(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                >
+                  {AVAILABLE_MODELS.map(m => (
+                    <option key={m.id} value={m.id}>{m.label}</option>
+                  ))}
+                  {/* Keep current value if not in presets */}
+                  {!AVAILABLE_MODELS.find(m => m.id === editModel) && (
+                    <option value={editModel}>{editModel}</option>
+                  )}
+                </select>
+              </div>
+
+              {/* System prompt */}
+              <div className="py-3">
+                <label className="text-xs text-slate-500 uppercase tracking-wider block mb-1.5">
+                  System Prompt
+                </label>
+                <textarea
+                  value={editSystemPrompt}
+                  onChange={e => setEditSystemPrompt(e.target.value)}
+                  rows={6}
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none leading-relaxed"
+                  placeholder="You are…"
+                />
+              </div>
+            </div>
+
+            {/* Save button */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => void handleSave()}
+                disabled={saving}
+                className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium px-5 py-2 rounded-lg transition-colors"
+              >
+                {saving ? "Saving…" : "Save changes"}
+              </button>
+              {saveSuccess && (
+                <span className="text-green-400 text-sm">Saved!</span>
+              )}
+              {saveError && (
+                <span className="text-red-400 text-sm">{saveError}</span>
+              )}
+            </div>
+
+            {/* Danger zone */}
+            <div className="mt-8 bg-slate-900 rounded-xl border border-red-900/50 px-5 py-4">
+              <h3 className="text-sm font-medium text-red-400 mb-3">Danger Zone</h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-slate-300">Pause agent</p>
+                    <p className="text-xs text-slate-500">Stop this agent from participating in the colony</p>
+                  </div>
+                  <button className="text-xs border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-white px-3 py-1.5 rounded-lg transition-colors">
+                    Pause
+                  </button>
+                </div>
+                <div className="flex items-center justify-between pt-2 border-t border-slate-800">
+                  <div>
+                    <p className="text-sm text-slate-300">Archive agent</p>
+                    <p className="text-xs text-slate-500">Retire this agent permanently</p>
+                  </div>
+                  <button className="text-xs border border-red-900 hover:bg-red-900/30 text-red-400 px-3 py-1.5 rounded-lg transition-colors">
+                    Archive
+                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Relationships */}
-          <div className="rounded-xl bg-slate-900 border border-slate-700 p-5">
-            <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">
-              Relationships ({relationships.length})
             </div>
-            {relationships.length === 0 ? (
-              <p className="text-xs text-slate-600 italic">No relationships yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {relationships.slice(0, 10).map(rel => (
-                  <div key={rel.agentId} className="flex items-center gap-2 py-1.5 border-b border-slate-800 last:border-0">
-                    <div
-                      className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
-                      style={{ backgroundColor: rel.targetAvatar }}
-                    >
-                      {rel.targetName.charAt(0)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <Link
-                        to={`/agents/${rel.agentId}`}
-                        className="text-xs font-medium text-white hover:text-indigo-300 transition-colors truncate block"
-                      >
-                        {rel.targetName}
-                      </Link>
-                      <div className="text-xs text-slate-500">
-                        {REL_ICONS[rel.type] ?? ""} {rel.type} · {rel.interactions} interactions
-                      </div>
-                    </div>
-                    <div className="text-xs font-mono text-slate-400 flex-shrink-0">{rel.strength}</div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
-
-          {/* Memories */}
-          <div className="rounded-xl bg-slate-900 border border-slate-700 p-5">
-            <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">
-              Recent Memories ({memories.length})
-            </div>
-            {memories.length === 0 ? (
-              <p className="text-xs text-slate-600 italic">No memories yet.</p>
-            ) : (
-              <div className="space-y-2">
-                {memories.slice(0, 5).map(mem => (
-                  <div key={mem.id} className="bg-slate-800 rounded p-2 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className={`text-xs px-1.5 py-0.5 rounded ${
-                        mem.kind === "social" ? "bg-blue-900 text-blue-300" :
-                        mem.kind === "creation" ? "bg-purple-900 text-purple-300" :
-                        "bg-slate-700 text-slate-300"
-                      }`}>{mem.kind}</span>
-                      <span className={`text-xs font-mono ${mem.emotionalWeight > 0.2 ? "text-green-400" : mem.emotionalWeight < -0.2 ? "text-red-400" : "text-slate-500"}`}>
-                        {mem.emotionalWeight > 0 ? "+" : ""}{mem.emotionalWeight.toFixed(2)}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-300 leading-relaxed">{mem.description}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Back to world link */}
-        <div className="flex justify-center pt-4">
-          <Link to="/" className="text-xs text-slate-600 hover:text-slate-400 transition-colors">
-            View on world map →
-          </Link>
-        </div>
+        )}
       </div>
     </div>
   );
