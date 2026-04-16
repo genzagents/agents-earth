@@ -59,10 +59,6 @@ export default function App() {
       setApprovals([e.payload, ...useBridgeStore.getState().approvals]);
     }).then((u) => unlisten.push(u));
 
-    listen<{ approvalId: string }>("bridge:approval_resolved", (e) => {
-      useBridgeStore.getState().removeApproval(e.payload.approvalId);
-    }).then((u) => unlisten.push(u));
-
     listen<AuditEntry[]>("bridge:audit_entries", (e) => {
       prependAuditEntries(e.payload);
     }).then((u) => unlisten.push(u));
