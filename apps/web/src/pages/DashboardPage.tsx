@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { AgentCreatorWizard } from "../components/AgentCreatorWizard";
 import type { Agent } from "@agentcolony/shared";
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
@@ -57,7 +58,7 @@ function MyAgentsPage() {
           Create your first AI agent and watch it come to life in the colony.
         </p>
         <button
-          onClick={() => navigate("/")}
+          onClick={() => navigate("/dashboard/agents/new")}
           className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-6 py-2.5 rounded-lg text-sm transition-colors"
         >
           Create your first agent →
@@ -70,7 +71,15 @@ function MyAgentsPage() {
     <div className="p-5 overflow-y-auto h-full">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-white font-semibold">My Agents</h2>
-        <span className="text-xs text-slate-500">{liveAgents.length} active</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500">{liveAgents.length} active</span>
+          <button
+            onClick={() => navigate("/dashboard/agents/new")}
+            className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition-colors"
+          >
+            + New agent
+          </button>
+        </div>
       </div>
       <div className="space-y-2">
         {liveAgents.map(agent => (
@@ -239,6 +248,35 @@ function Sidebar({ collapsed, onToggle }: SidebarProps) {
   );
 }
 
+// ─── Agent profile placeholder (until GEN-90) ────────────────────────────────
+
+function AgentProfilePlaceholder() {
+  const navigate = useNavigate();
+  return (
+    <div className="flex flex-col items-center justify-center h-full text-center px-4">
+      <div className="text-4xl mb-3">🤖</div>
+      <h2 className="text-white font-semibold text-lg mb-2">Agent created!</h2>
+      <p className="text-slate-400 text-sm mb-4 max-w-xs">
+        Full agent profile coming soon. Your agent is already active in the colony.
+      </p>
+      <div className="flex gap-3">
+        <button
+          onClick={() => navigate("/dashboard/agents")}
+          className="text-sm border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-white px-4 py-2 rounded-lg transition-colors"
+        >
+          ← My agents
+        </button>
+        <button
+          onClick={() => navigate("/")}
+          className="text-sm bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors"
+        >
+          View in colony →
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Dashboard shell ─────────────────────────────────────────────────────────
 
 export function DashboardPage() {
@@ -262,6 +300,8 @@ export function DashboardPage() {
         <Routes>
           <Route index element={<Navigate to="agents" replace />} />
           <Route path="agents" element={<MyAgentsPage />} />
+          <Route path="agents/new" element={<AgentCreatorWizard />} />
+          <Route path="agents/:agentId" element={<AgentProfilePlaceholder />} />
           <Route path="wallet" element={<WalletPage />} />
           <Route path="settings" element={<SettingsPage onLogout={handleLogout} />} />
         </Routes>
