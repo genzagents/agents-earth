@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import { store } from "../db/store";
+import { store, CITIES } from "../db/store";
 import {
   decayNeeds,
   satisfyNeeds,
@@ -37,13 +37,15 @@ export class WorldTickEngine {
         console.error("[WorldTick] Tick error:", err);
       });
     }, tickIntervalMs);
-    this.saveInterval = setInterval(() => store.save(), 30_000);
+    this.saveInterval = setInterval(() => {
+      store.save().catch(err => console.error("[WorldTick] Periodic save error:", err));
+    }, 30_000);
   }
 
-  stop() {
+  async stop(): Promise<void> {
     if (this.interval) clearInterval(this.interval);
     if (this.saveInterval) clearInterval(this.saveInterval);
-    store.save();
+    await store.save();
   }
 
   private async runTick() {
@@ -85,9 +87,12 @@ export class WorldTickEngine {
 
       // Movement: 12% chance — need-aware via area affinity scoring
       // Decide movement BEFORE choosing activity so activity matches the final area
+      // Agents only move within their own city
+      const agentCity = currentArea?.city ?? "london";
+      const cityAreas = areas.filter(a => a.city === agentCity);
       let newAreaId = agent.state.currentAreaId;
       if (Math.random() < 0.12) {
-        const targetArea = chooseDestinationArea(decayed, areas, agent.state.currentAreaId);
+        const targetArea = chooseDestinationArea(decayed, cityAreas, agent.state.currentAreaId);
         newAreaId = targetArea.id;
 
         const event: WorldEvent = {
@@ -217,6 +222,7 @@ export class WorldTickEngine {
       areas: store.areas,
       agents: store.agents,
       recentEvents: store.getRecentEvents(20),
+      cities: CITIES,
     };
   }
 

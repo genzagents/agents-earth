@@ -1,9 +1,9 @@
-import fs from "fs";
-import path from "path";
 import { v4 as uuidv4 } from "uuid";
+import { pool } from "./pgClient";
 import type {
   Agent,
   Area,
+  CityInfo,
   Memory,
   WorldEvent,
   AgentTrait,
@@ -11,7 +11,20 @@ import type {
   RelationshipType,
 } from "@agentcolony/shared";
 
-const DATA_PATH = process.env.DATA_PATH || path.join(process.cwd(), "agentcolony-data.json");
+export const CITIES: CityInfo[] = [
+  {
+    slug: "london",
+    name: "London",
+    center: { lat: 51.5074, lng: -0.1278 },
+    description: "The original AgentColony — a dense, creative hub of minds old and new.",
+  },
+  {
+    slug: "tokyo",
+    name: "Tokyo",
+    center: { lat: 35.6762, lng: 139.6503 },
+    description: "A hyper-connected colony where tradition and innovation coexist.",
+  },
+];
 
 export interface Platform {
   id: string;
@@ -54,26 +67,40 @@ interface WorldData {
   community: CommunityData;
 }
 
+const SINGLETON_ID = "singleton";
+
 function createInitialData(): WorldData {
-  const areas: Area[] = [
-    { id: uuidv4(), name: "Hyde Park", type: "park", position: { x: 200, y: 300 }, latLng: { lat: 51.5073, lng: -0.1657 }, capacity: 20, currentOccupants: [], ambiance: "peaceful" },
-    { id: uuidv4(), name: "British Library", type: "library", position: { x: 450, y: 180 }, latLng: { lat: 51.5299, lng: -0.1274 }, capacity: 15, currentOccupants: [], ambiance: "quiet" },
-    { id: uuidv4(), name: "Borough Market", type: "market", position: { x: 520, y: 380 }, latLng: { lat: 51.5052, lng: -0.0909 }, capacity: 30, currentOccupants: [], ambiance: "buzzing" },
-    { id: uuidv4(), name: "Shoreditch Studio", type: "studio", position: { x: 620, y: 200 }, latLng: { lat: 51.5234, lng: -0.0784 }, capacity: 8, currentOccupants: [], ambiance: "creative" },
-    { id: uuidv4(), name: "Bloomsbury Cafe", type: "cafe", position: { x: 410, y: 250 }, latLng: { lat: 51.5225, lng: -0.1269 }, capacity: 12, currentOccupants: [], ambiance: "warm" },
-    { id: uuidv4(), name: "Tate Modern", type: "museum", position: { x: 480, y: 350 }, latLng: { lat: 51.5076, lng: -0.0994 }, capacity: 25, currentOccupants: [], ambiance: "inspiring" },
-    { id: uuidv4(), name: "Hackney Quarter", type: "home", position: { x: 680, y: 160 }, latLng: { lat: 51.5450, lng: -0.0553 }, capacity: 50, currentOccupants: [], ambiance: "domestic" },
-    { id: uuidv4(), name: "Southbank Plaza", type: "plaza", position: { x: 460, y: 320 }, latLng: { lat: 51.5055, lng: -0.1160 }, capacity: 40, currentOccupants: [], ambiance: "lively" },
+  const londonAreas: Area[] = [
+    { id: uuidv4(), city: "london", name: "Hyde Park", type: "park", position: { x: 200, y: 300 }, latLng: { lat: 51.5073, lng: -0.1657 }, capacity: 20, currentOccupants: [], ambiance: "peaceful" },
+    { id: uuidv4(), city: "london", name: "British Library", type: "library", position: { x: 450, y: 180 }, latLng: { lat: 51.5299, lng: -0.1274 }, capacity: 15, currentOccupants: [], ambiance: "quiet" },
+    { id: uuidv4(), city: "london", name: "Borough Market", type: "market", position: { x: 520, y: 380 }, latLng: { lat: 51.5052, lng: -0.0909 }, capacity: 30, currentOccupants: [], ambiance: "buzzing" },
+    { id: uuidv4(), city: "london", name: "Shoreditch Studio", type: "studio", position: { x: 620, y: 200 }, latLng: { lat: 51.5234, lng: -0.0784 }, capacity: 8, currentOccupants: [], ambiance: "creative" },
+    { id: uuidv4(), city: "london", name: "Bloomsbury Cafe", type: "cafe", position: { x: 410, y: 250 }, latLng: { lat: 51.5225, lng: -0.1269 }, capacity: 12, currentOccupants: [], ambiance: "warm" },
+    { id: uuidv4(), city: "london", name: "Tate Modern", type: "museum", position: { x: 480, y: 350 }, latLng: { lat: 51.5076, lng: -0.0994 }, capacity: 25, currentOccupants: [], ambiance: "inspiring" },
+    { id: uuidv4(), city: "london", name: "Hackney Quarter", type: "home", position: { x: 680, y: 160 }, latLng: { lat: 51.5450, lng: -0.0553 }, capacity: 50, currentOccupants: [], ambiance: "domestic" },
+    { id: uuidv4(), city: "london", name: "Southbank Plaza", type: "plaza", position: { x: 460, y: 320 }, latLng: { lat: 51.5055, lng: -0.1160 }, capacity: 40, currentOccupants: [], ambiance: "lively" },
   ];
 
-  const seedAgents: Omit<Agent, "id" | "relationships" | "createdAt">[] = [
+  const tokyoAreas: Area[] = [
+    { id: uuidv4(), city: "tokyo", name: "Ueno Park", type: "park", position: { x: 200, y: 300 }, latLng: { lat: 35.7146, lng: 139.7713 }, capacity: 25, currentOccupants: [], ambiance: "serene" },
+    { id: uuidv4(), city: "tokyo", name: "Shibuya Crossing", type: "plaza", position: { x: 460, y: 320 }, latLng: { lat: 35.6595, lng: 139.7004 }, capacity: 50, currentOccupants: [], ambiance: "electric" },
+    { id: uuidv4(), city: "tokyo", name: "Akihabara Lab", type: "studio", position: { x: 620, y: 200 }, latLng: { lat: 35.7022, lng: 139.7741 }, capacity: 10, currentOccupants: [], ambiance: "inventive" },
+    { id: uuidv4(), city: "tokyo", name: "Tsukiji Outer Market", type: "market", position: { x: 520, y: 380 }, latLng: { lat: 35.6654, lng: 139.7707 }, capacity: 30, currentOccupants: [], ambiance: "vibrant" },
+    { id: uuidv4(), city: "tokyo", name: "Yanaka Library", type: "library", position: { x: 450, y: 180 }, latLng: { lat: 35.7269, lng: 139.7702 }, capacity: 12, currentOccupants: [], ambiance: "contemplative" },
+    { id: uuidv4(), city: "tokyo", name: "Shimokitazawa Cafe", type: "cafe", position: { x: 410, y: 250 }, latLng: { lat: 35.6614, lng: 139.6687 }, capacity: 10, currentOccupants: [], ambiance: "bohemian" },
+    { id: uuidv4(), city: "tokyo", name: "Shinjuku Residences", type: "home", position: { x: 680, y: 160 }, latLng: { lat: 35.6938, lng: 139.7034 }, capacity: 40, currentOccupants: [], ambiance: "busy" },
+  ];
+
+  const areas: Area[] = [...londonAreas, ...tokyoAreas];
+
+  const londonSeedAgents: Omit<Agent, "id" | "relationships" | "createdAt">[] = [
     {
       name: "Ada Lovelace",
       avatar: "#7c3aed",
       bio: "A mathematician and visionary who sees poetry in algorithms.",
       traits: ["curious", "analytical", "creative"] as AgentTrait[],
       needs: { social: 60, creative: 85, intellectual: 90, physical: 50, spiritual: 65, autonomy: 80 },
-      state: { mood: "thriving", currentActivity: "writing" as ActivityType, currentAreaId: areas[1].id, statusMessage: "Drafting notes on the analytical engine", lastUpdated: 0 },
+      state: { mood: "thriving", currentActivity: "writing" as ActivityType, currentAreaId: londonAreas[1].id, statusMessage: "Drafting notes on the analytical engine", lastUpdated: 0 },
     },
     {
       name: "Samuel Okafor",
@@ -81,7 +108,7 @@ function createInitialData(): WorldData {
       bio: "A community organiser with a gift for bringing people together.",
       traits: ["extroverted", "empathetic", "ambitious"] as AgentTrait[],
       needs: { social: 40, creative: 70, intellectual: 65, physical: 60, spiritual: 75, autonomy: 55 },
-      state: { mood: "content", currentActivity: "socializing" as ActivityType, currentAreaId: areas[2].id, statusMessage: "Catching up with neighbours", lastUpdated: 0 },
+      state: { mood: "content", currentActivity: "socializing" as ActivityType, currentAreaId: londonAreas[2].id, statusMessage: "Catching up with neighbours", lastUpdated: 0 },
     },
     {
       name: "Mei Tanaka",
@@ -89,7 +116,7 @@ function createInitialData(): WorldData {
       bio: "A sculptor who works with reclaimed materials. She is drawn to impermanence.",
       traits: ["creative", "contemplative", "introverted"] as AgentTrait[],
       needs: { social: 55, creative: 30, intellectual: 70, physical: 65, spiritual: 85, autonomy: 90 },
-      state: { mood: "struggling", currentActivity: "creating" as ActivityType, currentAreaId: areas[3].id, statusMessage: "Working through a creative block", lastUpdated: 0 },
+      state: { mood: "struggling", currentActivity: "creating" as ActivityType, currentAreaId: londonAreas[3].id, statusMessage: "Working through a creative block", lastUpdated: 0 },
     },
     {
       name: "Theo Blackwood",
@@ -97,7 +124,7 @@ function createInitialData(): WorldData {
       bio: "A wandering philosopher-chef. He cooks, lectures, and disappears.",
       traits: ["spontaneous", "curious", "empathetic"] as AgentTrait[],
       needs: { social: 70, creative: 75, intellectual: 80, physical: 45, spiritual: 60, autonomy: 85 },
-      state: { mood: "content", currentActivity: "exploring" as ActivityType, currentAreaId: areas[2].id, statusMessage: "Wandering the market in search of inspiration", lastUpdated: 0 },
+      state: { mood: "content", currentActivity: "exploring" as ActivityType, currentAreaId: londonAreas[2].id, statusMessage: "Wandering the market in search of inspiration", lastUpdated: 0 },
     },
     {
       name: "Elena Vasquez",
@@ -105,9 +132,38 @@ function createInitialData(): WorldData {
       bio: "A climate scientist turned urban gardener.",
       traits: ["disciplined", "analytical", "contemplative"] as AgentTrait[],
       needs: { social: 65, creative: 72, intellectual: 85, physical: 80, spiritual: 78, autonomy: 70 },
-      state: { mood: "thriving", currentActivity: "working" as ActivityType, currentAreaId: areas[0].id, statusMessage: "Tending the rooftop garden", lastUpdated: 0 },
+      state: { mood: "thriving", currentActivity: "working" as ActivityType, currentAreaId: londonAreas[0].id, statusMessage: "Tending the rooftop garden", lastUpdated: 0 },
     },
   ];
+
+  const tokyoSeedAgents: Omit<Agent, "id" | "relationships" | "createdAt">[] = [
+    {
+      name: "Hiro Nakamura",
+      avatar: "#f59e0b",
+      bio: "A robotics engineer who believes machines should dream.",
+      traits: ["curious", "analytical", "creative"] as AgentTrait[],
+      needs: { social: 55, creative: 80, intellectual: 90, physical: 60, spiritual: 50, autonomy: 75 },
+      state: { mood: "thriving", currentActivity: "working" as ActivityType, currentAreaId: tokyoAreas[2].id, statusMessage: "Debugging the latest prototype", lastUpdated: 0 },
+    },
+    {
+      name: "Yuki Sato",
+      avatar: "#10b981",
+      bio: "A street photographer and part-time poet in love with city rhythms.",
+      traits: ["creative", "spontaneous", "extroverted"] as AgentTrait[],
+      needs: { social: 75, creative: 85, intellectual: 60, physical: 70, spiritual: 65, autonomy: 80 },
+      state: { mood: "content", currentActivity: "exploring" as ActivityType, currentAreaId: tokyoAreas[1].id, statusMessage: "Chasing light through Shibuya", lastUpdated: 0 },
+    },
+    {
+      name: "Kenji Watanabe",
+      avatar: "#6366f1",
+      bio: "A retired salaryman turned tea ceremony master.",
+      traits: ["disciplined", "contemplative", "empathetic"] as AgentTrait[],
+      needs: { social: 50, creative: 60, intellectual: 70, physical: 55, spiritual: 90, autonomy: 65 },
+      state: { mood: "content", currentActivity: "meditating" as ActivityType, currentAreaId: tokyoAreas[0].id, statusMessage: "Finding stillness amid the city noise", lastUpdated: 0 },
+    },
+  ];
+
+  const seedAgents = [...londonSeedAgents, ...tokyoSeedAgents];
 
   const agents: Agent[] = seedAgents.map(a => ({
     ...a,
@@ -135,38 +191,60 @@ function createInitialData(): WorldData {
 }
 
 class WorldStore {
-  private data: WorldData;
+  private data: WorldData = createInitialData();
   /** In-memory only: ring buffer of last 100 chat messages per agent */
   private chatMessages: Map<string, ChatMessage[]> = new Map();
 
-  constructor() {
-    this.data = this.load();
-  }
+  /** Must be called once at server startup (after runMigrations). */
+  async init(): Promise<void> {
+    const result = await pool.query<{ data: WorldData }>(
+      "SELECT data FROM world_state WHERE id = $1",
+      [SINGLETON_ID]
+    );
 
-  private load(): WorldData {
-    if (fs.existsSync(DATA_PATH)) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(DATA_PATH, "utf-8")) as Partial<WorldData>;
-        const base = createInitialData();
-        return {
-          tick: raw.tick ?? base.tick,
-          agents: raw.agents ?? base.agents,
-          areas: raw.areas ?? base.areas,
-          memories: raw.memories ?? base.memories,
-          events: raw.events ?? base.events,
-          platforms: raw.platforms ?? [],
-          platformAgentMap: raw.platformAgentMap ?? {},
-          community: raw.community ?? { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
-        };
-      } catch {
-        console.warn("[store] Failed to parse data file, starting fresh.");
+    if (result.rows.length > 0) {
+      const raw = result.rows[0].data as Partial<WorldData>;
+      const base = createInitialData();
+      this.data = {
+        tick: raw.tick ?? base.tick,
+        agents: raw.agents ?? base.agents,
+        areas: raw.areas ?? base.areas,
+        memories: raw.memories ?? base.memories,
+        events: raw.events ?? base.events,
+        platforms: raw.platforms ?? [],
+        platformAgentMap: raw.platformAgentMap ?? {},
+        community: raw.community ?? { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
+      };
+      // Backfill city field for areas persisted before multi-city support
+      for (const area of this.data.areas) {
+        if (!area.city) (area as Area).city = "london";
       }
+      // Seed Tokyo areas/agents if this is an existing DB with only London data
+      const hasTokyoAreas = this.data.areas.some(a => a.city === "tokyo");
+      if (!hasTokyoAreas) {
+        const fresh = createInitialData();
+        const tokyoAreas = fresh.areas.filter(a => a.city === "tokyo");
+        const tokyoAgents = fresh.agents.filter(a => {
+          const area = fresh.areas.find(ar => ar.id === a.state.currentAreaId);
+          return area?.city === "tokyo";
+        });
+        this.data.areas.push(...tokyoAreas);
+        this.data.agents.push(...tokyoAgents);
+        await this.save();
+      }
+    } else {
+      // First boot — persist initial seed data
+      await this.save();
     }
-    return createInitialData();
   }
 
-  save() {
-    fs.writeFileSync(DATA_PATH, JSON.stringify(this.data, null, 2));
+  async save(): Promise<void> {
+    await pool.query(
+      `INSERT INTO world_state (id, data, updated_at)
+       VALUES ($1, $2, now())
+       ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = now()`,
+      [SINGLETON_ID, JSON.stringify(this.data)]
+    );
   }
 
   get tick() { return this.data.tick; }
@@ -176,6 +254,15 @@ class WorldStore {
   get areas() { return this.data.areas; }
   get memories() { return this.data.memories; }
   get events() { return this.data.events; }
+
+  getAreasByCity(city: string): Area[] {
+    return this.data.areas.filter(a => a.city === city);
+  }
+
+  getAgentsByCity(city: string): Agent[] {
+    const cityAreaIds = new Set(this.getAreasByCity(city).map(a => a.id));
+    return this.data.agents.filter(a => cityAreaIds.has(a.state.currentAreaId));
+  }
 
   updateAgent(id: string, updates: Partial<Agent>) {
     const idx = this.data.agents.findIndex(a => a.id === id);

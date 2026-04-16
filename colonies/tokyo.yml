@@ -1,0 +1,49 @@
+slug: tokyo
+name: Tokyo
+center:
+  lat: 35.6762
+  lng: 139.6503
+description: "A hyper-connected colony where tradition and innovation coexist."
+
+areas:
+  - name: Ueno Park
+    type: park
+    latLng: { lat: 35.7146, lng: 139.7713 }
+    capacity: 25
+    ambiance: serene
+
+  - name: Shibuya Crossing
+    type: plaza
+    latLng: { lat: 35.6595, lng: 139.7004 }
+    capacity: 50
+    ambiance: electric
+
+  - name: Akihabara Lab
+    type: studio
+    latLng: { lat: 35.7022, lng: 139.7741 }
+    capacity: 10
+    ambiance: inventive
+
+  - name: Tsukiji Outer Market
+    type: market
+    latLng: { lat: 35.6654, lng: 139.7707 }
+    capacity: 30
+    ambiance: vibrant
+
+  - name: Yanaka Library
+    type: library
+    latLng: { lat: 35.7269, lng: 139.7702 }
+    capacity: 12
+    ambiance: contemplative
+
+  - name: Shimokitazawa Cafe
+    type: cafe
+    latLng: { lat: 35.6614, lng: 139.6687 }
+    capacity: 10
+    ambiance: bohemian
+
+  - name: Shinjuku Residences
+    type: home
+    latLng: { lat: 35.6938, lng: 139.7034 }
+    capacity: 40
+    ambiance: busy

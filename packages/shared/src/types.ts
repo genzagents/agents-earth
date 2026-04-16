@@ -105,12 +105,21 @@ export interface Memory {
   tags: string[];
 }
 
+export interface CityInfo {
+  slug: string;   // e.g. "london", "tokyo"
+  name: string;   // e.g. "London", "Tokyo"
+  center: { lat: number; lng: number };
+  description: string;
+}
+
 export interface Area {
   id: string;
   name: string;
   type: AreaType;
+  /** City this area belongs to (slug) */
+  city: string;
   position: { x: number; y: number };
-  /** Real-world London coordinates for map rendering */
+  /** Real-world coordinates for map rendering */
   latLng?: { lat: number; lng: number };
   capacity: number;
   currentOccupants: string[]; // agent ids
@@ -132,6 +141,7 @@ export interface WorldState {
   areas: Area[];
   agents: Agent[];
   recentEvents: WorldEvent[];
+  cities: CityInfo[];
 }
 
 export interface PlatformAgentUpdate {

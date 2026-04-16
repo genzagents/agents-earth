@@ -138,10 +138,10 @@ describe("chooseBestActivity", () => {
 
 describe("chooseDestinationArea", () => {
   const areas: Area[] = [
-    { id: "a1", name: "Hyde Park", type: "park", position: { x: 0, y: 0 }, capacity: 20, currentOccupants: [], ambiance: "peaceful" },
-    { id: "a2", name: "British Library", type: "library", position: { x: 1, y: 0 }, capacity: 15, currentOccupants: [], ambiance: "quiet" },
-    { id: "a3", name: "Shoreditch Studio", type: "studio", position: { x: 2, y: 0 }, capacity: 8, currentOccupants: [], ambiance: "creative" },
-    { id: "a4", name: "Borough Market", type: "market", position: { x: 3, y: 0 }, capacity: 30, currentOccupants: [], ambiance: "buzzing" },
+    { id: "a1", city: "london", name: "Hyde Park", type: "park", position: { x: 0, y: 0 }, capacity: 20, currentOccupants: [], ambiance: "peaceful" },
+    { id: "a2", city: "london", name: "British Library", type: "library", position: { x: 1, y: 0 }, capacity: 15, currentOccupants: [], ambiance: "quiet" },
+    { id: "a3", city: "london", name: "Shoreditch Studio", type: "studio", position: { x: 2, y: 0 }, capacity: 8, currentOccupants: [], ambiance: "creative" },
+    { id: "a4", city: "london", name: "Borough Market", type: "market", position: { x: 3, y: 0 }, capacity: 30, currentOccupants: [], ambiance: "buzzing" },
   ];
 
   test("returns one of the provided areas", () => {
