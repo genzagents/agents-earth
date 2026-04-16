@@ -17,7 +17,8 @@ COPY packages/shared/package.json ./packages/shared/
 COPY packages/contracts/package.json ./packages/contracts/
 
 # Install all dependencies (workspaces)
-RUN npm install
+# Delete lock file so npm resolves platform-specific optional deps (e.g. rollup) for Alpine/Linux
+RUN rm -f package-lock.json && npm install
 
 # Copy all source files
 COPY apps/ ./apps/
@@ -45,7 +46,7 @@ COPY apps/desktop/package.json ./apps/desktop/
 COPY apps/bridge-desktop/package.json ./apps/bridge-desktop/
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/contracts/package.json ./packages/contracts/
-RUN npm install --workspace=apps/server --omit=dev
+RUN rm -f package-lock.json && npm install --workspace=apps/server --omit=dev
 
 # Copy compiled server (all @agentcolony/shared imports are type-only, erased at compile)
 COPY --from=builder /app/apps/server/dist ./apps/server/dist

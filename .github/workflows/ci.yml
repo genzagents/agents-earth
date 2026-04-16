@@ -6,6 +6,11 @@ on:
   push:
     branches: [main]
 
+# Re-usable install snippet:
+# Delete package-lock.json before npm install so npm resolves platform-specific
+# optional deps (e.g. @rollup/rollup-linux-x64-gnu) correctly on ubuntu-latest.
+# npm still benefits from the ~/.npm tarball cache restored by setup-node.
+
 jobs:
   typecheck:
     name: TypeScript Typecheck
@@ -22,7 +27,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: rm -f package-lock.json && npm install
 
       - name: Typecheck all workspaces
         run: npm run typecheck
@@ -42,7 +47,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: rm -f package-lock.json && npm install
 
       - name: Build web (Vite)
         run: npm run build --workspace=apps/web
@@ -79,7 +84,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: rm -f package-lock.json && npm install
 
       - name: Run server tests
         run: npm run test --workspace=apps/server
