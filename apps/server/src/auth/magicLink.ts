@@ -1,4 +1,4 @@
-import { randomBytes, createHmac } from "crypto";
+import { randomBytes, createHmac, timingSafeEqual } from "crypto";
 import { pool } from "./db";
 
 const TOKEN_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
@@ -52,5 +52,5 @@ function verifyToken(token: string, email: string): boolean {
   if (dotIdx === -1) return false;
   const raw = token.slice(0, dotIdx);
   const expected = signToken(raw, email);
-  return expected === token;
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(token));
 }

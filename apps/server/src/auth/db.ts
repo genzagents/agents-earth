@@ -5,7 +5,7 @@ const {
   SUPABASE_DB_PORT = "5432",
   SUPABASE_DB_NAME = "postgres",
   SUPABASE_DB_USER = "postgres",
-  SUPABASE_DB_PASSWORD = "supabase@123",
+  SUPABASE_DB_PASSWORD = "",
 } = process.env;
 
 export const pool = new Pool({

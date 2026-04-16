@@ -2,25 +2,6 @@ import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
-const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "";
-
-async function verifyToken(token: string): Promise<{ email: string } | null> {
-  try {
-    const res = await fetch(`${SERVER_URL}/api/auth/verify`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-    });
-    if (res.ok) {
-      const data = (await res.json()) as { email: string };
-      return data;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 export function AuthCallbackPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -36,26 +17,18 @@ export function AuthCallbackPage() {
       return;
     }
 
-    async function hydrate() {
-      // Try real verify endpoint first
-      const verified = await verifyToken(token!);
-      if (verified) {
-        login({ email: verified.email, token: token! });
-        navigate("/dashboard", { replace: true });
-        return;
-      }
-
-      // Dev fallback: accept a dev-generated token if email param is present
-      if (emailParam) {
-        login({ email: emailParam, token: token! });
-        navigate("/dashboard", { replace: true });
-        return;
-      }
-
-      setError("This magic link is invalid or has expired. Please request a new one.");
+    // Production flow: server handles GET /api/auth/callback, sets cookie, redirects to
+    // /dashboard — this frontend page is never reached in production.
+    //
+    // Dev flow: LoginPage "Continue to dashboard anyway" navigates here with an emailParam.
+    // We trust it directly since there's no real backend token in dev mode.
+    if (emailParam) {
+      login({ email: emailParam, token });
+      navigate("/dashboard", { replace: true });
+      return;
     }
 
-    hydrate();
+    setError("This magic link is invalid or has expired. Please request a new one.");
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (error) {

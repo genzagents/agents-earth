@@ -1,5 +1,5 @@
 import { useState, FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { getStoredSession } from "../hooks/useAuth";
 
 type Stage = "input" | "sent";
@@ -27,8 +27,7 @@ export function LoginPage() {
 
   // If already authenticated, skip to dashboard
   if (getStoredSession()) {
-    navigate("/dashboard", { replace: true });
-    return null;
+    return <Navigate to="/dashboard" replace />;
   }
 
   async function handleSubmit(e: FormEvent) {
