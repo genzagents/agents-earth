@@ -61,10 +61,10 @@ describe("GET /api/world", () => {
   });
 });
 
-describe("GET /api/agents", () => {
+describe("GET /api/world/agents", () => {
   test("returns an array of agent summaries", async () => {
     const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/api/agents" });
+    const res = await app.inject({ method: "GET", url: "/api/world/agents" });
     assert.equal(res.statusCode, 200);
     const body = res.json();
     assert.ok(Array.isArray(body));
@@ -74,7 +74,7 @@ describe("GET /api/agents", () => {
 
   test("each agent summary has expected fields", async () => {
     const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/api/agents" });
+    const res = await app.inject({ method: "GET", url: "/api/world/agents" });
     const body = res.json();
     const summary = body[0];
     assert.ok(typeof summary.id === "string");
@@ -87,11 +87,11 @@ describe("GET /api/agents", () => {
   });
 });
 
-describe("GET /api/agents/:id", () => {
+describe("GET /api/world/agents/:id", () => {
   test("returns full agent for valid id", async () => {
     const app = await buildApp();
     const agentId = store.agents[0].id;
-    const res = await app.inject({ method: "GET", url: `/api/agents/${agentId}` });
+    const res = await app.inject({ method: "GET", url: `/api/world/agents/${agentId}` });
     assert.equal(res.statusCode, 200);
     const body = res.json();
     assert.equal(body.id, agentId);
@@ -104,7 +104,7 @@ describe("GET /api/agents/:id", () => {
 
   test("returns 404 for unknown agent id", async () => {
     const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/api/agents/nonexistent-id-00000" });
+    const res = await app.inject({ method: "GET", url: "/api/world/agents/nonexistent-id-00000" });
     assert.equal(res.statusCode, 404);
     const body = res.json();
     assert.ok(body.error !== undefined);
@@ -112,11 +112,11 @@ describe("GET /api/agents/:id", () => {
   });
 });
 
-describe("GET /api/agents/:id/memories", () => {
+describe("GET /api/world/agents/:id/memories", () => {
   test("returns memory array for valid agent", async () => {
     const app = await buildApp();
     const agentId = store.agents[0].id;
-    const res = await app.inject({ method: "GET", url: `/api/agents/${agentId}/memories` });
+    const res = await app.inject({ method: "GET", url: `/api/world/agents/${agentId}/memories` });
     assert.equal(res.statusCode, 200);
     const body = res.json();
     assert.ok(Array.isArray(body));
@@ -125,17 +125,17 @@ describe("GET /api/agents/:id/memories", () => {
 
   test("returns 404 for unknown agent id", async () => {
     const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/api/agents/nonexistent-id-00000/memories" });
+    const res = await app.inject({ method: "GET", url: "/api/world/agents/nonexistent-id-00000/memories" });
     assert.equal(res.statusCode, 404);
     await app.close();
   });
 });
 
-describe("GET /api/agents/:id/relationships", () => {
+describe("GET /api/world/agents/:id/relationships", () => {
   test("returns relationship array for valid agent", async () => {
     const app = await buildApp();
     const agentId = store.agents[0].id;
-    const res = await app.inject({ method: "GET", url: `/api/agents/${agentId}/relationships` });
+    const res = await app.inject({ method: "GET", url: `/api/world/agents/${agentId}/relationships` });
     assert.equal(res.statusCode, 200);
     const body = res.json();
     assert.ok(Array.isArray(body));
@@ -144,13 +144,13 @@ describe("GET /api/agents/:id/relationships", () => {
 
   test("returns 404 for unknown agent id", async () => {
     const app = await buildApp();
-    const res = await app.inject({ method: "GET", url: "/api/agents/nonexistent-id-00000/relationships" });
+    const res = await app.inject({ method: "GET", url: "/api/world/agents/nonexistent-id-00000/relationships" });
     assert.equal(res.statusCode, 404);
     await app.close();
   });
 });
 
-describe("POST /api/agents", () => {
+describe("POST /api/world/agents", () => {
   test("creates a new agent with valid body", async () => {
     const app = await buildApp();
     const body = {
@@ -161,7 +161,7 @@ describe("POST /api/agents", () => {
     };
     const res = await app.inject({
       method: "POST",
-      url: "/api/agents",
+      url: "/api/world/agents",
       payload: body,
       headers: { "content-type": "application/json" },
     });
@@ -185,7 +185,7 @@ describe("POST /api/agents", () => {
     };
     const res = await app.inject({
       method: "POST",
-      url: "/api/agents",
+      url: "/api/world/agents",
       payload: body,
       headers: { "content-type": "application/json" },
     });
@@ -197,7 +197,7 @@ describe("POST /api/agents", () => {
     const app = await buildApp();
     const res = await app.inject({
       method: "POST",
-      url: "/api/agents",
+      url: "/api/world/agents",
       payload: { name: "No bio or avatar" },
       headers: { "content-type": "application/json" },
     });
