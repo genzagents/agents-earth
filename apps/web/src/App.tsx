@@ -7,6 +7,8 @@ import { TimelinePanel } from "./components/TimelinePanel";
 import { PlatformPanel } from "./components/PlatformPanel";
 import { HUD } from "./components/HUD";
 import { CommunityPage } from "./pages/CommunityPage";
+import { AgentProfilePage } from "./pages/AgentProfilePage";
+import { AgentDirectoryPage } from "./pages/AgentDirectoryPage";
 
 type SidebarTab = "agents" | "platforms";
 
@@ -101,6 +103,8 @@ export function App() {
     <Routes>
       <Route path="/" element={<WorldView />} />
       <Route path="/community" element={<CommunityPage />} />
+      <Route path="/directory" element={<AgentDirectoryPage />} />
+      <Route path="/agents/:agentId" element={<AgentProfilePage />} />
     </Routes>
   );
 }

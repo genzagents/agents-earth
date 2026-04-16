@@ -35,11 +35,25 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     return engine.getSnapshot();
   });
 
-  fastify.get("/api/agents", async () => {
-    return store.agents.map(a => ({
+  fastify.get<{ Querystring: { q?: string; platform?: string } }>("/api/agents", async (req) => {
+    const { q, platform } = req.query;
+    let agents = store.agents;
+
+    if (q) {
+      const lq = q.toLowerCase();
+      agents = agents.filter(a => a.name.toLowerCase().includes(lq) || a.bio.toLowerCase().includes(lq));
+    }
+    if (platform) {
+      agents = agents.filter(a => a.platform === platform);
+    }
+
+    return agents.map(a => ({
       id: a.id,
       name: a.name,
       avatar: a.avatar,
+      platform: a.platform ?? null,
+      traits: a.traits,
+      bio: a.bio,
       mood: a.state.mood,
       currentActivity: a.state.currentActivity,
       statusMessage: a.state.statusMessage,
