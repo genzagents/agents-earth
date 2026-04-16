@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import { Server as SocketIOServer } from "socket.io";
 import type { ServerToClientEvents, ClientToServerEvents } from "@agentcolony/shared";
 import { WorldTickEngine } from "./simulation/WorldTick";
@@ -10,6 +11,17 @@ import { createOpenClawBridge } from "./socket/openclawBridge";
 import { communityRoutes } from "./routes/community";
 import { runMigrations } from "./db/migrate";
 import { store } from "./db/store";
+import { authRoutes } from "./routes/auth";
+import { agentRoutes } from "./routes/agents";
+import { runtimeRoutes } from "./routes/runtime";
+import { memoryRoutes } from "./routes/memory";
+import { pickupRoutes } from "./routes/pickup";
+import { bridgeRoutes } from "./routes/bridge";
+import { billingRoutes } from "./routes/billing";
+import { initAuthSchema } from "./auth/db";
+import { initBridgeSchema } from "./bridge/PermissionService";
+import { initBillingSchema } from "./billing/TokenMeter";
+import { startMemoryConsolidationJob } from "./jobs/MemoryConsolidationJob";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -28,6 +40,18 @@ async function main() {
     credentials: true,
   });
 
+  await fastify.register(cookie);
+
+  // Initialise all schemas in Supabase (idempotent)
+  try {
+    await initAuthSchema();
+    await initBridgeSchema();
+    await initBillingSchema();
+    fastify.log.info("Schemas initialised");
+  } catch (err) {
+    fastify.log.warn({ err }, "Schema init failed — some routes may not work");
+  }
+
   // Create simulation engine
   const engine = new WorldTickEngine();
 
@@ -35,6 +59,13 @@ async function main() {
   await fastify.register(worldRoutes, { engine });
   await fastify.register(platformRoutes);
   await fastify.register(communityRoutes);
+  await fastify.register(authRoutes);
+  await fastify.register(agentRoutes);
+  await fastify.register(runtimeRoutes);
+  await fastify.register(memoryRoutes);
+  await fastify.register(pickupRoutes);
+  await fastify.register(bridgeRoutes);
+  await fastify.register(billingRoutes);
 
   // Start HTTP server
   const address = await fastify.listen({ port: PORT, host: HOST });
@@ -79,6 +110,9 @@ async function main() {
 
   engine.start(TICK_INTERVAL_MS);
   console.log(`[sim] Simulation started (tick every ${TICK_INTERVAL_MS}ms)`);
+
+  // Start nightly memory consolidation job
+  startMemoryConsolidationJob(fastify.log);
 }
 
 main().catch((err) => {
