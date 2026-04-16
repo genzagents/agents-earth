@@ -8,9 +8,18 @@
 
 html, body, #root {
   height: 100%;
+  /* Use dvh on modern browsers to account for mobile browser chrome */
+  height: 100dvh;
   margin: 0;
   padding: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  /* Prevent pull-to-refresh on mobile */
+  overscroll-behavior: none;
+}
+
+/* iOS safe area support for bottom sheet */
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Speech bubble overlays on WorldCanvas */
