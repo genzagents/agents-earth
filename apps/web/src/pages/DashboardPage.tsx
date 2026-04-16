@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { AgentCreatorWizard } from "../components/AgentCreatorWizard";
+import { AgentChatPage } from "./AgentChatPage";
 import type { Agent } from "@agentcolony/shared";
 
 // ─── Nav items ────────────────────────────────────────────────────────────────
@@ -85,19 +86,29 @@ function MyAgentsPage() {
         {liveAgents.map(agent => (
           <div
             key={agent.id}
-            className="flex items-center gap-3 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg px-4 py-3 transition-colors cursor-pointer"
-            onClick={() => navigate(`/?agent=${agent.id}`)}
+            className="flex items-center gap-3 bg-slate-800 border border-slate-700 rounded-lg px-4 py-3"
           >
             <div
-              className="w-8 h-8 rounded-full flex-shrink-0 border-2 border-slate-600"
+              className="w-8 h-8 rounded-full flex-shrink-0 border-2 border-slate-600 cursor-pointer"
               style={{ backgroundColor: agent.avatar }}
+              onClick={() => navigate(`/?agent=${agent.id}`)}
             />
-            <div className="min-w-0 flex-1">
+            <div
+              className="min-w-0 flex-1 cursor-pointer"
+              onClick={() => navigate(`/?agent=${agent.id}`)}
+            >
               <p className="text-white text-sm font-medium truncate">{agent.name}</p>
               <p className="text-slate-400 text-xs truncate">
                 {agent.state.currentActivity ?? "Idle"}
               </p>
             </div>
+            <button
+              onClick={() => navigate(`/dashboard/agents/${agent.id}/chat`)}
+              className="text-xs bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-700/50 px-2.5 py-1 rounded-lg transition-colors flex-shrink-0"
+              title="Open chat"
+            >
+              Chat
+            </button>
             <span
               className="text-xs px-2 py-0.5 rounded-full border flex-shrink-0"
               style={{
@@ -301,6 +312,7 @@ export function DashboardPage() {
           <Route index element={<Navigate to="agents" replace />} />
           <Route path="agents" element={<MyAgentsPage />} />
           <Route path="agents/new" element={<AgentCreatorWizard />} />
+          <Route path="agents/:agentId/chat" element={<AgentChatPage />} />
           <Route path="agents/:agentId" element={<AgentProfilePlaceholder />} />
           <Route path="wallet" element={<WalletPage />} />
           <Route path="settings" element={<SettingsPage onLogout={handleLogout} />} />
