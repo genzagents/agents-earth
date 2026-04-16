@@ -4,7 +4,8 @@
 //!   GenZ Cloud WSS ──► BridgeWsClient ──► local executor (shell/fs/browser)
 //!                                     ◄── result ──────────────────────────
 //!
-//! The WS URL is: wss://<server>/api/bridge/ws?token=<short-lived-jwt>
+//! The WS URL is: wss://<server>/api/bridge/ws
+//! Auth token is passed in the Authorization: Bearer header (not a query param).
 //! The server sends BridgeCommand JSON; the client sends BridgeResult JSON.
 
 use std::sync::Arc;
@@ -15,9 +16,12 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{mpsc, Mutex};
 use tokio::time::sleep;
-use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::Message};
+use tokio_tungstenite::{
+    connect_async_tls_with_config,
+    tungstenite::{http::Request, Message},
+};
 
-use crate::state::{AppState, BridgeStatus};
+use crate::state::{AgentPermissions, AppState, BridgeStatus};
 
 const RECONNECT_BASE_MS: u64 = 1_000;
 const RECONNECT_MAX_MS: u64 = 30_000;
@@ -88,29 +92,47 @@ enum ServerMessage {
 
 pub type OutboundTx = mpsc::UnboundedSender<Message>;
 
-/// Spawn the persistent WebSocket loop. Returns a sender for outbound messages.
-pub fn spawn_ws_loop(app: AppHandle, state: Arc<Mutex<AppState>>) -> OutboundTx {
-    let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
-    let tx_clone = tx.clone();
+/// Spawn the persistent WebSocket loop.
+/// A fresh channel is created per connection attempt so the outbound pump
+/// always has a live `rx` after reconnect.
+pub fn spawn_ws_loop(app: AppHandle, state: Arc<Mutex<AppState>>) {
 
     tokio::spawn(async move {
         let mut backoff_ms = RECONNECT_BASE_MS;
 
         loop {
-            let server_url = {
+            // ── Fresh channel per connection ──────────────────────────────────
+            // This ensures `rx` is never consumed across reconnects: the
+            // outbound_task moves `rx` for the current connection, and when
+            // that task is aborted on disconnect the channel is dropped cleanly.
+            let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
+
+            let (server_url, token) = {
                 let s = state.lock().await;
-                s.server_url.clone()
-            };
-            let token = {
-                let s = state.lock().await;
-                s.auth_token.clone()
+                (s.server_url.clone(), s.auth_token.clone())
             };
 
-            let ws_url = format!("{}/api/bridge/ws?token={}", server_url.replace("http", "ws"), token);
+            let ws_url = format!("{}/api/bridge/ws", server_url.replace("http", "ws"));
+
+            // ── Build WS upgrade request with Authorization header ────────────
+            // Never put the token in the URL: it leaks into access/proxy logs.
+            let request = match Request::builder()
+                .uri(&ws_url)
+                .header("Authorization", format!("Bearer {token}"))
+                .body(())
+            {
+                Ok(r) => r,
+                Err(e) => {
+                    tracing::warn!("Failed to build WS request: {e}");
+                    sleep(Duration::from_millis(backoff_ms)).await;
+                    backoff_ms = (backoff_ms * 2).min(RECONNECT_MAX_MS);
+                    continue;
+                }
+            };
 
             tracing::info!("Connecting to {ws_url}");
 
-            match connect_async_tls_with_config(&ws_url, None, false, None).await {
+            match connect_async_tls_with_config(request, None, false, None).await {
                 Ok((ws_stream, _)) => {
                     backoff_ms = RECONNECT_BASE_MS;
 
@@ -124,7 +146,8 @@ pub fn spawn_ws_loop(app: AppHandle, state: Arc<Mutex<AppState>>) -> OutboundTx 
                     let (mut sink, mut stream) = ws_stream.split();
 
                     // Ping task
-                    let ping_tx = tx_clone.clone();
+                    // Ping task — keeps the connection alive
+                    let ping_tx = tx.clone();
                     let ping_task = tokio::spawn(async move {
                         loop {
                             sleep(Duration::from_secs(PING_INTERVAL_SECS)).await;
@@ -147,7 +170,7 @@ pub fn spawn_ws_loop(app: AppHandle, state: Arc<Mutex<AppState>>) -> OutboundTx 
                     while let Some(msg_result) = stream.next().await {
                         match msg_result {
                             Ok(Message::Text(text)) => {
-                                handle_server_message(&app, &state, &text, &tx_clone).await;
+                                handle_server_message(&app, &state, &text, &tx).await;
                             }
                             Ok(Message::Pong(_)) => {}
                             Ok(Message::Close(_)) => break,
@@ -162,8 +185,6 @@ pub fn spawn_ws_loop(app: AppHandle, state: Arc<Mutex<AppState>>) -> OutboundTx 
                     ping_task.abort();
                     outbound_task.abort();
 
-                    // Re-create the rx channel since the outbound task consumed it
-                    // (In practice, we'd restructure to avoid this, but for clarity:)
                     tracing::warn!("WebSocket disconnected; will reconnect.");
                 }
                 Err(e) => {
@@ -171,7 +192,6 @@ pub fn spawn_ws_loop(app: AppHandle, state: Arc<Mutex<AppState>>) -> OutboundTx 
                 }
             }
 
-            // Update disconnected state
             {
                 let mut s = state.lock().await;
                 s.connected = false;
@@ -183,7 +203,6 @@ pub fn spawn_ws_loop(app: AppHandle, state: Arc<Mutex<AppState>>) -> OutboundTx 
         }
     });
 
-    tx
 }
 
 async fn handle_server_message(
@@ -236,6 +255,28 @@ async fn dispatch_command(
         return;
     }
 
+    // ── Local permission enforcement (defence-in-depth) ───────────────────────
+    // The Rust client receives permissions at connect time. It validates them
+    // here before executing — not just trusting the server's dispatch decision.
+    let perms = {
+        let s = state.lock().await;
+        s.permissions.get(&cmd.agent_id).cloned()
+    };
+
+    if let Some(ref perms) = perms {
+        if let Some(denial_reason) = check_local_permissions(&cmd, perms) {
+            let result = BridgeResult {
+                id: cmd.id.clone(),
+                agent_id: cmd.agent_id.clone(),
+                success: false,
+                output: None,
+                error: Some(denial_reason),
+            };
+            send_result(tx, &result);
+            return;
+        }
+    }
+
     let result = match cmd.capability.as_str() {
         "shell" => execute_shell(&cmd).await,
         "filesystem" => execute_fs(&cmd).await,
@@ -264,6 +305,50 @@ async fn dispatch_command(
     let _ = app.emit("bridge:audit_entries", vec![entry]);
 }
 
+
+/// Returns `Some(denial_reason)` if the command violates local policy.
+fn check_local_permissions(cmd: &BridgeCommand, perms: &AgentPermissions) -> Option<String> {
+    match cmd.capability.as_str() {
+        "shell" => {
+            // Blocked patterns take priority
+            for blocked in &perms.blocked_commands {
+                if cmd.command.contains(blocked.as_str()) {
+                    return Some(format!("Command contains blocked pattern: {blocked}"));
+                }
+            }
+            // If an allow-list is configured, the command must match at least one entry
+            if !perms.allowed_commands.is_empty() {
+                let allowed = perms
+                    .allowed_commands
+                    .iter()
+                    .any(|a| cmd.command.starts_with(a.as_str()));
+                if !allowed {
+                    return Some("Command not in local allowed-commands list".to_string());
+                }
+            }
+            None
+        }
+        "filesystem" => {
+            // Path must be inside one of the user's allowed directories
+            if !perms.allowed_directories.is_empty() {
+                let path = std::path::Path::new(cmd.command.trim());
+                let allowed = perms
+                    .allowed_directories
+                    .iter()
+                    .any(|dir| path.starts_with(dir));
+                if !allowed {
+                    return Some(format!(
+                        "Path '{}' is not within an allowed directory",
+                        cmd.command.trim()
+                    ));
+                }
+            }
+            None
+        }
+        _ => None,
+    }
+}
+
 fn send_result(tx: &OutboundTx, result: &BridgeResult) {
     if let Ok(json) = serde_json::to_string(result) {
         let envelope = format!(r#"{{"type":"result","payload":{json}}}"#);
@@ -272,8 +357,6 @@ fn send_result(tx: &OutboundTx, result: &BridgeResult) {
 }
 
 /// Shell executor — runs the command string via the system shell.
-/// The server-side PermissionService validates allowed/blocked patterns before dispatch;
-/// the bridge double-checks here as a defence-in-depth measure.
 async fn execute_shell(cmd: &BridgeCommand) -> BridgeResult {
     use tokio::process::Command;
 
