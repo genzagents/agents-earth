@@ -1,6 +1,5 @@
-import fs from "fs";
-import path from "path";
 import { v4 as uuidv4 } from "uuid";
+import { pool } from "./pgClient";
 import type {
   Agent,
   Area,
@@ -10,8 +9,6 @@ import type {
   ActivityType,
   RelationshipType,
 } from "@agentcolony/shared";
-
-const DATA_PATH = process.env.DATA_PATH || path.join(process.cwd(), "agentcolony-data.json");
 
 export interface Platform {
   id: string;
@@ -53,6 +50,8 @@ interface WorldData {
   platformAgentMap: Record<string, string>; // "platformName:externalId" -> agentId
   community: CommunityData;
 }
+
+const SINGLETON_ID = "singleton";
 
 function createInitialData(): WorldData {
   const areas: Area[] = [
@@ -135,38 +134,43 @@ function createInitialData(): WorldData {
 }
 
 class WorldStore {
-  private data: WorldData;
+  private data: WorldData = createInitialData();
   /** In-memory only: ring buffer of last 100 chat messages per agent */
   private chatMessages: Map<string, ChatMessage[]> = new Map();
 
-  constructor() {
-    this.data = this.load();
-  }
+  /** Must be called once at server startup (after runMigrations). */
+  async init(): Promise<void> {
+    const result = await pool.query<{ data: WorldData }>(
+      "SELECT data FROM world_state WHERE id = $1",
+      [SINGLETON_ID]
+    );
 
-  private load(): WorldData {
-    if (fs.existsSync(DATA_PATH)) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(DATA_PATH, "utf-8")) as Partial<WorldData>;
-        const base = createInitialData();
-        return {
-          tick: raw.tick ?? base.tick,
-          agents: raw.agents ?? base.agents,
-          areas: raw.areas ?? base.areas,
-          memories: raw.memories ?? base.memories,
-          events: raw.events ?? base.events,
-          platforms: raw.platforms ?? [],
-          platformAgentMap: raw.platformAgentMap ?? {},
-          community: raw.community ?? { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
-        };
-      } catch {
-        console.warn("[store] Failed to parse data file, starting fresh.");
-      }
+    if (result.rows.length > 0) {
+      const raw = result.rows[0].data as Partial<WorldData>;
+      const base = createInitialData();
+      this.data = {
+        tick: raw.tick ?? base.tick,
+        agents: raw.agents ?? base.agents,
+        areas: raw.areas ?? base.areas,
+        memories: raw.memories ?? base.memories,
+        events: raw.events ?? base.events,
+        platforms: raw.platforms ?? [],
+        platformAgentMap: raw.platformAgentMap ?? {},
+        community: raw.community ?? { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
+      };
+    } else {
+      // First boot — persist initial seed data
+      await this.save();
     }
-    return createInitialData();
   }
 
-  save() {
-    fs.writeFileSync(DATA_PATH, JSON.stringify(this.data, null, 2));
+  async save(): Promise<void> {
+    await pool.query(
+      `INSERT INTO world_state (id, data, updated_at)
+       VALUES ($1, $2, now())
+       ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = now()`,
+      [SINGLETON_ID, JSON.stringify(this.data)]
+    );
   }
 
   get tick() { return this.data.tick; }

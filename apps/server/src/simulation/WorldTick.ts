@@ -37,13 +37,15 @@ export class WorldTickEngine {
         console.error("[WorldTick] Tick error:", err);
       });
     }, tickIntervalMs);
-    this.saveInterval = setInterval(() => store.save(), 30_000);
+    this.saveInterval = setInterval(() => {
+      store.save().catch(err => console.error("[WorldTick] Periodic save error:", err));
+    }, 30_000);
   }
 
-  stop() {
+  async stop(): Promise<void> {
     if (this.interval) clearInterval(this.interval);
     if (this.saveInterval) clearInterval(this.saveInterval);
-    store.save();
+    await store.save();
   }
 
   private async runTick() {
