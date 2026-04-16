@@ -3,6 +3,7 @@ import { createMagicToken, consumeMagicToken } from "../auth/magicLink";
 import { sendMagicLinkEmail } from "../auth/email";
 import { findUserByEmail, findUserById, createUser } from "../auth/userStore";
 import { createSession, findSession, deleteSession } from "../auth/sessions";
+import { provisionWallet } from "../auth/walletProvisioner";
 
 const SESSION_COOKIE = "agentcolony_session";
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3001";
@@ -80,10 +81,17 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
         return reply.code(400).send({ error: "Token/email mismatch." });
       }
 
-      // Upsert user
-      const user = await (findUserByEmail(verifiedEmail).then(
-        (u) => u ?? createUser(verifiedEmail)
-      ));
+      // Upsert user; track whether this is a brand-new signup
+      const existing = await findUserByEmail(verifiedEmail);
+      const user = existing ?? (await createUser(verifiedEmail));
+      const isNewUser = !existing;
+
+      // Auto-provision EVM wallet on Base via Privy for new users
+      if (isNewUser && !user.walletAddress) {
+        provisionWallet(user.id, verifiedEmail).catch((err) => {
+          fastify.log.warn({ err, userId: user.id }, "Background wallet provisioning failed");
+        });
+      }
 
       const session = await createSession(user.id);
 

@@ -201,6 +201,11 @@ class WorldStore {
     this.data.agents.push(agent);
   }
 
+  updateAgentField(agentId: string, fields: Partial<Agent>) {
+    const agent = this.data.agents.find(a => a.id === agentId);
+    if (agent) Object.assign(agent, fields);
+  }
+
   getAgent(id: string) {
     return this.data.agents.find(a => a.id === id);
   }

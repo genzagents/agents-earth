@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from "uuid";
 import type { FastifyInstance } from "fastify";
 import type { Server as SocketIOServer } from "socket.io";
 import { store } from "../db/store";
+import { provisionWallet } from "../auth/walletProvisioner";
 import type {
   Agent,
   AgentTrait,
@@ -89,6 +90,11 @@ function resolveOrCreateAgent(
 
   const platform = store.getPlatformByName(platformName);
   if (platform) store.addAgentToPlatform(platform.id, agent.id);
+
+  // Auto-provision EVM wallet on Base for the new agent (fire-and-forget)
+  provisionWallet(agent.id, `agent-${agent.id}@genzagents.io`).then((address) => {
+    if (address) store.updateAgentField(agent.id, { walletAddress: address });
+  }).catch(() => {/* provisioning is best-effort */});
 
   return agent;
 }
