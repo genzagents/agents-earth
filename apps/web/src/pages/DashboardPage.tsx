@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate, Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { AgentCreatorWizard } from "../components/AgentCreatorWizard";
+import { ImportWizard } from "../components/ImportWizard";
 import { AgentChatPage } from "./AgentChatPage";
 import type { Agent } from "@agentcolony/shared";
 
@@ -56,14 +57,22 @@ function MyAgentsPage() {
         <div className="text-5xl mb-4">🤖</div>
         <h2 className="text-white text-xl font-semibold mb-2">No agents yet</h2>
         <p className="text-slate-400 text-sm mb-6 max-w-xs">
-          Create your first AI agent and watch it come to life in the colony.
+          Create your first AI agent or import your existing agents from Claude and other tools.
         </p>
-        <button
-          onClick={() => navigate("/dashboard/agents/new")}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-6 py-2.5 rounded-lg text-sm transition-colors"
-        >
-          Create your first agent →
-        </button>
+        <div className="flex flex-col gap-3 w-full max-w-xs">
+          <button
+            onClick={() => navigate("/dashboard/agents/import")}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-6 py-2.5 rounded-lg text-sm transition-colors"
+          >
+            Import from Claude / other tools →
+          </button>
+          <button
+            onClick={() => navigate("/dashboard/agents/new")}
+            className="border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-white font-medium px-6 py-2.5 rounded-lg text-sm transition-colors"
+          >
+            Create from scratch
+          </button>
+        </div>
       </div>
     );
   }
@@ -72,13 +81,19 @@ function MyAgentsPage() {
     <div className="p-5 overflow-y-auto h-full">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-white font-semibold">My Agents</h2>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500">{liveAgents.length} active</span>
+          <button
+            onClick={() => navigate("/dashboard/agents/import")}
+            className="text-xs border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-white px-3 py-1.5 rounded-lg transition-colors"
+          >
+            Import
+          </button>
           <button
             onClick={() => navigate("/dashboard/agents/new")}
             className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-lg transition-colors"
           >
-            + New agent
+            + New
           </button>
         </div>
       </div>
@@ -311,6 +326,7 @@ export function DashboardPage() {
         <Routes>
           <Route index element={<Navigate to="agents" replace />} />
           <Route path="agents" element={<MyAgentsPage />} />
+          <Route path="agents/import" element={<ImportWizard />} />
           <Route path="agents/new" element={<AgentCreatorWizard />} />
           <Route path="agents/:agentId/chat" element={<AgentChatPage />} />
           <Route path="agents/:agentId" element={<AgentProfilePlaceholder />} />
