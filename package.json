@@ -11,6 +11,8 @@
     "dev:server": "npm run dev --workspace=apps/server",
     "dev:web": "npm run dev --workspace=apps/web",
     "build": "npm run build --workspaces",
+    "build:desktop": "VITE_SERVER_URL=https://genzagents.io npm run build --workspace=apps/web && npm run build --workspace=apps/desktop",
+    "build:desktop:win": "VITE_SERVER_URL=https://genzagents.io npm run build --workspace=apps/web && npm run build:win --workspace=apps/desktop",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
   "devDependencies": {
