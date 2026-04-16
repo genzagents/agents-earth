@@ -35,7 +35,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     return engine.getSnapshot();
   });
 
-  fastify.get("/api/agents", async () => {
+  fastify.get("/api/world/agents", async () => {
     return store.agents.map(a => ({
       id: a.id,
       name: a.name,
@@ -48,19 +48,19 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     }));
   });
 
-  fastify.get<{ Params: { id: string } }>("/api/agents/:id", async (req, reply) => {
+  fastify.get<{ Params: { id: string } }>("/api/world/agents/:id", async (req, reply) => {
     const agent = store.getAgent(req.params.id);
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
     return agent;
   });
 
-  fastify.get<{ Params: { id: string } }>("/api/agents/:id/memories", async (req, reply) => {
+  fastify.get<{ Params: { id: string } }>("/api/world/agents/:id/memories", async (req, reply) => {
     const agent = store.getAgent(req.params.id);
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
     return store.getAgentMemories(req.params.id);
   });
 
-  fastify.get<{ Params: { id: string } }>("/api/agents/:id/relationships", async (req, reply) => {
+  fastify.get<{ Params: { id: string } }>("/api/world/agents/:id/relationships", async (req, reply) => {
     const agent = store.getAgent(req.params.id);
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
 
@@ -77,7 +77,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     });
   });
 
-  fastify.post<{ Body: CreateAgentBody }>("/api/agents", {
+  fastify.post<{ Body: CreateAgentBody }>("/api/world/agents", {
     schema: {
       body: {
         type: "object",
@@ -129,7 +129,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     return reply.code(201).send(newAgent);
   });
 
-  fastify.post<{ Params: { id: string }; Body: { message: string } }>("/api/agents/:id/chat", {
+  fastify.post<{ Params: { id: string }; Body: { message: string } }>("/api/world/agents/:id/chat", {
     schema: {
       body: {
         type: "object",
