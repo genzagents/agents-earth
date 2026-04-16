@@ -8,12 +8,18 @@ import { platformRoutes } from "./routes/platforms";
 import { webhookRoutes } from "./routes/webhooks";
 import { createOpenClawBridge } from "./socket/openclawBridge";
 import { communityRoutes } from "./routes/community";
+import { runMigrations } from "./db/migrate";
+import { store } from "./db/store";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "0.0.0.0";
 const TICK_INTERVAL_MS = parseInt(process.env.TICK_INTERVAL_MS || "2000", 10);
 
 async function main() {
+  // Run DB migrations then load world state
+  await runMigrations();
+  await store.init();
+
   // Create Fastify instance
   const fastify = Fastify({ logger: { level: "info" } });
 

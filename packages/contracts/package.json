@@ -1,0 +1,19 @@
+{
+  "name": "@agentcolony/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AgentColony smart contracts — RegistryDID on Base L2",
+  "scripts": {
+    "compile": "hardhat compile",
+    "deploy:base-sepolia": "hardhat run scripts/deploy.ts --network base-sepolia",
+    "deploy:base": "hardhat run scripts/deploy.ts --network base",
+    "test": "hardhat test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "@types/node": "^20.12.7",
+    "hardhat": "^2.22.3",
+    "typescript": "^5.4.5"
+  }
+}

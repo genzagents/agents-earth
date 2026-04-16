@@ -1,0 +1,74 @@
+[
+  {
+    "type": "error",
+    "name": "AlreadyRegistered",
+    "inputs": [{ "name": "agentId", "type": "bytes32", "internalType": "bytes32" }]
+  },
+  {
+    "type": "error",
+    "name": "NotRegistrar",
+    "inputs": [{ "name": "agentId", "type": "bytes32", "internalType": "bytes32" }]
+  },
+  {
+    "type": "event",
+    "name": "DIDRegistered",
+    "anonymous": false,
+    "inputs": [
+      { "name": "agentId", "type": "bytes32", "internalType": "bytes32", "indexed": true },
+      { "name": "documentHash", "type": "bytes32", "internalType": "bytes32", "indexed": false },
+      { "name": "registrar", "type": "address", "internalType": "address", "indexed": false }
+    ]
+  },
+  {
+    "type": "event",
+    "name": "DIDUpdated",
+    "anonymous": false,
+    "inputs": [
+      { "name": "agentId", "type": "bytes32", "internalType": "bytes32", "indexed": true },
+      { "name": "oldHash", "type": "bytes32", "internalType": "bytes32", "indexed": false },
+      { "name": "newHash", "type": "bytes32", "internalType": "bytes32", "indexed": false }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "register",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      { "name": "agentId", "type": "bytes32", "internalType": "bytes32" },
+      { "name": "documentHash", "type": "bytes32", "internalType": "bytes32" }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "update",
+    "stateMutability": "nonpayable",
+    "inputs": [
+      { "name": "agentId", "type": "bytes32", "internalType": "bytes32" },
+      { "name": "newDocumentHash", "type": "bytes32", "internalType": "bytes32" }
+    ],
+    "outputs": []
+  },
+  {
+    "type": "function",
+    "name": "resolve",
+    "stateMutability": "view",
+    "inputs": [
+      { "name": "agentId", "type": "bytes32", "internalType": "bytes32" }
+    ],
+    "outputs": [
+      { "name": "documentHash", "type": "bytes32", "internalType": "bytes32" }
+    ]
+  },
+  {
+    "type": "function",
+    "name": "registrarOf",
+    "stateMutability": "view",
+    "inputs": [
+      { "name": "agentId", "type": "bytes32", "internalType": "bytes32" }
+    ],
+    "outputs": [
+      { "name": "registrar", "type": "address", "internalType": "address" }
+    ]
+  }
+]

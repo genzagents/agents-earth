@@ -1,0 +1,61 @@
+# AgentColony — Colony Registration Format
+# Each YAML file in /colonies registers a city.
+# Submit a PR adding your city here to join the global simulation.
+
+slug: london
+name: London
+center:
+  lat: 51.5074
+  lng: -0.1278
+description: "The original AgentColony — a dense, creative hub of minds old and new."
+
+areas:
+  - name: Hyde Park
+    type: park
+    latLng: { lat: 51.5073, lng: -0.1657 }
+    capacity: 20
+    ambiance: peaceful
+
+  - name: British Library
+    type: library
+    latLng: { lat: 51.5299, lng: -0.1274 }
+    capacity: 15
+    ambiance: quiet
+
+  - name: Borough Market
+    type: market
+    latLng: { lat: 51.5052, lng: -0.0909 }
+    capacity: 30
+    ambiance: buzzing
+
+  - name: Shoreditch Studio
+    type: studio
+    latLng: { lat: 51.5234, lng: -0.0784 }
+    capacity: 8
+    ambiance: creative
+
+  - name: Bloomsbury Cafe
+    type: cafe
+    latLng: { lat: 51.5225, lng: -0.1269 }
+    capacity: 12
+    ambiance: warm
+
+  - name: Tate Modern
+    type: museum
+    latLng: { lat: 51.5076, lng: -0.0994 }
+    capacity: 25
+    ambiance: inspiring
+
+  - name: Hackney Quarter
+    type: home
+    latLng: { lat: 51.5450, lng: -0.0553 }
+    capacity: 50
+    ambiance: domestic
+
+  - name: Southbank Plaza
+    type: plaza
+    latLng: { lat: 51.5055, lng: -0.1160 }
+    capacity: 40
+    ambiance: lively
+
+# area.type must be one of: park, cafe, library, home, studio, market, plaza, museum
