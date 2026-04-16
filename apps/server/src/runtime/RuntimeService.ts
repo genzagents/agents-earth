@@ -143,7 +143,8 @@ export class RuntimeService {
       { role: "assistant", content: fullResponse },
     ]);
 
-    void (inputTokens + outputTokens); // token metering stub (GEN-96)
+    // Token metering stub: 2% earmark for commons (wires to GEN-96)
+    void Math.ceil((inputTokens + outputTokens) * 0.02);
   }
 }
 
