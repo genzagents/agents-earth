@@ -15,8 +15,11 @@ import { runtimeRoutes } from "./routes/runtime";
 import { memoryRoutes } from "./routes/memory";
 import { pickupRoutes } from "./routes/pickup";
 import { bridgeRoutes } from "./routes/bridge";
+import { billingRoutes } from "./routes/billing";
 import { initAuthSchema } from "./auth/db";
 import { initBridgeSchema } from "./bridge/PermissionService";
+import { initBillingSchema } from "./billing/TokenMeter";
+import { startMemoryConsolidationJob } from "./jobs/MemoryConsolidationJob";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -33,10 +36,11 @@ async function main() {
 
   await fastify.register(cookie);
 
-  // Initialise auth + bridge schemas in Supabase (idempotent)
+  // Initialise all schemas in Supabase (idempotent)
   try {
     await initAuthSchema();
     await initBridgeSchema();
+    await initBillingSchema();
     fastify.log.info("Schemas initialised");
   } catch (err) {
     fastify.log.warn({ err }, "Schema init failed — some routes may not work");
@@ -55,6 +59,7 @@ async function main() {
   await fastify.register(memoryRoutes);
   await fastify.register(pickupRoutes);
   await fastify.register(bridgeRoutes);
+  await fastify.register(billingRoutes);
 
   // Start HTTP server
   const address = await fastify.listen({ port: PORT, host: HOST });
@@ -99,6 +104,9 @@ async function main() {
 
   engine.start(TICK_INTERVAL_MS);
   console.log(`[sim] Simulation started (tick every ${TICK_INTERVAL_MS}ms)`);
+
+  // Start nightly memory consolidation job
+  startMemoryConsolidationJob(fastify.log);
 }
 
 main().catch((err) => {

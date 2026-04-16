@@ -4,6 +4,8 @@ import {
   getConversation,
   appendToConversation,
 } from "../db/ownedAgentStore";
+import { routeRequest } from "./ModelRouter";
+import { chargeInvocation } from "../billing/TokenMeter";
 
 export interface InvokeParams {
   agentId: string;
@@ -45,8 +47,14 @@ export class RuntimeService {
       { role: "user" as const, content: message },
     ];
 
+    const route = routeRequest(agent.model, {
+      messageLength: message.length,
+      historyLength: recentHistory.length,
+      systemPromptLength: (agent.systemPrompt || "").length,
+    });
+
     const response = await client.messages.create({
-      model: agent.model || "claude-sonnet-4-6",
+      model: route.model,
       max_tokens: 4096,
       system: agent.systemPrompt || undefined,
       messages,
@@ -68,8 +76,14 @@ export class RuntimeService {
       { role: "assistant", content: assistantContent },
     ]);
 
-    // Token metering stub: 2% earmark for commons (wires to GEN-96)
-    void Math.ceil(tokensUsed.total * 0.02);
+    // Token metering: deduct credits + earmark 2% for commons
+    await chargeInvocation({
+      userId,
+      agentId,
+      model: route.model,
+      inputTokens: tokensUsed.input,
+      outputTokens: tokensUsed.output,
+    });
 
     return { response: assistantContent, tokensUsed };
   }
@@ -95,12 +109,18 @@ export class RuntimeService {
       { role: "user" as const, content: message },
     ];
 
+    const streamRoute = routeRequest(agent.model, {
+      messageLength: message.length,
+      historyLength: recentHistory.length,
+      systemPromptLength: (agent.systemPrompt || "").length,
+    });
+
     let fullResponse = "";
     let inputTokens = 0;
     let outputTokens = 0;
 
     const stream = await client.messages.create({
-      model: agent.model || "claude-sonnet-4-6",
+      model: streamRoute.model,
       max_tokens: 4096,
       system: agent.systemPrompt || undefined,
       messages,
