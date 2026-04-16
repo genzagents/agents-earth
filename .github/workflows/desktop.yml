@@ -1,0 +1,136 @@
+name: Desktop — Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write  # needed to upload release assets
+
+jobs:
+  build-mac:
+    name: macOS (dmg — x64 + arm64)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web (with production server URL)
+        run: VITE_SERVER_URL=https://genzagents.io npm run build --workspace=apps/web
+
+      - name: Compile Electron main + preload
+        run: npx tsc -p apps/desktop/tsconfig.json
+
+      - name: Build macOS installer
+        run: npm run build:mac --workspace=apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload .dmg artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentcolony-mac
+          path: apps/desktop/release/*.dmg
+          if-no-files-found: error
+
+      - name: Attach release assets (mac)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/desktop/release/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-win:
+    name: Windows (exe — x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web (with production server URL)
+        run: npx cross-env VITE_SERVER_URL=https://genzagents.io npm run build --workspace=apps/web
+
+      - name: Compile Electron main + preload
+        run: npx tsc -p apps/desktop/tsconfig.json
+
+      - name: Build Windows installer
+        run: npm run build:win --workspace=apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload .exe artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentcolony-win
+          path: apps/desktop/release/*.exe
+          if-no-files-found: error
+
+      - name: Attach release assets (win)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/desktop/release/*.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-linux:
+    name: Linux (AppImage — x64)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web (with production server URL)
+        run: VITE_SERVER_URL=https://genzagents.io npm run build --workspace=apps/web
+
+      - name: Compile Electron main + preload
+        run: npx tsc -p apps/desktop/tsconfig.json
+
+      - name: Build Linux AppImage
+        run: npm run build:linux --workspace=apps/desktop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload .AppImage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentcolony-linux
+          path: apps/desktop/release/*.AppImage
+          if-no-files-found: error
+
+      - name: Attach release assets (linux)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/desktop/release/*.AppImage
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,64 @@
+{
+  "name": "@agentcolony/desktop",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AgentColony desktop app — Electron wrapper",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && electron-builder",
+    "build:mac": "tsc -p tsconfig.json && electron-builder --mac",
+    "build:win": "tsc -p tsconfig.json && electron-builder --win",
+    "build:linux": "tsc -p tsconfig.json && electron-builder --linux",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^31.7.6",
+    "electron-builder": "^24.13.3",
+    "typescript": "^5.4.5"
+  },
+  "build": {
+    "appId": "io.genzagents.agentcolony",
+    "productName": "AgentColony",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      {
+        "from": "dist-electron",
+        "to": "dist-electron"
+      },
+      {
+        "from": "../web/dist",
+        "to": "dist"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "icon": "assets/icon.icns"
+    },
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] }
+      ],
+      "icon": "assets/icon.png",
+      "category": "Network"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "genzagents",
+      "repo": "agents-earth"
+    }
+  }
+}
