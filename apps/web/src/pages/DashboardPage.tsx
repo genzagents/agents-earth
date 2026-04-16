@@ -107,11 +107,11 @@ function MyAgentsPage() {
             <div
               className="w-8 h-8 rounded-full flex-shrink-0 border-2 border-slate-600 cursor-pointer"
               style={{ backgroundColor: agent.avatar }}
-              onClick={() => navigate(`/?agent=${agent.id}`)}
+              onClick={() => navigate(`/dashboard/agents/${agent.id}`)}
             />
             <div
               className="min-w-0 flex-1 cursor-pointer"
-              onClick={() => navigate(`/?agent=${agent.id}`)}
+              onClick={() => navigate(`/dashboard/agents/${agent.id}`)}
             >
               <p className="text-white text-sm font-medium truncate">{agent.name}</p>
               <p className="text-slate-400 text-xs truncate">
