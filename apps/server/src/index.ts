@@ -14,7 +14,9 @@ import { agentRoutes } from "./routes/agents";
 import { runtimeRoutes } from "./routes/runtime";
 import { memoryRoutes } from "./routes/memory";
 import { pickupRoutes } from "./routes/pickup";
+import { bridgeRoutes } from "./routes/bridge";
 import { initAuthSchema } from "./auth/db";
+import { initBridgeSchema } from "./bridge/PermissionService";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -31,12 +33,13 @@ async function main() {
 
   await fastify.register(cookie);
 
-  // Initialise auth schema in Supabase (idempotent)
+  // Initialise auth + bridge schemas in Supabase (idempotent)
   try {
     await initAuthSchema();
-    fastify.log.info("Auth schema initialised");
+    await initBridgeSchema();
+    fastify.log.info("Schemas initialised");
   } catch (err) {
-    fastify.log.warn({ err }, "Auth schema init failed — auth routes may not work");
+    fastify.log.warn({ err }, "Schema init failed — some routes may not work");
   }
 
   // Create simulation engine
@@ -51,6 +54,7 @@ async function main() {
   await fastify.register(runtimeRoutes);
   await fastify.register(memoryRoutes);
   await fastify.register(pickupRoutes);
+  await fastify.register(bridgeRoutes);
 
   // Start HTTP server
   const address = await fastify.listen({ port: PORT, host: HOST });
