@@ -11,6 +11,8 @@ import { createOpenClawBridge } from "./socket/openclawBridge";
 import { communityRoutes } from "./routes/community";
 import { authRoutes } from "./routes/auth";
 import { agentRoutes } from "./routes/agents";
+import { runtimeRoutes } from "./routes/runtime";
+import { memoryRoutes } from "./routes/memory";
 import { initAuthSchema } from "./auth/db";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
@@ -45,6 +47,8 @@ async function main() {
   await fastify.register(communityRoutes);
   await fastify.register(authRoutes);
   await fastify.register(agentRoutes);
+  await fastify.register(runtimeRoutes);
+  await fastify.register(memoryRoutes);
 
   // Start HTTP server
   const address = await fastify.listen({ port: PORT, host: HOST });
