@@ -17,6 +17,7 @@ function makeMockEngine(): WorldTickEngine {
         areas: store.areas,
         agents: store.agents,
         recentEvents: [],
+        cities: [],
       };
     },
     onTick() {},
