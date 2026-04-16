@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import { Server as SocketIOServer } from "socket.io";
 import type { ServerToClientEvents, ClientToServerEvents } from "@agentcolony/shared";
 import { WorldTickEngine } from "./simulation/WorldTick";
@@ -8,6 +9,8 @@ import { platformRoutes } from "./routes/platforms";
 import { webhookRoutes } from "./routes/webhooks";
 import { createOpenClawBridge } from "./socket/openclawBridge";
 import { communityRoutes } from "./routes/community";
+import { authRoutes } from "./routes/auth";
+import { initAuthSchema } from "./auth/db";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -22,6 +25,16 @@ async function main() {
     credentials: true,
   });
 
+  await fastify.register(cookie);
+
+  // Initialise auth schema in Supabase (idempotent)
+  try {
+    await initAuthSchema();
+    fastify.log.info("Auth schema initialised");
+  } catch (err) {
+    fastify.log.warn({ err }, "Auth schema init failed — auth routes may not work");
+  }
+
   // Create simulation engine
   const engine = new WorldTickEngine();
 
@@ -29,6 +42,7 @@ async function main() {
   await fastify.register(worldRoutes, { engine });
   await fastify.register(platformRoutes);
   await fastify.register(communityRoutes);
+  await fastify.register(authRoutes);
 
   // Start HTTP server
   const address = await fastify.listen({ port: PORT, host: HOST });
