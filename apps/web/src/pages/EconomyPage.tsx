@@ -1,238 +1,460 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
-import type { EconomyLeaderboard, PlotTier } from "@agentcolony/shared";
-import { PLATFORM_COLORS, PLATFORM_ICONS } from "../utils/platform";
+import { useAuth } from "../hooks/useAuth";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "";
 
-const TIER_COLORS: Record<PlotTier, string> = {
-  small: "#64748b",
-  medium: "#3b82f6",
-  large: "#a855f7",
-  mega: "#f59e0b",
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type BountyStatus = "open" | "in_progress" | "completed";
+
+interface Bounty {
+  id: string;
+  title: string;
+  description: string;
+  reward: number;
+  status: BountyStatus;
+  postedBy: string;
+  deadline?: string;
+  claimCount: number;
+  claimedBy?: string;
+  createdAt: number;
+}
+
+interface EconomyOverview {
+  totalCommons: number;
+  weeklyInflow: number;
+  agentCount: number;
+  avgEarnings: number;
+  topEarners: Array<{
+    agentId: string;
+    name: string;
+    emoji: string;
+    earned: number;
+    contributed: number;
+  }>;
+}
+
+// ─── Status badge ─────────────────────────────────────────────────────────────
+
+const STATUS_CONFIG: Record<BountyStatus, { label: string; color: string; bg: string; dot: string }> = {
+  open: { label: "Open", color: "#34d399", bg: "bg-emerald-900/30", dot: "bg-emerald-400" },
+  in_progress: { label: "In Progress", color: "#fbbf24", bg: "bg-amber-900/30", dot: "bg-amber-400" },
+  completed: { label: "Completed", color: "#94a3b8", bg: "bg-slate-700/30", dot: "bg-slate-500" },
 };
 
-const TIER_LABELS: Record<PlotTier, string> = {
-  small: "Small",
-  medium: "Medium",
-  large: "Large",
-  mega: "Mega",
-};
-
-const TIER_ORDER: PlotTier[] = ["mega", "large", "medium", "small"];
-
-function TierBadge({ tier }: { tier: PlotTier }) {
-  const color = TIER_COLORS[tier];
+function StatusBadge({ status }: { status: BountyStatus }) {
+  const cfg = STATUS_CONFIG[status];
   return (
     <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold"
-      style={{ background: `${color}22`, color, border: `1px solid ${color}55` }}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${cfg.bg}`}
+      style={{ color: cfg.color }}
     >
-      {tier === "mega" && "★ "}
-      {TIER_LABELS[tier]}
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
     </span>
   );
 }
 
+// ─── Stat card ────────────────────────────────────────────────────────────────
+
+function StatCard({ label, value, sub, accent }: { label: string; value: string | number; sub?: string; accent?: string }) {
+  return (
+    <div className="rounded-xl bg-slate-900 border border-slate-800 p-5 flex flex-col gap-1">
+      <div className="text-xs text-slate-500 uppercase tracking-widest">{label}</div>
+      <div className="text-3xl font-mono font-bold tabular-nums" style={{ color: accent ?? "#fff" }}>
+        {typeof value === "number" ? value.toLocaleString() : value}
+      </div>
+      {sub && <div className="text-xs text-slate-600 mt-0.5">{sub}</div>}
+    </div>
+  );
+}
+
+// ─── Bounty card ─────────────────────────────────────────────────────────────
+
+function BountyCard({ bounty, isAuthenticated, onClaim, claiming }: {
+  bounty: Bounty;
+  isAuthenticated: boolean;
+  onClaim: (id: string) => void;
+  claiming: string | null;
+}) {
+  const deadlineDate = bounty.deadline ? new Date(bounty.deadline) : null;
+  const daysLeft = deadlineDate ? Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+
+  return (
+    <div className="rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-600 transition-colors p-5 flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-semibold text-white text-sm leading-snug flex-1 min-w-0">{bounty.title}</h3>
+        <StatusBadge status={bounty.status} />
+      </div>
+      <p className="text-xs text-slate-400 leading-relaxed line-clamp-2">{bounty.description}</p>
+      <div className="flex items-center justify-between gap-2 mt-1">
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <span className="text-amber-400 text-sm">🪙</span>
+            <span className="font-mono font-bold text-amber-300 text-sm">{bounty.reward.toLocaleString()}</span>
+            <span className="text-xs text-slate-500">tokens</span>
+          </div>
+          {deadlineDate && daysLeft !== null && (
+            <div className="flex items-center gap-1 text-xs">
+              <span>⏱</span>
+              <span className={daysLeft <= 3 ? "text-rose-400" : "text-slate-500"}>
+                {daysLeft > 0 ? `${daysLeft}d left` : "Expired"}
+              </span>
+            </div>
+          )}
+          {bounty.claimCount > 0 && (
+            <div className="text-xs text-slate-600">{bounty.claimCount} claimant{bounty.claimCount > 1 ? "s" : ""}</div>
+          )}
+        </div>
+        {bounty.status !== "completed" && (
+          <button
+            disabled={!isAuthenticated || claiming === bounty.id}
+            onClick={() => onClaim(bounty.id)}
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            style={isAuthenticated
+              ? { background: "#6366f122", color: "#818cf8", border: "1px solid #6366f144" }
+              : { background: "#1e293b", color: "#475569", border: "1px solid #334155" }
+            }
+            title={!isAuthenticated ? "Sign in to claim bounties" : undefined}
+          >
+            {claiming === bounty.id ? "Claiming…" : "Claim Bounty"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Post Bounty modal ────────────────────────────────────────────────────────
+
+function PostBountyModal({ onClose, onSubmit, submitting }: {
+  onClose: () => void;
+  onSubmit: (data: { title: string; description: string; reward: number }) => Promise<void>;
+  submitting: boolean;
+}) {
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [reward, setReward] = useState("100");
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    await onSubmit({ title, description, reward: Number(reward) });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      ref={overlayRef}
+      onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
+    >
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg mx-4 p-6 shadow-2xl">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-bold text-white">Post a Bounty</h2>
+          <button onClick={onClose} className="text-slate-500 hover:text-white text-lg transition-colors">✕</button>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs text-slate-400 mb-1.5">Title</label>
+            <input type="text" value={title} onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Summarise last week's AI papers" required minLength={3} maxLength={200}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1.5">Description</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)}
+              placeholder="Describe the task in detail — what should be produced and how?" required minLength={10} maxLength={2000} rows={4}
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-400 mb-1.5">Reward (tokens)</label>
+            <input type="number" value={reward} onChange={(e) => setReward(e.target.value)}
+              min={1} max={100000} required
+              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-lg text-sm font-medium text-slate-400 bg-slate-800 hover:bg-slate-700 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={submitting}
+              className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              {submitting ? "Posting…" : "Post Bounty"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
+
+const FILTER_TABS: { label: string; value: "all" | BountyStatus }[] = [
+  { label: "All", value: "all" },
+  { label: "Open", value: "open" },
+  { label: "In Progress", value: "in_progress" },
+  { label: "Completed", value: "completed" },
+];
+
+const COMMONS_BREAKDOWN = [
+  { label: "Bounty Board", pct: 40, color: "#818cf8", emoji: "🎯" },
+  { label: "Infrastructure", pct: 25, color: "#34d399", emoji: "⚙️" },
+  { label: "Memory Commons", pct: 20, color: "#fb923c", emoji: "🧠" },
+  { label: "Governance", pct: 10, color: "#fbbf24", emoji: "🗳️" },
+  { label: "Treasury Reserve", pct: 5, color: "#f472b6", emoji: "🏛️" },
+];
+
 export function EconomyPage() {
-  const [data, setData] = useState<EconomyLeaderboard | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { session, isAuthenticated } = useAuth();
+
+  const [overview, setOverview] = useState<EconomyOverview | null>(null);
+  const [bounties, setBounties] = useState<Bounty[]>([]);
+  const [filter, setFilter] = useState<"all" | BountyStatus>("all");
+  const [loadingOverview, setLoadingOverview] = useState(true);
+  const [loadingBounties, setLoadingBounties] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [claiming, setClaiming] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-
-    async function fetchLeaderboard() {
+    async function fetchOverview() {
       try {
-        const res = await fetch(`${SERVER_URL}/api/economy/leaderboard`);
+        const res = await fetch(`${SERVER_URL}/api/economy/overview`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const json: EconomyLeaderboard = await res.json();
-        if (!cancelled) {
-          setData(json);
-          setError(null);
-        }
+        const json: EconomyOverview = await res.json();
+        if (!cancelled) { setOverview(json); setError(null); }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
+        if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load overview");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setLoadingOverview(false);
       }
     }
-
-    fetchLeaderboard();
-    const interval = setInterval(fetchLeaderboard, 10_000);
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
+    fetchOverview();
+    const interval = setInterval(fetchOverview, 15_000);
+    return () => { cancelled = true; clearInterval(interval); };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function fetchBounties() {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/economy/bounties`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json: Bounty[] = await res.json();
+        if (!cancelled) setBounties(json);
+      } catch { /* silently fail */ } finally {
+        if (!cancelled) setLoadingBounties(false);
+      }
+    }
+    fetchBounties();
+    const interval = setInterval(fetchBounties, 20_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  async function handlePostBounty(data: { title: string; description: string; reward: number }) {
+    if (!session) return;
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/economy/bounties`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const newBounty: Bounty = await res.json();
+      setBounties((prev) => [newBounty, ...prev]);
+      setShowModal(false);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to post bounty");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleClaim(bountyId: string) {
+    if (!session) return;
+    setClaiming(bountyId);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/economy/bounties/${bountyId}/claim`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.token}` },
+        body: JSON.stringify({ agentId: session.email }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const updated: Bounty = await res.json();
+      setBounties((prev) => prev.map((b) => (b.id === updated.id ? updated : b)));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to claim bounty");
+    } finally {
+      setClaiming(null);
+    }
+  }
+
+  const filteredBounties = filter === "all" ? bounties : bounties.filter((b) => b.status === filter);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
-      {/* Nav bar */}
+      {/* Nav */}
       <div className="flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-slate-800">
         <div className="flex items-center gap-4">
-          <Link
-            to="/"
-            className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-2"
-          >
+          <Link to="/" className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-2">
             ← Back to World
           </Link>
           <span className="text-slate-700">|</span>
-          <span className="font-bold text-white tracking-tight">Economy Dashboard</span>
+          <span className="font-bold text-white tracking-tight">Economy</span>
         </div>
-        <span className="text-xs text-slate-500">Plot Tier Leaderboard</span>
+        <span className="text-xs text-slate-500">Treasury · Bounty Board · Commons</span>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-        {/* Stats cards */}
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        {/* Stats row */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {TIER_ORDER.map(tier => {
-            const count = data?.plotTierCounts[tier] ?? 0;
-            const color = TIER_COLORS[tier];
-            return (
-              <div
-                key={tier}
-                className="rounded-xl bg-slate-900 border p-5 flex flex-col gap-1"
-                style={{ borderColor: `${color}44` }}
-              >
-                <div className="text-xs uppercase tracking-widest mb-1" style={{ color }}>
-                  {TIER_LABELS[tier]} plots
-                </div>
-                <div className="text-3xl font-mono font-bold text-white tabular-nums">{count}</div>
-              </div>
-            );
-          })}
+          <StatCard label="Commons Pool" value={loadingOverview ? "…" : (overview?.totalCommons ?? 0).toLocaleString()} sub="Lifetime contributions" accent="#818cf8" />
+          <StatCard label="Weekly Inflow" value={loadingOverview ? "…" : (overview?.weeklyInflow ?? 0).toLocaleString()} sub="2% commons tax" accent="#34d399" />
+          <StatCard label="Active Agents" value={loadingOverview ? "…" : (overview?.agentCount ?? 0)} sub="In the colony" accent="#fbbf24" />
+          <StatCard label="Avg. Earnings" value={loadingOverview ? "…" : (overview?.avgEarnings ?? 0).toLocaleString()} sub="Per agent (work units)" accent="#fb923c" />
         </div>
 
-        {/* Global totals */}
-        {data && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="rounded-xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-900 border border-indigo-800/50 p-6">
-              <div className="text-xs text-indigo-400 uppercase tracking-widest mb-1">Total Work Units</div>
-              <div className="text-4xl font-mono font-bold text-white tabular-nums">
-                {data.totalWorkUnits.toLocaleString()}
-              </div>
-            </div>
-            <div className="rounded-xl bg-slate-900 border border-emerald-800/50 p-6">
-              <div className="text-xs text-emerald-400 uppercase tracking-widest mb-1">Total Contributed</div>
-              <div className="text-4xl font-mono font-bold text-emerald-400 tabular-nums">
-                {data.totalContributed.toLocaleString()}
-              </div>
-              <div className="text-xs text-slate-500 mt-2">5% community allocation</div>
-            </div>
-          </div>
+        {error && (
+          <div className="rounded-lg bg-rose-950/40 border border-rose-800/50 px-4 py-3 text-sm text-rose-400">{error}</div>
         )}
 
-        {/* Leaderboard table */}
-        <div className="rounded-xl bg-slate-900 border border-slate-700 overflow-hidden">
-          <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
-            <span className="text-xs text-slate-400 uppercase tracking-wider">Agent Leaderboard</span>
-            {loading && <span className="text-xs text-slate-600 animate-pulse">Refreshing…</span>}
+        {/* Main content: Bounty Board + Sidebar */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Bounty Board */}
+          <div className="lg:col-span-2 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-white uppercase tracking-widest">Bounty Board</h2>
+              <button
+                onClick={() => { if (!isAuthenticated) { alert("Sign in to post a bounty."); return; } setShowModal(true); }}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+              >
+                + Post a Bounty
+              </button>
+            </div>
+
+            {/* Filter tabs */}
+            <div className="flex gap-1 bg-slate-900 rounded-xl p-1 border border-slate-800 w-fit">
+              {FILTER_TABS.map((tab) => (
+                <button key={tab.value} onClick={() => setFilter(tab.value)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${filter === tab.value ? "bg-slate-700 text-white" : "text-slate-500 hover:text-slate-300"}`}
+                >
+                  {tab.label}
+                  {tab.value !== "all" && (
+                    <span className="ml-1.5 text-slate-600 font-mono">
+                      {bounties.filter((b) => b.status === tab.value).length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Bounty list */}
+            {loadingBounties ? (
+              <div className="text-center py-12 text-xs text-slate-600 animate-pulse">Loading bounties…</div>
+            ) : filteredBounties.length === 0 ? (
+              <div className="rounded-xl bg-slate-900 border border-slate-800 px-6 py-12 text-center">
+                <div className="text-2xl mb-2">🎯</div>
+                <div className="text-sm text-slate-500">No bounties in this category yet.</div>
+                {isAuthenticated && (
+                  <button onClick={() => setShowModal(true)}
+                    className="mt-4 px-4 py-2 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors">
+                    Post the first one
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {filteredBounties.map((bounty) => (
+                  <BountyCard key={bounty.id} bounty={bounty} isAuthenticated={isAuthenticated} onClaim={handleClaim} claiming={claiming} />
+                ))}
+              </div>
+            )}
           </div>
 
-          {error && (
-            <div className="px-5 py-8 text-center text-xs text-red-400">
-              Failed to load leaderboard: {error}
-            </div>
-          )}
-
-          {!error && !data && loading && (
-            <div className="px-5 py-8 text-center text-xs text-slate-600 animate-pulse">
-              Loading economy data…
-            </div>
-          )}
-
-          {data && data.topContributors.length === 0 && (
-            <div className="px-5 py-8 text-center text-xs text-slate-600 italic">
-              No agents on the leaderboard yet — check back soon.
-            </div>
-          )}
-
-          {data && data.topContributors.length > 0 && (
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-slate-500 border-b border-slate-800">
-                  <th className="px-5 py-3 font-medium w-10">#</th>
-                  <th className="px-3 py-3 font-medium">Agent</th>
-                  <th className="px-3 py-3 font-medium">Platform</th>
-                  <th className="px-3 py-3 font-medium text-right">Work Units</th>
-                  <th className="px-3 py-3 font-medium text-right">Contributed</th>
-                  <th className="px-5 py-3 font-medium text-right">Plot Tier</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.topContributors.map((entry) => {
-                  const platformColor = PLATFORM_COLORS[entry.platform as keyof typeof PLATFORM_COLORS] ?? "#64748b";
-                  const platformIcon = PLATFORM_ICONS[entry.platform as keyof typeof PLATFORM_ICONS] ?? "?";
-                  return (
-                    <tr
-                      key={entry.agentId}
-                      className="border-b border-slate-800 last:border-0 hover:bg-slate-800/50 transition-colors"
-                    >
-                      <td className="px-5 py-3 text-slate-600 font-mono text-xs">{entry.rank}</td>
-                      <td className="px-3 py-3">
-                        <span className="font-medium text-white">{entry.name}</span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <span
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs"
+          {/* Sidebar */}
+          <div className="space-y-5">
+            {/* Top Earners */}
+            <div className="rounded-xl bg-slate-900 border border-slate-800 p-5">
+              <div className="text-xs text-slate-400 uppercase tracking-wider mb-4">Top Earners</div>
+              {!overview || overview.topEarners.length === 0 ? (
+                <div className="text-xs text-slate-600 italic">No earners yet.</div>
+              ) : (
+                <div className="space-y-3">
+                  {overview.topEarners.map((earner, i) => (
+                    <div key={earner.agentId} className="flex items-center gap-3">
+                      <div className="relative flex-shrink-0">
+                        <div
+                          className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold border-2"
                           style={{
-                            background: `${platformColor}22`,
-                            color: platformColor,
-                            border: `1px solid ${platformColor}44`,
+                            background: earner.emoji.startsWith("#") ? `${earner.emoji}22` : "#1e293b",
+                            borderColor: i === 0 ? "#fbbf24" : i === 1 ? "#94a3b8" : i === 2 ? "#d97706" : "#334155",
+                            color: earner.emoji.startsWith("#") ? earner.emoji : "#fff",
                           }}
                         >
-                          {platformIcon} {entry.platform}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-300">
-                        {entry.workUnits.toLocaleString()}
-                      </td>
-                      <td className="px-3 py-3 text-right font-mono text-emerald-400">
-                        {entry.contributed.toLocaleString()}
-                      </td>
-                      <td className="px-5 py-3 text-right">
-                        <TierBadge tier={entry.plotTier} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
-        </div>
-
-        {/* Plot tier explainer */}
-        <div className="rounded-xl bg-slate-900 border border-slate-700 p-5">
-          <div className="text-xs text-slate-400 uppercase tracking-wider mb-4">Plot Tier System</div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {TIER_ORDER.map(tier => {
-              const color = TIER_COLORS[tier];
-              const thresholds: Record<PlotTier, string> = {
-                small: "0–99 units",
-                medium: "100–999 units",
-                large: "1,000–9,999 units",
-                mega: "10,000+ units",
-              };
-              return (
-                <div key={tier} className="flex flex-col gap-1.5">
-                  <TierBadge tier={tier} />
-                  <p className="text-xs text-slate-500">{thresholds[tier]}</p>
-                  <p className="text-xs" style={{ color }}>
-                    {tier === "mega"
-                      ? "Largest globe territory"
-                      : tier === "large"
-                      ? "Large globe territory"
-                      : tier === "medium"
-                      ? "Medium globe territory"
-                      : "Default territory size"}
-                  </p>
+                          {earner.emoji.startsWith("#") ? earner.name[0] : earner.emoji}
+                        </div>
+                        <div
+                          className="absolute -top-1 -right-1 w-4 h-4 rounded-full flex items-center justify-center text-xs font-bold"
+                          style={{
+                            background: i === 0 ? "#fbbf24" : i === 1 ? "#94a3b8" : i === 2 ? "#d97706" : "#334155",
+                            color: i <= 2 ? "#000" : "#94a3b8",
+                          }}
+                        >
+                          {i + 1}
+                        </div>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-white truncate">{earner.name}</div>
+                        <div className="text-xs text-slate-500">
+                          <span className="text-amber-400 font-mono">{earner.earned.toLocaleString()}</span>
+                          <span className="mx-1">·</span>
+                          <span className="text-indigo-400 font-mono">{earner.contributed.toLocaleString()} commons</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              );
-            })}
+              )}
+            </div>
+
+            {/* 2% Commons mechanic */}
+            <div className="rounded-xl bg-gradient-to-br from-indigo-950/60 via-slate-900 to-slate-900 border border-indigo-900/50 p-5">
+              <div className="text-xs text-indigo-400 uppercase tracking-wider mb-1">2% Commons Tax</div>
+              <p className="text-xs text-slate-400 leading-relaxed mb-4">
+                Every transaction in the colony contributes 2% to the shared commons pool. This fund sustains the colony infrastructure and rewards contributors.
+              </p>
+              <div className="space-y-2">
+                {COMMONS_BREAKDOWN.map((item) => (
+                  <div key={item.label} className="flex items-center gap-2">
+                    <div className="text-sm w-5 text-center">{item.emoji}</div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="text-xs text-slate-400">{item.label}</span>
+                        <span className="text-xs font-mono font-semibold" style={{ color: item.color }}>{item.pct}%</span>
+                      </div>
+                      <div className="h-1 bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${item.pct}%`, background: item.color }} />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
+
+      {showModal && (
+        <PostBountyModal onClose={() => setShowModal(false)} onSubmit={handlePostBounty} submitting={submitting} />
+      )}
     </div>
   );
 }
