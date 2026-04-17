@@ -6,8 +6,16 @@ import { AgentPanel } from "./components/AgentPanel";
 import { TimelinePanel } from "./components/TimelinePanel";
 import { PlatformPanel } from "./components/PlatformPanel";
 import { HUD } from "./components/HUD";
+import { NavBar } from "./components/NavBar";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import { CommunityPage } from "./pages/CommunityPage";
 import { EconomyPage } from "./pages/EconomyPage";
+import { LoginPage } from "./pages/LoginPage";
+import { AuthCallbackPage } from "./pages/AuthCallbackPage";
+import { DashboardPage } from "./pages/DashboardPage";
+import { AgentDirectoryPage } from "./pages/AgentDirectoryPage";
+import { AgentProfilePage } from "./pages/AgentProfilePage";
+import { AgentChatPage } from "./pages/AgentChatPage";
 
 type SidebarTab = "agents" | "platforms";
 
@@ -17,6 +25,7 @@ function WorldView() {
 
   return (
     <div className="flex flex-col h-screen bg-slate-950 text-white overflow-hidden">
+      <NavBar />
       <HUD />
       <div className="flex flex-1 overflow-hidden relative">
         {/* World canvas — main view */}
@@ -141,9 +150,46 @@ export function App() {
   useSocket();
   return (
     <Routes>
+      {/* Public routes */}
       <Route path="/" element={<WorldView />} />
       <Route path="/community" element={<CommunityPage />} />
       <Route path="/economy" element={<EconomyPage />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/auth/callback" element={<AuthCallbackPage />} />
+
+      {/* Protected routes */}
+      <Route
+        path="/dashboard/*"
+        element={
+          <ProtectedRoute>
+            <DashboardPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/agents"
+        element={
+          <ProtectedRoute>
+            <AgentDirectoryPage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/agents/:id"
+        element={
+          <ProtectedRoute>
+            <AgentProfilePage />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/agents/:id/chat"
+        element={
+          <ProtectedRoute>
+            <AgentChatPage />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   );
 }

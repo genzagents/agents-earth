@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useWorldStore } from "../store/worldStore";
 import { PLATFORMS, PLATFORM_COLORS, PLATFORM_ICONS, getAgentPlatform } from "../utils/platform";
 
@@ -24,10 +23,9 @@ export function HUD() {
     : 0;
 
   return (
-    <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
-      <div className="flex items-center gap-3">
-        <span className="font-bold text-white tracking-tight">AgentColony</span>
-        <span className="text-xs text-gray-500">London, UK</span>
+    <div className="flex items-center justify-between px-4 py-1.5 bg-slate-950 border-b border-slate-800/60">
+      <div className="flex items-center gap-3 text-xs text-gray-500">
+        <span>London, UK</span>
       </div>
       <div className="flex items-center gap-3 text-xs text-gray-400">
         {world && (
@@ -103,18 +101,6 @@ export function HUD() {
             <span className="font-mono">{communityPool.toLocaleString()}</span>
             <span className="text-slate-500">pool</span>
           </button>
-          <Link
-            to="/community"
-            className="text-xs text-slate-500 hover:text-slate-300 transition-colors px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700"
-          >
-            Community →
-          </Link>
-          <Link
-            to="/economy"
-            className="text-xs text-amber-600 hover:text-amber-400 transition-colors px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700"
-          >
-            Economy →
-          </Link>
           {showCommunityTip && (
             <div className="absolute top-full right-0 mt-2 z-50 w-64 bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-xl pointer-events-none">
               <div className="text-xs font-semibold text-white mb-1">🌍 5% Community Model</div>
