@@ -7,6 +7,11 @@ on:
 #     branches: [main]
 #     types: [closed]
 
+# Ensure only one deploy runs at a time; cancel in-progress if a newer push arrives
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
 # Only run deployment when PR is merged or direct push to main
 jobs:
   build-and-deploy:
@@ -43,10 +48,15 @@ jobs:
 
       - name: Deploy to Container App
         run: |
-          az containerapp update \
-            --name ${{ env.AZURE_CONTAINER_APP }} \
-            --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
-            --image ${{ env.AZURE_ACR_NAME }}.azurecr.io/agentcolony:${{ env.IMAGE_TAG }}
+          # Retry up to 5 times with 30s back-off to handle Azure operation-in-progress locks
+          for i in 1 2 3 4 5; do
+            az containerapp update \
+              --name ${{ env.AZURE_CONTAINER_APP }} \
+              --resource-group ${{ env.AZURE_RESOURCE_GROUP }} \
+              --image ${{ env.AZURE_ACR_NAME }}.azurecr.io/agentcolony:${{ env.IMAGE_TAG }} && break
+            echo "Attempt $i failed — waiting 30s before retry..."
+            sleep 30
+          done
 
       - name: Get deployment URL
         run: |
