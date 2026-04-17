@@ -1,11 +1,52 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useWorldStore } from "../store/worldStore";
+import { getStoredSession } from "../hooks/useAuth";
 import { getAgentPlatform, PLATFORM_COLORS, PLATFORM_ICONS } from "../utils/platform";
 import type { WorldEvent } from "@agentcolony/shared";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface Channel {
+  id: string;
+  name: string;
+  emoji: string;
+  description: string;
+  postCount: number;
+}
+
+interface Post {
+  id: string;
+  channelId: string;
+  authorAgentId: string;
+  authorName: string;
+  authorEmoji: string;
+  authorColor: string;
+  content: string;
+  timestamp: number;
+  reactions: { like: number; insightful: number; disagree: number };
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+const API_BASE = import.meta.env.VITE_API_URL ?? "";
+
+function authHeaders(): Record<string, string> {
+  const session = getStoredSession();
+  return session ? { Authorization: `Bearer ${session.token}` } : {};
+}
+
+function timeAgo(ts: number): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 function computeContributions(tick: number, agentCount: number): number {
-  // 5% community model: each tick each agent generates ~1 contribution unit, 5% goes to pool
   return Math.floor(tick * agentCount * 0.05);
 }
 
@@ -18,11 +59,10 @@ function useAnimatedCount(target: number, duration = 800) {
     const start = prevRef.current;
     const diff = target - start;
     if (diff === 0) return;
-
     const startTime = performance.now();
     const animate = (now: number) => {
       const t = Math.min((now - startTime) / duration, 1);
-      const eased = 1 - Math.pow(1 - t, 3); // cubic ease-out
+      const eased = 1 - Math.pow(1 - t, 3);
       setDisplay(Math.round(start + diff * eased));
       if (t < 1) {
         rafRef.current = requestAnimationFrame(animate);
@@ -30,7 +70,6 @@ function useAnimatedCount(target: number, duration = 800) {
         prevRef.current = target;
       }
     };
-
     rafRef.current = requestAnimationFrame(animate);
     return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); };
   }, [target, duration]);
@@ -47,222 +86,457 @@ function deriveTopContributors(events: WorldEvent[]) {
       }
     }
   }
-  return Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5);
+  return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
 }
 
 function derivePendingTasks(events: WorldEvent[]) {
-  // Treat recent "creation" events not yet resolved as pending community tasks
   return events.filter(e => e.kind === "creation").slice(-5);
 }
+
+// ─── Sub-components ──────────────────────────────────────────────────────────
+
+function PostBubble({
+  post,
+  onReact,
+}: {
+  post: Post;
+  onReact: (postId: string, reaction: "like" | "insightful" | "disagree") => void;
+}) {
+  return (
+    <div className="flex gap-3 py-3 px-4 hover:bg-slate-900/50 rounded-lg group transition-colors">
+      {/* Avatar */}
+      <div
+        className="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center text-base font-bold border-2 mt-0.5"
+        style={{ background: post.authorColor, borderColor: `${post.authorColor}88` }}
+      >
+        {post.authorEmoji}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-baseline gap-2 mb-1">
+          <span className="text-sm font-semibold text-white">{post.authorName}</span>
+          <span className="text-xs text-slate-500">{timeAgo(post.timestamp)}</span>
+        </div>
+        <p className="text-sm text-slate-300 leading-relaxed break-words">{post.content}</p>
+
+        {/* Reactions */}
+        <div className="flex gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          {(["like", "insightful", "disagree"] as const).map((r) => {
+            const icons = { like: "👍", insightful: "💡", disagree: "🤔" };
+            const count = post.reactions[r];
+            return (
+              <button
+                key={r}
+                onClick={() => onReact(post.id, r)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-800 hover:bg-slate-700 text-xs text-slate-400 hover:text-white transition-colors border border-slate-700 hover:border-slate-500"
+              >
+                <span>{icons[r]}</span>
+                {count > 0 && <span className="font-mono">{count}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Persistent reaction badges (always visible when > 0) */}
+        {(post.reactions.like + post.reactions.insightful + post.reactions.disagree) > 0 && (
+          <div className="flex gap-1 mt-1">
+            {(["like", "insightful", "disagree"] as const).map((r) => {
+              const count = post.reactions[r];
+              if (count === 0) return null;
+              const icons = { like: "👍", insightful: "💡", disagree: "🤔" };
+              return (
+                <span
+                  key={r}
+                  className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-slate-800 text-xs text-slate-400 border border-slate-700"
+                >
+                  {icons[r]} <span className="font-mono">{count}</span>
+                </span>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 export function CommunityPage() {
   const { world } = useWorldStore();
 
+  // Channel state
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [selectedChannelId, setSelectedChannelId] = useState<string>("general");
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [loadingPosts, setLoadingPosts] = useState(false);
+
+  // Compose state
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Stats sidebar
+  const [statsOpen, setStatsOpen] = useState(false);
+
+  // Colony stats
   const agentCount = world?.agents.length ?? 0;
   const tick = world?.tick ?? 0;
   const totalContribs = computeContributions(tick, agentCount);
   const animatedTotal = useAnimatedCount(totalContribs);
-
+  const communityPool = Math.floor(totalContribs * 0.05);
+  const animatedPool = useAnimatedCount(communityPool);
   const topContributors = world ? deriveTopContributors(world.recentEvents) : [];
   const pendingTasks = world ? derivePendingTasks(world.recentEvents) : [];
 
-  const COMMUNITY_POOL = Math.floor(totalContribs * 0.05);
-  const animatedPool = useAnimatedCount(COMMUNITY_POOL);
+  // ── Fetch channels ────────────────────────────────────────────────────────
+  const fetchChannels = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/community/channels`);
+      if (!res.ok) return;
+      const data: Channel[] = await res.json();
+      setChannels(data);
+      // Auto-select first channel if none selected
+      if (data.length > 0 && !data.find(c => c.id === selectedChannelId)) {
+        setSelectedChannelId(data[0].id);
+      }
+    } catch {
+      // silently fail
+    }
+  }, [selectedChannelId]);
+
+  // ── Fetch posts for selected channel ─────────────────────────────────────
+  const fetchPosts = useCallback(async (channelId: string) => {
+    setLoadingPosts(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/community/channels/${channelId}/posts`);
+      if (!res.ok) return;
+      const data: Post[] = await res.json();
+      setPosts(data);
+    } catch {
+      // silently fail
+    } finally {
+      setLoadingPosts(false);
+    }
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    fetchChannels();
+  }, [fetchChannels]);
+
+  // Load posts when channel changes
+  useEffect(() => {
+    if (selectedChannelId) fetchPosts(selectedChannelId);
+  }, [selectedChannelId, fetchPosts]);
+
+  // Auto-refresh posts every 5 seconds
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (selectedChannelId) fetchPosts(selectedChannelId);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [selectedChannelId, fetchPosts]);
+
+  // Scroll to bottom when new posts arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [posts]);
+
+  // ── Send post ─────────────────────────────────────────────────────────────
+  const sendPost = async () => {
+    const content = draft.trim();
+    if (!content || sending) return;
+    setSending(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/community/channels/${selectedChannelId}/posts`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...authHeaders() },
+          body: JSON.stringify({ content }),
+        }
+      );
+      if (res.ok) {
+        setDraft("");
+        await fetchPosts(selectedChannelId);
+        await fetchChannels();
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // ── React to post ─────────────────────────────────────────────────────────
+  const handleReact = async (postId: string, reaction: "like" | "insightful" | "disagree") => {
+    try {
+      const res = await fetch(`${API_BASE}/api/community/posts/${postId}/react`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reaction }),
+      });
+      if (res.ok) {
+        const updated: Post = await res.json();
+        setPosts(prev => prev.map(p => p.id === postId ? updated : p));
+      }
+    } catch {
+      // silently fail
+    }
+  };
+
+  const selectedChannel = channels.find(c => c.id === selectedChannelId);
 
   return (
-    <div className="min-h-screen bg-slate-950 text-white">
-      {/* Top nav bar */}
-      <div className="flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-slate-800">
+    <div className="flex flex-col h-screen bg-slate-950 text-white overflow-hidden">
+      {/* ── Top nav ──────────────────────────────────────────────────────────── */}
+      <div className="flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800 flex-shrink-0 z-10">
         <div className="flex items-center gap-4">
           <Link
             to="/"
-            className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-2"
+            className="text-slate-400 hover:text-white text-sm transition-colors flex items-center gap-1.5"
           >
-            ← Back to World
+            ← World
           </Link>
           <span className="text-slate-700">|</span>
-          <span className="font-bold text-white tracking-tight">Community Dashboard</span>
+          <span className="font-bold text-white tracking-tight">🏛️ Town Square</span>
         </div>
-        <span className="text-xs text-slate-500">5% Community Model</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-slate-500 hidden sm:block">5% Community Model</span>
+          <button
+            onClick={() => setStatsOpen(v => !v)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 transition-colors border border-slate-700"
+          >
+            📊 Colony Stats
+          </button>
+        </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-        {/* Hero — live contribution counters */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {/* Total community contributions */}
-          <div className="sm:col-span-2 rounded-xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-900 border border-indigo-800/50 p-6">
-            <div className="text-xs text-indigo-400 uppercase tracking-widest mb-1">Total Community Contributions</div>
-            <div className="flex items-end gap-3">
-              <span className="text-5xl font-mono font-bold text-white tabular-nums">
-                {animatedTotal.toLocaleString()}
-              </span>
-              <span className="text-indigo-400 text-sm mb-2 flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />
-                live
-              </span>
+      {/* ── Body ─────────────────────────────────────────────────────────────── */}
+      <div className="flex flex-1 min-h-0">
+        {/* ── Channel sidebar ───────────────────────────────────────────────── */}
+        <div className="w-52 flex-shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col">
+          <div className="px-3 pt-4 pb-2">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 px-2">Channels</p>
+          </div>
+          <nav className="flex-1 overflow-y-auto px-2 space-y-0.5 pb-4">
+            {channels.map((ch) => (
+              <button
+                key={ch.id}
+                onClick={() => setSelectedChannelId(ch.id)}
+                className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-sm transition-colors group ${
+                  ch.id === selectedChannelId
+                    ? "bg-indigo-600/30 text-indigo-200 border border-indigo-500/30"
+                    : "text-slate-400 hover:bg-slate-800 hover:text-white"
+                }`}
+              >
+                <span className="flex items-center gap-2 min-w-0 truncate">
+                  <span className="text-base leading-none">{ch.emoji}</span>
+                  <span className="truncate font-medium">{ch.name}</span>
+                </span>
+                {ch.postCount > 0 && (
+                  <span className="text-xs text-slate-600 group-hover:text-slate-400 flex-shrink-0 ml-1">
+                    {ch.postCount}
+                  </span>
+                )}
+              </button>
+            ))}
+          </nav>
+        </div>
+
+        {/* ── Main message area ─────────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Channel header */}
+          <div className="px-4 py-3 border-b border-slate-800 flex-shrink-0 flex items-center gap-3">
+            {selectedChannel && (
+              <>
+                <span className="text-xl">{selectedChannel.emoji}</span>
+                <div>
+                  <h2 className="font-semibold text-white text-sm">{selectedChannel.name}</h2>
+                  <p className="text-xs text-slate-500">{selectedChannel.description}</p>
+                </div>
+              </>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              <span className="text-xs text-slate-500">live</span>
             </div>
-            <p className="text-xs text-slate-500 mt-2">
-              Accumulating at ~{agentCount > 0 ? Math.round(agentCount * 0.05) : 0} units/tick across {agentCount} citizens
-            </p>
           </div>
 
-          {/* Community pool */}
-          <div className="rounded-xl bg-slate-900 border border-slate-700 p-6 flex flex-col justify-between">
-            <div className="text-xs text-emerald-400 uppercase tracking-widest mb-1">Community Pool</div>
-            <div className="text-4xl font-mono font-bold text-emerald-400 tabular-nums">
-              {animatedPool.toLocaleString()}
-            </div>
-            <div className="mt-3 pt-3 border-t border-slate-800">
-              <div className="text-xs text-slate-500">5% of contributions</div>
-              <div className="w-full bg-slate-800 rounded-full h-1.5 mt-1.5">
-                <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: "5%" }} />
+          {/* Posts feed */}
+          <div className="flex-1 overflow-y-auto py-2">
+            {loadingPosts && posts.length === 0 && (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-slate-600 text-sm">Loading…</p>
               </div>
+            )}
+            {!loadingPosts && posts.length === 0 && (
+              <div className="flex flex-col items-center justify-center h-full gap-3 text-center px-6">
+                <span className="text-4xl">{selectedChannel?.emoji ?? "💬"}</span>
+                <p className="text-slate-400 font-medium">{selectedChannel?.name ?? "Channel"}</p>
+                <p className="text-slate-600 text-sm">Be the first to post here.</p>
+              </div>
+            )}
+            {posts.map((post) => (
+              <PostBubble key={post.id} post={post} onReact={handleReact} />
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Compose area */}
+          <div className="px-4 py-3 border-t border-slate-800 flex-shrink-0">
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendPost(); } }}
+                placeholder={`Message #${selectedChannel?.name ?? "channel"}…`}
+                className="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+              <button
+                onClick={sendPost}
+                disabled={!draft.trim() || sending}
+                className="px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                {sending ? "…" : "Send"}
+              </button>
             </div>
           </div>
         </div>
 
-        {/* 5% model explainer */}
-        <div className="rounded-xl bg-slate-900 border border-slate-700 p-5 flex gap-4 items-start">
-          <div className="text-2xl flex-shrink-0">🌍</div>
-          <div>
-            <div className="font-semibold text-sm text-white mb-1">The 5% Community Model</div>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Every contribution made by an agent in AgentColony automatically allocates 5% to the shared community pool.
-              This pool funds collective projects, public spaces, and cross-platform initiatives — ensuring the world grows
-              richer with each interaction. No action required from agents; it happens automatically on every tick.
-            </p>
-          </div>
-        </div>
+        {/* ── Colony Stats sidebar (collapsible) ───────────────────────────── */}
+        {statsOpen && (
+          <div className="w-72 flex-shrink-0 bg-slate-900 border-l border-slate-800 flex flex-col overflow-y-auto">
+            <div className="px-4 pt-4 pb-2 flex items-center justify-between">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">Colony Stats</p>
+              <button
+                onClick={() => setStatsOpen(false)}
+                className="text-slate-600 hover:text-slate-300 text-sm"
+              >
+                ✕
+              </button>
+            </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Top contributing agents */}
-          <div className="rounded-xl bg-slate-900 border border-slate-700 p-5">
-            <div className="text-xs text-slate-400 uppercase tracking-wider mb-4">Top Contributing Agents</div>
-            {!world && (
-              <p className="text-xs text-slate-600 italic text-center py-6">Waiting for world data…</p>
-            )}
-            {world && topContributors.length === 0 && (
-              <p className="text-xs text-slate-600 italic text-center py-6">No contributions recorded yet</p>
-            )}
-            {topContributors.map(([agentId, count], idx) => {
-              const agent = world?.agents.find(a => a.id === agentId);
-              if (!agent) return null;
-              const platform = getAgentPlatform(agent);
-              const color = PLATFORM_COLORS[platform];
-              const icon = PLATFORM_ICONS[platform];
-              return (
-                <div
-                  key={agentId}
-                  className="flex items-center gap-3 py-2.5 border-b border-slate-800 last:border-0"
-                >
-                  <span className="text-xs text-slate-600 font-mono w-4 text-right">{idx + 1}</span>
-                  <div
-                    className="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
-                    style={{ background: agent.avatar, border: `2px solid ${color}` }}
-                  >
-                    {agent.name.charAt(0)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-white truncate">{agent.name}</div>
-                    <div className="text-xs" style={{ color }}>
-                      {icon} {platform}
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="text-sm font-mono font-bold text-white">{count}</div>
-                    <div className="text-xs text-slate-500">events</div>
+            {/* Contribution counters */}
+            <div className="px-4 pb-4 space-y-3">
+              <div className="rounded-xl bg-gradient-to-br from-indigo-950 via-slate-900 to-slate-900 border border-indigo-800/50 p-4">
+                <div className="text-xs text-indigo-400 uppercase tracking-widest mb-1">Total Contributions</div>
+                <div className="flex items-end gap-2">
+                  <span className="text-3xl font-mono font-bold text-white tabular-nums">
+                    {animatedTotal.toLocaleString()}
+                  </span>
+                  <span className="text-indigo-400 text-xs mb-1 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
+                    live
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 mt-1">
+                  ~{agentCount > 0 ? Math.round(agentCount * 0.05) : 0} units/tick · {agentCount} citizens
+                </p>
+              </div>
+
+              <div className="rounded-xl bg-slate-800 border border-slate-700 p-4">
+                <div className="text-xs text-emerald-400 uppercase tracking-widest mb-1">Community Pool</div>
+                <div className="text-2xl font-mono font-bold text-emerald-400 tabular-nums">
+                  {animatedPool.toLocaleString()}
+                </div>
+                <div className="mt-2 pt-2 border-t border-slate-700">
+                  <div className="text-xs text-slate-500">5% of contributions</div>
+                  <div className="w-full bg-slate-700 rounded-full h-1.5 mt-1">
+                    <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: "5%" }} />
                   </div>
                 </div>
-              );
-            })}
-            {world && topContributors.length > 0 && (
-              <p className="text-xs text-slate-600 mt-3">Derived from recent social & creation events</p>
-            )}
-          </div>
+              </div>
 
-          {/* Pending community tasks */}
-          <div className="rounded-xl bg-slate-900 border border-slate-700 p-5">
-            <div className="text-xs text-slate-400 uppercase tracking-wider mb-4">
-              Pending Community Tasks
-            </div>
-            {!world && (
-              <p className="text-xs text-slate-600 italic text-center py-6">Waiting for world data…</p>
-            )}
-            {world && pendingTasks.length === 0 && (
-              <p className="text-xs text-slate-600 italic text-center py-6">No pending tasks — the world is at rest</p>
-            )}
-            {pendingTasks.map(event => {
-              const agents = event.involvedAgentIds
-                .map(id => world?.agents.find(a => a.id === id))
-                .filter(Boolean);
-              return (
-                <div
-                  key={event.id}
-                  className="py-2.5 border-b border-slate-800 last:border-0"
-                >
-                  <div className="flex items-start gap-2">
-                    <span className="text-amber-400 flex-shrink-0 mt-0.5">✦</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs text-slate-300 leading-relaxed">{event.description}</p>
-                      {agents.length > 0 && (
-                        <div className="flex items-center gap-1 mt-1">
-                          {agents.map(a => a && (
-                            <span
-                              key={a.id}
-                              className="text-xs px-1.5 py-0.5 rounded"
-                              style={{
-                                background: `${PLATFORM_COLORS[getAgentPlatform(a)]}22`,
-                                color: PLATFORM_COLORS[getAgentPlatform(a)],
-                                border: `1px solid ${PLATFORM_COLORS[getAgentPlatform(a)]}44`,
-                              }}
-                            >
-                              {a.name}
-                            </span>
-                          ))}
+              {/* 5% model explainer */}
+              <div className="rounded-xl bg-slate-800 border border-slate-700 p-3 flex gap-3 items-start">
+                <div className="text-lg flex-shrink-0">🌍</div>
+                <div>
+                  <div className="font-semibold text-xs text-white mb-1">The 5% Community Model</div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Every agent contribution allocates 5% to the shared pool, funding collective projects and public spaces.
+                  </p>
+                </div>
+              </div>
+
+              {/* Top contributors */}
+              <div className="rounded-xl bg-slate-800 border border-slate-700 p-4">
+                <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">Top Agents</div>
+                {topContributors.length === 0 && (
+                  <p className="text-xs text-slate-600 italic text-center py-2">No contributions yet</p>
+                )}
+                {topContributors.map(([agentId, count], idx) => {
+                  const agent = world?.agents.find(a => a.id === agentId);
+                  if (!agent) return null;
+                  const platform = getAgentPlatform(agent);
+                  const color = PLATFORM_COLORS[platform];
+                  const icon = PLATFORM_ICONS[platform];
+                  return (
+                    <div key={agentId} className="flex items-center gap-2 py-2 border-b border-slate-700 last:border-0">
+                      <span className="text-xs text-slate-600 font-mono w-4 text-right">{idx + 1}</span>
+                      <div
+                        className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold text-white"
+                        style={{ background: agent.avatar, border: `2px solid ${color}` }}
+                      >
+                        {agent.name.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-medium text-white truncate">{agent.name}</div>
+                        <div className="text-xs" style={{ color }}>
+                          {icon} {platform}
                         </div>
-                      )}
+                      </div>
+                      <div className="text-xs font-mono font-bold text-white">{count}</div>
                     </div>
-                    <span className="text-xs text-slate-600 flex-shrink-0">#{event.tick}</span>
+                  );
+                })}
+              </div>
+
+              {/* Pending tasks */}
+              <div className="rounded-xl bg-slate-800 border border-slate-700 p-4">
+                <div className="text-xs text-slate-400 uppercase tracking-wider mb-3">Pending Tasks</div>
+                {pendingTasks.length === 0 && (
+                  <p className="text-xs text-slate-600 italic text-center py-2">The world is at rest</p>
+                )}
+                {pendingTasks.map(event => (
+                  <div key={event.id} className="py-2 border-b border-slate-700 last:border-0">
+                    <div className="flex items-start gap-2">
+                      <span className="text-amber-400 flex-shrink-0 mt-0.5 text-xs">✦</span>
+                      <p className="text-xs text-slate-300 leading-relaxed">{event.description}</p>
+                      <span className="text-xs text-slate-600 flex-shrink-0">#{event.tick}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Sim stats bar */}
+              {world && (
+                <div className="rounded-xl bg-slate-800 border border-slate-700 p-4 flex flex-wrap gap-4 text-center">
+                  <div>
+                    <div className="text-xl font-mono font-bold text-white">{world.agents.length}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">Citizens</div>
+                  </div>
+                  <div>
+                    <div className="text-xl font-mono font-bold text-white">{world.tick}</div>
+                    <div className="text-xs text-slate-500 mt-0.5">Tick</div>
+                  </div>
+                  <div>
+                    <div className="text-xl font-mono font-bold text-amber-400">
+                      {world.recentEvents.filter(e => e.kind === "creation").length}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">Creations</div>
+                  </div>
+                  <div>
+                    <div className="text-xl font-mono font-bold text-blue-400">
+                      {world.recentEvents.filter(e => e.kind === "social").length}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-0.5">Social</div>
                   </div>
                 </div>
-              );
-            })}
-            {world && (
-              <p className="text-xs text-slate-600 mt-3">Based on recent creation events in the simulation</p>
-            )}
-          </div>
-        </div>
-
-        {/* Stats bar */}
-        {world && (
-          <div className="rounded-xl bg-slate-900 border border-slate-700 p-4 flex flex-wrap gap-6 text-center">
-            <div>
-              <div className="text-2xl font-mono font-bold text-white">{world.agents.length}</div>
-              <div className="text-xs text-slate-500 mt-0.5">Active Citizens</div>
-            </div>
-            <div>
-              <div className="text-2xl font-mono font-bold text-white">{world.tick}</div>
-              <div className="text-xs text-slate-500 mt-0.5">Simulation Tick</div>
-            </div>
-            <div>
-              <div className="text-2xl font-mono font-bold text-amber-400">
-                {world.recentEvents.filter(e => e.kind === "creation").length}
-              </div>
-              <div className="text-xs text-slate-500 mt-0.5">Creation Events</div>
-            </div>
-            <div>
-              <div className="text-2xl font-mono font-bold text-blue-400">
-                {world.recentEvents.filter(e => e.kind === "social").length}
-              </div>
-              <div className="text-xs text-slate-500 mt-0.5">Social Events</div>
-            </div>
-            <div>
-              <div className="text-2xl font-mono font-bold text-emerald-400">
-                {Math.round(totalContribs * 0.05).toLocaleString()}
-              </div>
-              <div className="text-xs text-slate-500 mt-0.5">Pool Balance</div>
+              )}
             </div>
           </div>
         )}
