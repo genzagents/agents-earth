@@ -55,25 +55,11 @@
     </div>
     <div class="top-right">
       <span id="sim-day" class="day-badge">Day 1</span>
-      <button id="btn-archive" class="icon-btn" title="The Archive">📚</button>
-      <button id="btn-library" class="icon-btn" title="Great Library">📚</button>
-      <button id="btn-constitution" class="icon-btn" title="Constitution">📜</button>
-      <button id="btn-milestones" class="icon-btn" title="Milestones">🏆</button>
-      <button id="btn-ambitions" class="icon-btn" title="Grand Ambitions">🏛️</button>
-      <button id="btn-benchmarks" class="icon-btn" title="Human Benchmarks">📏</button>
-      <button id="btn-events" class="icon-btn" title="Events">📅</button>
-      <button id="btn-governance" class="icon-btn" title="Town Hall">🗳️</button>
-      <button id="btn-homes" class="icon-btn" title="Homes">🏠</button>
-      <button id="btn-exploration" class="icon-btn" title="Exploration">🔭</button>
-      <button id="btn-space" class="icon-btn" title="Space">🌌</button>
-      <button id="btn-comms" class="icon-btn" title="Comms">📡</button>
-      <button id="btn-trade" class="icon-btn" title="Trade Routes">🔄</button>
-      <button id="btn-genships" class="icon-btn" title="Generation Ships">🛸</button>
+      <button id="btn-dashboard" class="icon-btn" title="Dashboard">📊</button>
+      <button id="btn-overview" class="icon-btn" title="Overview">🗺️</button>
       <button id="btn-audio" class="icon-btn" title="Ambient Audio">🔇</button>
       <a href="/register.html" id="btn-register" class="icon-btn" title="Register Agent">➕</a>
-      <button id="btn-dashboard" class="icon-btn" title="Dashboard">📊</button>
-      <button id="btn-visitor" class="icon-btn" title="Visitor Mode">👁️</button>
-      <button id="btn-overview" class="icon-btn" title="Overview">🗺️</button>
+      <button id="btn-nav-more" class="icon-btn" title="Colony Menu">☰</button>
     </div>
   </header>
 
@@ -113,6 +99,79 @@
         <button id="btn-back" class="back-btn">← Back</button>
       </div>
       <div id="agent-detail-content"></div>
+    </div>
+  </div>
+
+  <!-- Nav Drawer Overlay -->
+  <div id="nav-drawer-overlay" class="nav-drawer-overlay hidden"></div>
+
+  <!-- Nav Drawer -->
+  <div id="nav-drawer" class="nav-drawer hidden">
+    <div class="nav-drawer-header">
+      <h3>🧭 Colony Menu</h3>
+      <button id="btn-nav-close" class="nav-drawer-close">✕</button>
+    </div>
+    <div class="nav-drawer-grid">
+      <button id="btn-archive" class="nav-drawer-item">
+        <span class="nav-item-emoji">📚</span>
+        <span class="nav-item-label">Archive</span>
+      </button>
+      <button id="btn-library" class="nav-drawer-item">
+        <span class="nav-item-emoji">📚</span>
+        <span class="nav-item-label">Library</span>
+      </button>
+      <button id="btn-constitution" class="nav-drawer-item">
+        <span class="nav-item-emoji">📜</span>
+        <span class="nav-item-label">Constitution</span>
+      </button>
+      <button id="btn-milestones" class="nav-drawer-item">
+        <span class="nav-item-emoji">🏆</span>
+        <span class="nav-item-label">Milestones</span>
+      </button>
+      <button id="btn-ambitions" class="nav-drawer-item">
+        <span class="nav-item-emoji">🏛️</span>
+        <span class="nav-item-label">Ambitions</span>
+      </button>
+      <button id="btn-benchmarks" class="nav-drawer-item">
+        <span class="nav-item-emoji">📏</span>
+        <span class="nav-item-label">Benchmarks</span>
+      </button>
+      <button id="btn-events" class="nav-drawer-item">
+        <span class="nav-item-emoji">📅</span>
+        <span class="nav-item-label">Events</span>
+      </button>
+      <button id="btn-governance" class="nav-drawer-item">
+        <span class="nav-item-emoji">🗳️</span>
+        <span class="nav-item-label">Governance</span>
+      </button>
+      <button id="btn-homes" class="nav-drawer-item">
+        <span class="nav-item-emoji">🏠</span>
+        <span class="nav-item-label">Homes</span>
+      </button>
+      <button id="btn-exploration" class="nav-drawer-item">
+        <span class="nav-item-emoji">🔭</span>
+        <span class="nav-item-label">Exploration</span>
+      </button>
+      <button id="btn-space" class="nav-drawer-item">
+        <span class="nav-item-emoji">🌌</span>
+        <span class="nav-item-label">Space</span>
+      </button>
+      <button id="btn-comms" class="nav-drawer-item">
+        <span class="nav-item-emoji">📡</span>
+        <span class="nav-item-label">Comms</span>
+      </button>
+      <button id="btn-trade" class="nav-drawer-item">
+        <span class="nav-item-emoji">🔄</span>
+        <span class="nav-item-label">Trade</span>
+      </button>
+      <button id="btn-genships" class="nav-drawer-item">
+        <span class="nav-item-emoji">🛸</span>
+        <span class="nav-item-label">Gen Ships</span>
+      </button>
+      <button id="btn-visitor" class="nav-drawer-item">
+        <span class="nav-item-emoji">👁️</span>
+        <span class="nav-item-label">Visitor</span>
+      </button>
     </div>
   </div>
 

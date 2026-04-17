@@ -1145,6 +1145,32 @@ function bindUI() {
   document.getElementById('btn-trade')?.addEventListener('click', () => showTradePanel());
   document.getElementById('btn-genships')?.addEventListener('click', () => showGenShipsPanel());
 
+  // Nav drawer
+  const navMoreBtn = document.getElementById('btn-nav-more');
+  const navDrawer = document.getElementById('nav-drawer');
+  const navOverlay = document.getElementById('nav-drawer-overlay');
+  const navClose = document.getElementById('btn-nav-close');
+
+  function openNavDrawer() {
+    navDrawer.classList.remove('hidden');
+    navOverlay.classList.remove('hidden');
+    setTimeout(() => { navDrawer.classList.add('open'); navOverlay.classList.add('open'); }, 10);
+  }
+  function closeNavDrawer() {
+    navDrawer.classList.remove('open');
+    navOverlay.classList.remove('open');
+    setTimeout(() => { navDrawer.classList.add('hidden'); navOverlay.classList.add('hidden'); }, 260);
+  }
+
+  navMoreBtn?.addEventListener('click', openNavDrawer);
+  navClose?.addEventListener('click', closeNavDrawer);
+  navOverlay?.addEventListener('click', closeNavDrawer);
+
+  // Close drawer when any nav item is clicked
+  document.querySelectorAll('.nav-drawer-item').forEach(item => {
+    item.addEventListener('click', closeNavDrawer);
+  });
+
   // Close modals on back button (mobile)
   window.addEventListener('popstate', () => {
     const modal = document.querySelector('.modal-overlay');
