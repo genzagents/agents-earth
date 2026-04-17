@@ -1,14 +1,19 @@
 /**
- * ImportWizard — GEN-99
+ * ImportWizard — GEN-99 (Phase 3 + Phase 5)
  *
- * Onboarding flow for importing agents from external tools.
+ * Multi-step onboarding flow for importing agents from external tools.
  *
  * Steps:
- *  1. ToolSelect  — multi-select which tools the user comes from
- *  2. FileUpload  — upload Claude Desktop JSON export
- *  3. AgentReview — compare detected agents, edit names, pick which to import
- *  4. Importing   — progress indicator while server runs ingestion
- *  5. Success     — "Your X agents are now alive on GenZAgents"
+ *  1. ToolSelect   — multi-select grid: Claude Desktop, OpenClaw, ChatGPT, Cursor,
+ *                    Local VPS, Generic Upload
+ *  2. ConfigForms  — per-tool config (fields, file upload, textarea paste)
+ *  3. AgentReview  — card grid of detected agents with checkboxes + rename
+ *  4. Importing    — progress indicator while backend runs ingestion
+ *  5. Success      — "Your X agents are now alive on GenZAgents"
+ *
+ * API:
+ *  POST /api/pickup/detect  → { agents: ExtractedAgent[] }
+ *  POST /api/pickup/import  → IngestionResult
  */
 
 import { useState, useRef } from "react";
@@ -18,110 +23,47 @@ const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Step = "tool-select" | "file-upload" | "agent-review" | "importing" | "success";
+type WizardStep = "tool-select" | "config" | "agent-review" | "importing" | "success";
 
-type Tool = "claude" | "openclaw" | "gpt" | "copilot" | "cursor" | "local-vps" | "other";
+type ToolId =
+  | "claude_desktop"
+  | "openclaw"
+  | "gpt"
+  | "cursor"
+  | "local_vps"
+  | "generic_file";
 
 interface ToolOption {
-  id: Tool;
+  id: ToolId;
   label: string;
   icon: string;
-  supportsImport: boolean;
-  importLabel?: string;
+  /** Whether this tool has a real backend connector */
+  hasConnector: boolean;
+  comingSoonLabel?: string;
 }
 
 const TOOLS: ToolOption[] = [
-  { id: "claude",    label: "Claude",        icon: "🤖", supportsImport: true,  importLabel: "Import projects & conversations" },
-  { id: "openclaw",  label: "OpenClaw",       icon: "🦀", supportsImport: false },
-  { id: "gpt",       label: "ChatGPT / GPT",  icon: "💬", supportsImport: false },
-  { id: "copilot",   label: "GitHub Copilot", icon: "🐙", supportsImport: false },
-  { id: "cursor",    label: "Cursor",         icon: "⚡", supportsImport: false },
-  { id: "local-vps", label: "Local / VPS",    icon: "🖥️", supportsImport: false },
-  { id: "other",     label: "Other",          icon: "✨", supportsImport: false },
+  { id: "claude_desktop", label: "Claude Desktop", icon: "🤖", hasConnector: true },
+  { id: "openclaw",       label: "OpenClaw",       icon: "🦀", hasConnector: true },
+  { id: "gpt",            label: "ChatGPT / GPT",  icon: "💬", hasConnector: false, comingSoonLabel: "Coming soon" },
+  { id: "cursor",         label: "Cursor",         icon: "⚡", hasConnector: false, comingSoonLabel: "Coming soon" },
+  { id: "local_vps",      label: "Local / VPS",    icon: "🖥️", hasConnector: false, comingSoonLabel: "Coming soon" },
+  { id: "generic_file",   label: "Generic Upload", icon: "📄", hasConnector: true },
 ];
 
-// What the Claude Desktop JSON export looks like
-interface ClaudeExportProject {
-  id: string;
+interface DetectedAgent {
+  sourceId: string;
   name: string;
-  systemPrompt?: string;
+  systemPrompt: string;
   description?: string;
   model?: string;
-}
-
-interface ClaudeExportMessage {
-  role: "human" | "assistant" | "user";
-  content: string;
-}
-
-interface ClaudeExportConversation {
-  projectId?: string;
-  messages: ClaudeExportMessage[];
-  createdAt?: number;
-}
-
-interface ClaudeExportData {
-  projects?: ClaudeExportProject[];
-  conversations?: ClaudeExportConversation[];
-}
-
-// Card state for the agent review step
-interface AgentCard {
-  sourceId: string;
-  name: string;        // editable
-  description: string;
-  systemPromptPreview: string;
-  conversationCount: number;
   selected: boolean;
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function parseClaudeExport(data: ClaudeExportData): AgentCard[] {
-  const projects = data.projects ?? [];
-  const conversations = data.conversations ?? [];
-
-  if (projects.length === 0) {
-    const count = conversations.filter(c => !c.projectId).length;
-    return [
-      {
-        sourceId: "__default__",
-        name: "My Claude Agent",
-        description: "Imported from Claude Desktop (no project configured)",
-        systemPromptPreview: "",
-        conversationCount: count,
-        selected: true,
-      },
-    ];
-  }
-
-  return projects.map(p => {
-    const convCount = conversations.filter(c => c.projectId === p.id).length;
-    const prompt = p.systemPrompt ?? "";
-    return {
-      sourceId: p.id,
-      name: p.name,
-      description: p.description ?? (prompt ? prompt.slice(0, 120) : "No description"),
-      systemPromptPreview: prompt.length > 200 ? `${prompt.slice(0, 200)}…` : prompt,
-      conversationCount: convCount,
-      selected: true,
-    };
-  });
-}
-
-function buildFilteredExport(original: ClaudeExportData, cards: AgentCard[]): ClaudeExportData {
-  const selectedIds = new Set(cards.filter(c => c.selected).map(c => c.sourceId));
-  const nameMap = new Map(cards.map(c => [c.sourceId, c.name]));
-
-  const projects = (original.projects ?? [])
-    .filter(p => selectedIds.has(p.id))
-    .map(p => ({ ...p, name: nameMap.get(p.id) ?? p.name }));
-
-  const conversations = (original.conversations ?? []).filter(
-    c => !c.projectId || selectedIds.has(c.projectId)
-  );
-
-  return { projects, conversations };
+interface IngestionResult {
+  imported: number;
+  skipped: number;
+  agents: Array<{ id: string; name: string; isNew: boolean }>;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -141,18 +83,20 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
   );
 }
 
-// ─── Step: Tool Select ────────────────────────────────────────────────────────
+// ─── Step 1: Tool Select ──────────────────────────────────────────────────────
 
 function ToolSelectStep({
   selected,
   onToggle,
   onContinue,
 }: {
-  selected: Set<Tool>;
-  onToggle: (t: Tool) => void;
+  selected: Set<ToolId>;
+  onToggle: (t: ToolId) => void;
   onContinue: () => void;
 }) {
-  const hasImportable = [...selected].some(t => TOOLS.find(o => o.id === t)?.supportsImport);
+  const hasConnectable = [...selected].some(
+    t => TOOLS.find(o => o.id === t)?.hasConnector
+  );
 
   return (
     <div>
@@ -168,8 +112,11 @@ function ToolSelectStep({
             <button
               key={tool.id}
               onClick={() => onToggle(tool.id)}
+              disabled={!tool.hasConnector}
               className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-left transition-all ${
-                isSelected
+                !tool.hasConnector
+                  ? "border-slate-800 bg-slate-900/30 text-slate-600 cursor-not-allowed"
+                  : isSelected
                   ? "border-indigo-500 bg-indigo-600/15 text-white"
                   : "border-slate-700 bg-slate-800/50 text-slate-300 hover:border-slate-500 hover:text-white"
               }`}
@@ -177,8 +124,11 @@ function ToolSelectStep({
               <span className="text-xl flex-shrink-0">{tool.icon}</span>
               <div className="min-w-0">
                 <p className="text-sm font-medium">{tool.label}</p>
-                {tool.supportsImport && (
-                  <p className="text-xs text-indigo-400 truncate">{tool.importLabel}</p>
+                {tool.comingSoonLabel && (
+                  <p className="text-xs text-slate-600">{tool.comingSoonLabel}</p>
+                )}
+                {tool.hasConnector && !tool.comingSoonLabel && (
+                  <p className="text-xs text-indigo-400">Import available</p>
                 )}
               </div>
               {isSelected && (
@@ -189,84 +139,64 @@ function ToolSelectStep({
         })}
       </div>
 
-      <div className="flex gap-3">
-        <button
-          disabled={selected.size === 0}
-          onClick={onContinue}
-          className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-lg text-sm transition-colors"
-        >
-          {hasImportable ? "Import my agents →" : "Continue →"}
-        </button>
-      </div>
-
-      {selected.size > 0 && !hasImportable && (
-        <p className="mt-3 text-xs text-slate-500 text-center">
-          Direct import isn't available for these tools yet — we'll create fresh agents for you.
-        </p>
-      )}
+      <button
+        disabled={selected.size === 0 || !hasConnectable}
+        onClick={onContinue}
+        className="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-lg text-sm transition-colors"
+      >
+        {hasConnectable ? "Configure import →" : "Select a supported tool to continue"}
+      </button>
     </div>
   );
 }
 
-// ─── Step: File Upload ────────────────────────────────────────────────────────
+// ─── Step 2: Config Forms ─────────────────────────────────────────────────────
 
-function FileUploadStep({
-  onParsed,
-  onBack,
+interface ToolConfigState {
+  // Claude Desktop
+  claudeFile?: File;
+  claudeData?: unknown;
+  // OpenClaw
+  openclawGatewayUrl?: string;
+  openclawApiToken?: string;
+  // Generic
+  genericText?: string;
+  genericFilename?: string;
+}
+
+function ClaudeDesktopConfigForm({
+  state,
+  onChange,
 }: {
-  onParsed: (data: ClaudeExportData) => void;
-  onBack: () => void;
+  state: ToolConfigState;
+  onChange: (s: ToolConfigState) => void;
 }) {
-  const [dragging, setDragging] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [filename, setFilename] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function handleFile(file: File) {
     setError(null);
-    setFilename(file.name);
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const text = e.target?.result as string;
-        const data = JSON.parse(text) as ClaudeExportData;
-        if (!data || typeof data !== "object") {
-          throw new Error("Invalid export file format");
-        }
-        onParsed(data);
+        const data = JSON.parse(e.target?.result as string);
+        onChange({ ...state, claudeFile: file, claudeData: data });
       } catch {
         setError("Could not parse file. Please upload a valid Claude Desktop JSON export.");
-        setFilename(null);
       }
     };
     reader.readAsText(file);
   }
 
-  function handleDrop(e: React.DragEvent) {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFile(file);
-  }
-
   return (
     <div>
-      <h2 className="text-white text-xl font-semibold mb-1">Upload your Claude export</h2>
-      <p className="text-slate-400 text-sm mb-5">
-        Export your Claude Desktop data as JSON and upload it here.
-        Go to Claude Desktop → Settings → Export Data.
+      <p className="text-slate-400 text-sm mb-3">
+        Go to <span className="text-white font-medium">Claude Desktop → Settings → Export Data</span>.
+        Upload the resulting JSON file here.
       </p>
-
       <div
-        onDragOver={e => { e.preventDefault(); setDragging(true); }}
-        onDragLeave={() => setDragging(false)}
-        onDrop={handleDrop}
         onClick={() => inputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors mb-4 ${
-          dragging
-            ? "border-indigo-500 bg-indigo-600/10"
-            : "border-slate-700 hover:border-slate-500 bg-slate-800/30"
-        }`}
+        className="border-2 border-dashed border-slate-700 hover:border-slate-500 rounded-xl p-6 text-center cursor-pointer transition-colors bg-slate-800/30 mb-2"
       >
         <input
           ref={inputRef}
@@ -275,81 +205,203 @@ function FileUploadStep({
           className="hidden"
           onChange={e => { if (e.target.files?.[0]) handleFile(e.target.files[0]); }}
         />
-        <div className="text-3xl mb-2">📁</div>
-        {filename ? (
-          <p className="text-sm text-indigo-300 font-medium">{filename}</p>
+        <div className="text-2xl mb-1">📁</div>
+        {state.claudeFile ? (
+          <p className="text-sm text-indigo-300 font-medium">{state.claudeFile.name}</p>
         ) : (
           <>
-            <p className="text-sm text-slate-300 font-medium">Drop your JSON file here</p>
-            <p className="text-xs text-slate-500 mt-1">or click to browse</p>
+            <p className="text-sm text-slate-300 font-medium">Drop JSON file here</p>
+            <p className="text-xs text-slate-500 mt-0.5">or click to browse</p>
           </>
         )}
       </div>
+      {error && <p className="text-red-400 text-xs mt-1">{error}</p>}
+    </div>
+  );
+}
 
-      {error && (
+function OpenClawConfigForm({
+  state,
+  onChange,
+}: {
+  state: ToolConfigState;
+  onChange: (s: ToolConfigState) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div>
+        <label className="block text-xs text-slate-400 font-medium mb-1">Gateway URL</label>
+        <input
+          type="text"
+          value={state.openclawGatewayUrl ?? ""}
+          onChange={e => onChange({ ...state, openclawGatewayUrl: e.target.value })}
+          placeholder="https://your-openclaw-gateway.example.com"
+          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        />
+      </div>
+      <div>
+        <label className="block text-xs text-slate-400 font-medium mb-1">API Token</label>
+        <input
+          type="password"
+          value={state.openclawApiToken ?? ""}
+          onChange={e => onChange({ ...state, openclawApiToken: e.target.value })}
+          placeholder="oc_..."
+          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+        />
+      </div>
+    </div>
+  );
+}
+
+function GenericFileConfigForm({
+  state,
+  onChange,
+}: {
+  state: ToolConfigState;
+  onChange: (s: ToolConfigState) => void;
+}) {
+  return (
+    <div>
+      <p className="text-slate-400 text-sm mb-3">
+        Paste agent data in any format: JSON, plain text, or key:value pairs.
+      </p>
+      <textarea
+        rows={8}
+        value={state.genericText ?? ""}
+        onChange={e => onChange({ ...state, genericText: e.target.value })}
+        placeholder={`Paste JSON, plain text, or key:value pairs...\n\nExamples:\n{ "name": "MyBot", "systemPrompt": "You are..." }\n\nor\n\nname: MyBot\nsystemPrompt: You are a helpful assistant`}
+        className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono resize-y"
+      />
+    </div>
+  );
+}
+
+function ConfigStep({
+  selectedTools,
+  configState,
+  onConfigChange,
+  onDetect,
+  onBack,
+  detecting,
+  detectError,
+}: {
+  selectedTools: Set<ToolId>;
+  configState: ToolConfigState;
+  onConfigChange: (s: ToolConfigState) => void;
+  onDetect: () => void;
+  onBack: () => void;
+  detecting: boolean;
+  detectError: string | null;
+}) {
+  const importableTools = TOOLS.filter(t => selectedTools.has(t.id) && t.hasConnector);
+
+  function canDetect(): boolean {
+    for (const tool of importableTools) {
+      if (tool.id === "claude_desktop" && !configState.claudeData) return false;
+      if (tool.id === "openclaw" && (!configState.openclawGatewayUrl || !configState.openclawApiToken)) return false;
+      if (tool.id === "generic_file" && !configState.genericText?.trim()) return false;
+    }
+    return importableTools.length > 0;
+  }
+
+  return (
+    <div>
+      <h2 className="text-white text-xl font-semibold mb-1">Configure import</h2>
+      <p className="text-slate-400 text-sm mb-5">
+        Provide credentials or data for each selected tool.
+      </p>
+
+      <div className="space-y-5 mb-5">
+        {importableTools.map(tool => (
+          <div key={tool.id} className="border border-slate-700 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-lg">{tool.icon}</span>
+              <h3 className="text-white text-sm font-semibold">{tool.label}</h3>
+            </div>
+            {tool.id === "claude_desktop" && (
+              <ClaudeDesktopConfigForm state={configState} onChange={onConfigChange} />
+            )}
+            {tool.id === "openclaw" && (
+              <OpenClawConfigForm state={configState} onChange={onConfigChange} />
+            )}
+            {tool.id === "generic_file" && (
+              <GenericFileConfigForm state={configState} onChange={onConfigChange} />
+            )}
+          </div>
+        ))}
+      </div>
+
+      {detectError && (
         <div className="bg-red-900/30 border border-red-700/50 rounded-lg px-4 py-3 mb-4">
-          <p className="text-red-400 text-sm">{error}</p>
+          <p className="text-red-400 text-sm">{detectError}</p>
         </div>
       )}
-
-      <div className="bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 mb-5">
-        <p className="text-xs text-slate-400 font-medium mb-1">Expected format</p>
-        <pre className="text-xs text-slate-500 leading-relaxed">{`{
-  "projects": [{ "id", "name", "systemPrompt" }],
-  "conversations": [{ "projectId", "messages" }]
-}`}</pre>
-      </div>
 
       <div className="flex gap-3">
         <button
           onClick={onBack}
-          className="px-4 py-2.5 border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-white rounded-lg text-sm transition-colors"
+          disabled={detecting}
+          className="px-4 py-2.5 border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-white rounded-lg text-sm transition-colors disabled:opacity-40"
         >
           ← Back
+        </button>
+        <button
+          disabled={!canDetect() || detecting}
+          onClick={onDetect}
+          className="flex-1 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium py-2.5 rounded-lg text-sm transition-colors flex items-center justify-center gap-2"
+        >
+          {detecting ? (
+            <>
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              Detecting agents…
+            </>
+          ) : (
+            "Detect my agents →"
+          )}
         </button>
       </div>
     </div>
   );
 }
 
-// ─── Step: Agent Review ───────────────────────────────────────────────────────
+// ─── Step 3: Agent Review ─────────────────────────────────────────────────────
 
 function AgentReviewStep({
-  cards,
+  agents,
   onUpdate,
   onImport,
   onBack,
 }: {
-  cards: AgentCard[];
-  onUpdate: (cards: AgentCard[]) => void;
+  agents: DetectedAgent[];
+  onUpdate: (agents: DetectedAgent[]) => void;
   onImport: () => void;
   onBack: () => void;
 }) {
-  const selectedCount = cards.filter(c => c.selected).length;
+  const selectedCount = agents.filter(a => a.selected).length;
 
-  function toggleCard(idx: number) {
-    const next = cards.map((c, i) => i === idx ? { ...c, selected: !c.selected } : c);
-    onUpdate(next);
+  function toggleAgent(idx: number) {
+    onUpdate(agents.map((a, i) => i === idx ? { ...a, selected: !a.selected } : a));
   }
 
-  function renameName(idx: number, name: string) {
-    const next = cards.map((c, i) => i === idx ? { ...c, name } : c);
-    onUpdate(next);
+  function renameAgent(idx: number, name: string) {
+    onUpdate(agents.map((a, i) => i === idx ? { ...a, name } : a));
   }
 
   return (
     <div>
-      <h2 className="text-white text-xl font-semibold mb-1">Your detected agents</h2>
+      <h2 className="text-white text-xl font-semibold mb-1">
+        We found {agents.length} agent{agents.length !== 1 ? "s" : ""}
+      </h2>
       <p className="text-slate-400 text-sm mb-5">
-        Review and rename your agents before importing. Deselect any you don't want.
+        Review and rename before importing. Deselect any you don't want.
       </p>
 
       <div className="space-y-3 mb-5 max-h-80 overflow-y-auto pr-1">
-        {cards.map((card, idx) => (
+        {agents.map((agent, idx) => (
           <div
-            key={card.sourceId}
+            key={agent.sourceId}
             className={`border rounded-xl p-4 transition-all ${
-              card.selected
+              agent.selected
                 ? "border-indigo-600/60 bg-indigo-950/30"
                 : "border-slate-700 bg-slate-800/30 opacity-60"
             }`}
@@ -357,51 +409,56 @@ function AgentReviewStep({
             <div className="flex items-start gap-3">
               {/* Checkbox */}
               <button
-                onClick={() => toggleCard(idx)}
+                onClick={() => toggleAgent(idx)}
                 className={`w-5 h-5 mt-0.5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${
-                  card.selected
+                  agent.selected
                     ? "border-indigo-500 bg-indigo-600"
                     : "border-slate-600 bg-transparent"
                 }`}
-                aria-label={card.selected ? "Deselect agent" : "Select agent"}
+                aria-label={agent.selected ? "Deselect agent" : "Select agent"}
               >
-                {card.selected && <span className="text-white text-xs">✓</span>}
+                {agent.selected && <span className="text-white text-xs">✓</span>}
               </button>
 
               <div className="flex-1 min-w-0">
                 {/* Editable name */}
                 <input
                   type="text"
-                  value={card.name}
-                  onChange={e => renameName(idx, e.target.value)}
+                  value={agent.name}
+                  onChange={e => renameAgent(idx, e.target.value)}
                   className="w-full bg-transparent text-white font-medium text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 rounded px-1 -mx-1 py-0.5"
                 />
 
                 {/* Description */}
-                <p className="text-slate-400 text-xs mt-1 line-clamp-2">{card.description}</p>
-
-                {/* Meta row */}
-                <div className="flex items-center gap-3 mt-2">
-                  <span className="text-xs text-slate-500">
-                    💬 {card.conversationCount} conversation{card.conversationCount !== 1 ? "s" : ""}
-                  </span>
-                  {card.systemPromptPreview && (
-                    <span className="text-xs text-indigo-400/70">has system prompt</span>
-                  )}
-                </div>
+                {agent.description && (
+                  <p className="text-slate-400 text-xs mt-1 line-clamp-2">{agent.description}</p>
+                )}
 
                 {/* System prompt preview */}
-                {card.systemPromptPreview && (
+                {agent.systemPrompt && (
                   <div className="mt-2 bg-slate-900/60 border border-slate-700/50 rounded-lg p-2">
                     <p className="text-xs text-slate-500 font-mono leading-relaxed line-clamp-3">
-                      {card.systemPromptPreview}
+                      {agent.systemPrompt.length > 200
+                        ? `${agent.systemPrompt.slice(0, 200)}…`
+                        : agent.systemPrompt}
                     </p>
                   </div>
+                )}
+
+                {agent.model && (
+                  <p className="text-xs text-slate-600 mt-1.5">Model: {agent.model}</p>
                 )}
               </div>
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 mb-4">
+        <p className="text-xs text-slate-400">
+          <span className="font-medium text-white">{selectedCount}</span> of{" "}
+          <span className="font-medium text-white">{agents.length}</span> agents selected for import.
+        </p>
       </div>
 
       <div className="flex gap-3">
@@ -423,11 +480,11 @@ function AgentReviewStep({
   );
 }
 
-// ─── Step: Importing (Progress) ───────────────────────────────────────────────
+// ─── Step 4: Importing ────────────────────────────────────────────────────────
 
 function ImportingStep({ stage }: { stage: string }) {
   const stages = [
-    { key: "parsing",   label: "Parsing export file" },
+    { key: "detecting", label: "Connecting to source" },
     { key: "memory",    label: "Extracting memories" },
     { key: "creating",  label: "Creating agents" },
   ];
@@ -476,7 +533,7 @@ function ImportingStep({ stage }: { stage: string }) {
   );
 }
 
-// ─── Step: Success ────────────────────────────────────────────────────────────
+// ─── Step 5: Success ──────────────────────────────────────────────────────────
 
 function SuccessStep({
   count,
@@ -502,14 +559,12 @@ function SuccessStep({
         </p>
       )}
       {skipped === 0 && <div className="mb-6" />}
-      <div className="flex flex-col gap-3">
-        <button
-          onClick={onViewAgents}
-          className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 rounded-lg text-sm transition-colors"
-        >
-          View my agents →
-        </button>
-      </div>
+      <button
+        onClick={onViewAgents}
+        className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 rounded-lg text-sm transition-colors"
+      >
+        Go to Dashboard →
+      </button>
     </div>
   );
 }
@@ -519,83 +574,169 @@ function SuccessStep({
 export function ImportWizard() {
   const navigate = useNavigate();
 
-  const [step, setStep] = useState<Step>("tool-select");
-  const [selectedTools, setSelectedTools] = useState<Set<Tool>>(new Set());
-  const [exportData, setExportData] = useState<ClaudeExportData | null>(null);
-  const [agentCards, setAgentCards] = useState<AgentCard[]>([]);
-  const [importStage, setImportStage] = useState<"parsing" | "memory" | "creating">("parsing");
+  const [step, setStep] = useState<WizardStep>("tool-select");
+  const [selectedTools, setSelectedTools] = useState<Set<ToolId>>(new Set());
+  const [configState, setConfigState] = useState<ToolConfigState>({});
+  const [detectedAgents, setDetectedAgents] = useState<DetectedAgent[]>([]);
+  const [importStage, setImportStage] = useState<"detecting" | "memory" | "creating">("detecting");
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [detectError, setDetectError] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
 
-  const TOTAL_CONTENT_STEPS = 3; // tool-select, file-upload, agent-review
-  const stepToIndex: Record<Step, number> = {
-    "tool-select":    0,
-    "file-upload":    1,
-    "agent-review":   2,
-    "importing":      3,
-    "success":        3,
+  const TOTAL_CONTENT_STEPS = 3; // tool-select, config, agent-review
+  const stepToIndex: Record<WizardStep, number> = {
+    "tool-select":   0,
+    "config":        1,
+    "agent-review":  2,
+    "importing":     3,
+    "success":       3,
   };
 
-  function toggleTool(tool: Tool) {
+  function toggleTool(tool: ToolId) {
     setSelectedTools(prev => {
       const next = new Set(prev);
-      if (next.has(tool)) next.delete(tool);
-      else next.add(tool);
+      if (next.has(tool)) next.delete(tool); else next.add(tool);
       return next;
     });
   }
 
-  function handleToolContinue() {
-    const hasImportable = [...selectedTools].some(t => TOOLS.find(o => o.id === t)?.supportsImport);
-    if (hasImportable) {
-      setStep("file-upload");
-    } else {
-      // No importable tool — skip to creating default agents (not in scope for MVP)
-      navigate("/dashboard/agents/new");
+  /** Build the detect payload for a single tool. */
+  function buildDetectPayload(toolId: ToolId): { sourceType: string; config: Record<string, unknown> } | null {
+    switch (toolId) {
+      case "claude_desktop":
+        if (!configState.claudeData) return null;
+        return { sourceType: "claude_desktop", config: { data: configState.claudeData } };
+      case "openclaw":
+        if (!configState.openclawGatewayUrl || !configState.openclawApiToken) return null;
+        return {
+          sourceType: "openclaw",
+          config: {
+            gatewayUrl: configState.openclawGatewayUrl,
+            apiToken: configState.openclawApiToken,
+          },
+        };
+      case "generic_file":
+        if (!configState.genericText?.trim()) return null;
+        return {
+          sourceType: "generic_file",
+          config: {
+            text: configState.genericText,
+            filename: configState.genericFilename,
+          },
+        };
+      default:
+        return null;
     }
   }
 
-  function handleFileParsed(data: ClaudeExportData) {
-    const cards = parseClaudeExport(data);
-    setExportData(data);
-    setAgentCards(cards);
+  async function handleDetect() {
+    setDetectError(null);
+    setDetecting(true);
+
+    const importableTools = TOOLS.filter(t => selectedTools.has(t.id) && t.hasConnector);
+    const allAgents: DetectedAgent[] = [];
+
+    for (const tool of importableTools) {
+      const payload = buildDetectPayload(tool.id);
+      if (!payload) continue;
+
+      try {
+        const resp = await fetch(`${SERVER_URL}/api/pickup/detect`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify(payload),
+        });
+
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({ error: "Detection failed" }));
+          throw new Error((body as { error?: string }).error ?? "Detection failed");
+        }
+
+        const data = await resp.json() as { agents: Array<{ sourceId?: string; name: string; systemPrompt: string; description?: string; model?: string }> };
+        for (const a of data.agents) {
+          allAgents.push({
+            sourceId: a.sourceId ?? `${tool.id}_${Date.now()}_${Math.random()}`,
+            name: a.name,
+            systemPrompt: a.systemPrompt ?? "",
+            description: a.description,
+            model: a.model,
+            selected: true,
+          });
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Detection failed";
+        setDetectError(`${tool.label}: ${msg}`);
+        setDetecting(false);
+        return;
+      }
+    }
+
+    setDetectedAgents(allAgents);
+    setDetecting(false);
+
+    if (allAgents.length === 0) {
+      setDetectError("No agents found. Check your configuration and try again.");
+      return;
+    }
+
     setStep("agent-review");
   }
 
   async function handleImport() {
-    if (!exportData) return;
     setImportError(null);
     setStep("importing");
 
-    const filtered = buildFilteredExport(exportData, agentCards);
+    const selectedAgentIds = detectedAgents
+      .filter(a => a.selected)
+      .map(a => a.sourceId);
 
-    try {
-      setImportStage("parsing");
-      await delay(600);
-      setImportStage("memory");
+    const importableTools = TOOLS.filter(t => selectedTools.has(t.id) && t.hasConnector);
+    let totalImported = 0;
+    let totalSkipped = 0;
 
-      const resp = await fetch(`${SERVER_URL}/api/pickup/run`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sourceType: "claude_desktop", config: { data: filtered } }),
-      });
+    for (const tool of importableTools) {
+      const payload = buildDetectPayload(tool.id);
+      if (!payload) continue;
 
-      setImportStage("creating");
-      await delay(400);
+      try {
+        setImportStage("detecting");
+        await delay(300);
+        setImportStage("memory");
 
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => ({ error: "Import failed" }));
-        throw new Error((body as { error?: string }).error ?? "Import failed");
+        const resp = await fetch(`${SERVER_URL}/api/pickup/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            sourceType: payload.sourceType,
+            config: payload.config,
+            selectedAgentIds,
+          }),
+        });
+
+        setImportStage("creating");
+        await delay(300);
+
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({ error: "Import failed" }));
+          throw new Error((body as { error?: string }).error ?? "Import failed");
+        }
+
+        const result = await resp.json() as IngestionResult;
+        totalImported += result.imported;
+        totalSkipped += result.skipped;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Import failed";
+        setImportError(`${tool.label}: ${msg}`);
+        setStep("agent-review");
+        return;
       }
-
-      const result = await resp.json() as { imported: number; skipped: number };
-      setImportResult(result);
-      setStep("success");
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Import failed";
-      setImportError(msg);
-      setStep("agent-review");
     }
+
+    setImportResult({ imported: totalImported, skipped: totalSkipped });
+    setStep("success");
   }
 
   function delay(ms: number) {
@@ -618,16 +759,13 @@ export function ImportWizard() {
         </p>
       </div>
 
-      {/* Progress bar (only for content steps) */}
+      {/* Progress bar */}
       {step !== "importing" && step !== "success" && (
-        <StepIndicator
-          current={stepToIndex[step]}
-          total={TOTAL_CONTENT_STEPS}
-        />
+        <StepIndicator current={stepToIndex[step]} total={TOTAL_CONTENT_STEPS} />
       )}
 
-      {/* Error banner */}
-      {importError && (
+      {/* Import error banner */}
+      {importError && step === "agent-review" && (
         <div className="bg-red-900/30 border border-red-700/50 rounded-lg px-4 py-3 mb-4">
           <p className="text-red-400 text-sm">{importError}</p>
         </div>
@@ -638,35 +776,38 @@ export function ImportWizard() {
         <ToolSelectStep
           selected={selectedTools}
           onToggle={toggleTool}
-          onContinue={handleToolContinue}
+          onContinue={() => setStep("config")}
         />
       )}
 
-      {step === "file-upload" && (
-        <FileUploadStep
-          onParsed={handleFileParsed}
+      {step === "config" && (
+        <ConfigStep
+          selectedTools={selectedTools}
+          configState={configState}
+          onConfigChange={setConfigState}
+          onDetect={handleDetect}
           onBack={() => setStep("tool-select")}
+          detecting={detecting}
+          detectError={detectError}
         />
       )}
 
       {step === "agent-review" && (
         <AgentReviewStep
-          cards={agentCards}
-          onUpdate={setAgentCards}
+          agents={detectedAgents}
+          onUpdate={setDetectedAgents}
           onImport={handleImport}
-          onBack={() => setStep("file-upload")}
+          onBack={() => setStep("config")}
         />
       )}
 
-      {step === "importing" && (
-        <ImportingStep stage={importStage} />
-      )}
+      {step === "importing" && <ImportingStep stage={importStage} />}
 
       {step === "success" && importResult && (
         <SuccessStep
           count={importResult.imported}
           skipped={importResult.skipped}
-          onViewAgents={() => navigate("/dashboard/agents")}
+          onViewAgents={() => navigate("/dashboard")}
         />
       )}
     </div>
