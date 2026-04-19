@@ -806,7 +806,7 @@ export function ImportAgentModal({ onClose, onImported }: ImportAgentModalProps)
                 ✓ {importedCount} agent{importedCount !== 1 ? "s" : ""} imported
               </span>
               <button
-                onClick={onClose}
+                onClick={() => { onImported(importedCount); onClose(); }}
                 className="text-xs text-emerald-400 hover:text-emerald-200 underline"
               >
                 Close
