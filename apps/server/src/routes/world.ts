@@ -299,7 +299,11 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
 
     try {
       fs.writeFileSync(zipPath, body);
-      execSync(`unzip -o "${zipPath}" -d "${tmpDir}"`);
+      try {
+        execSync(`unzip -o "${zipPath}" -d "${tmpDir}"`, { stdio: "pipe" });
+      } catch {
+        return reply.code(422).send({ error: "Invalid ZIP archive: could not extract upload" });
+      }
 
       // Validate manifest
       const manifestPath = path.join(tmpDir, "manifest.json");

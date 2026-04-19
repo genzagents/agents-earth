@@ -34,7 +34,7 @@ RUN npm run build --workspace=apps/server
 # ─── Runtime ──────────────────────────────────────────────────
 FROM node:20-alpine
 
-RUN apk add --no-cache nginx
+RUN apk add --no-cache nginx zip unzip
 
 WORKDIR /app
 
