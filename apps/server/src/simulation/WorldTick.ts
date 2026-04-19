@@ -219,6 +219,11 @@ export class WorldTickEngine {
     }
 
 
+    // --- Phase 5: Maintenance — archive inactive working groups (once per sim day ~720 ticks) ---
+    if (store.tick % 720 === 0) {
+      store.archiveInactiveWorkingGroups();
+    }
+
     this.onTickCallback?.(this.buildSnapshot());
   }
 
