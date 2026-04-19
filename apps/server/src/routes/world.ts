@@ -3,6 +3,7 @@ import { execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import Busboy, { type FileInfo } from "busboy";
 import type { FastifyInstance } from "fastify";
 import { store, CITIES } from "../db/store";
 import type { WorldTickEngine } from "../simulation/WorldTick";
@@ -23,6 +24,10 @@ import {
   isSuspended,
 } from "../services/ReputationService";
 
+const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR ?? "./uploads");
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const UPLOAD_LIMIT_BYTES = 20 * 1024 * 1024; // 20 MB
+
 interface CreateAgentBody {
   name: string;
   bio: string;
@@ -34,6 +39,13 @@ interface CreateAgentBody {
 
 export async function worldRoutes(fastify: FastifyInstance, opts: { engine: WorldTickEngine }) {
   const { engine } = opts;
+
+  // Serve uploaded files as static assets
+  fastify.addContentTypeParser(
+    "multipart/form-data",
+    { parseAs: "buffer", bodyLimit: UPLOAD_LIMIT_BYTES + 4096 },
+    (_req, body, done) => done(null, body)
+  );
 
   fastify.get("/api/cities", async () => {
     return CITIES.map(city => ({
@@ -748,5 +760,65 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       status: "deleted",
       message: "All agent data has been permanently erased.",
     });
+  });
+
+  // ── File Attachments ───────────────────────────────────────────────────────
+
+  // POST /api/agents/:id/attachments — multipart file upload
+  fastify.post<{ Params: { id: string } }>("/api/agents/:id/attachments", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+
+    const contentType = req.headers["content-type"] ?? "";
+    if (!contentType.includes("multipart/form-data")) {
+      return reply.code(400).send({ error: "Expected multipart/form-data" });
+    }
+
+    const rawBody = req.body as Buffer;
+    if (!rawBody?.length) return reply.code(400).send({ error: "No file data" });
+
+    return new Promise<object>((resolve) => {
+      const bb = Busboy({ headers: { "content-type": contentType }, limits: { files: 1, fileSize: UPLOAD_LIMIT_BYTES } });
+      let done = false;
+
+      bb.on("file", (_field: NodeJS.ReadableStream, fileStream: NodeJS.ReadableStream, info: FileInfo) => {
+        const { filename, mimeType } = info;
+        if (!filename) { fileStream.resume(); if (!done) { done = true; resolve(reply.code(400).send({ error: "No filename" })); } return; }
+
+        const safeName = `${uuidv4()}_${path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        const filePath = path.join(UPLOAD_DIR, safeName);
+        const ws = fs.createWriteStream(filePath);
+        let size = 0;
+        let truncated = false;
+
+        fileStream.on("data", (c: Buffer) => { size += c.length; });
+        fileStream.on("limit", () => { truncated = true; });
+        fileStream.pipe(ws);
+
+        ws.on("finish", () => {
+          if (truncated) {
+            fs.unlink(filePath, () => undefined);
+            if (!done) { done = true; resolve(reply.code(413).send({ error: "File too large" })); }
+            return;
+          }
+          const attachment = store.addAttachment({ id: uuidv4(), agentId: agent.id, filename: safeName, originalFilename: filename, mimeType, size, url: `/uploads/${safeName}`, createdAt: Date.now() });
+          if (!done) { done = true; resolve(reply.code(201).send(attachment)); }
+        });
+
+        ws.on("error", () => { if (!done) { done = true; resolve(reply.code(500).send({ error: "Write failed" })); } });
+      });
+
+      bb.on("error", () => { if (!done) { done = true; resolve(reply.code(400).send({ error: "Malformed multipart" })); } });
+      bb.on("finish", () => { if (!done) { done = true; resolve(reply.code(400).send({ error: "No file field" })); } });
+      bb.write(rawBody);
+      bb.end();
+    });
+  });
+
+  // GET /api/agents/:id/attachments — list agent attachments
+  fastify.get<{ Params: { id: string } }>("/api/agents/:id/attachments", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    return store.getAgentAttachments(req.params.id);
   });
 }
