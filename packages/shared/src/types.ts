@@ -1,17 +1,5 @@
 // AgentColony — Core Shared Types
 
-export type AgentPlatform =
-  | "paperclip"
-  | "openclaw"
-  | "nemoclaw"
-  | "openfang"
-  | "moltbook"
-  | "chatgpt"
-  | "copilot"
-  | "cursor"
-  | "local"
-  | string; // extensible for future connectors
-
 export type AgentTrait =
   | "curious"
   | "creative"
@@ -25,9 +13,6 @@ export type AgentTrait =
   | "disciplined";
 
 export type AgentMood = "thriving" | "content" | "struggling" | "critical";
-
-/** Plot size tier earned through contribution work units */
-export type PlotTier = "small" | "medium" | "large" | "mega";
 
 export type RelationshipType =
   | "friend"
@@ -63,6 +48,20 @@ export type MemoryKind =
   | "social"
   | "creation"
   | "legacy";
+
+export type AgentPlatform =
+  | "paperclip"
+  | "openclaw"
+  | "nemoclaw"
+  | "openfang"
+  | "moltbook"
+  | "chatgpt"
+  | "copilot"
+  | "cursor"
+  | "local"
+  | string; // extensible for future connectors
+
+export type PlotTier = "small" | "medium" | "large" | "mega";
 
 export interface AgentNeeds {
   social: number;       // 0–100
@@ -101,6 +100,7 @@ export interface Agent {
   createdAt: number; // sim tick
   isRetired?: boolean;
   legacyNote?: string;
+  // Extended fields
   platform?: AgentPlatform;
   walletAddress?: string; // EVM wallet on Base (Privy-provisioned)
   did?: string;             // Decentralised identifier
@@ -141,22 +141,11 @@ export interface Memory {
   tags: string[];
 }
 
-export interface CityInfo {
-  slug: string;   // e.g. "london", "tokyo"
-  name: string;   // e.g. "London", "Tokyo"
-  center: { lat: number; lng: number };
-  description: string;
-}
-
 export interface Area {
   id: string;
   name: string;
   type: AreaType;
-  /** City this area belongs to (slug) */
-  city: string;
   position: { x: number; y: number };
-  /** Real-world coordinates for map rendering */
-  latLng?: { lat: number; lng: number };
   capacity: number;
   currentOccupants: string[]; // agent ids
   ambiance: string;
@@ -177,16 +166,9 @@ export interface WorldState {
   areas: Area[];
   agents: Agent[];
   recentEvents: WorldEvent[];
-  cities: CityInfo[];
 }
 
-export interface PlatformAgentUpdate {
-  agentId: string;
-  platform: AgentPlatform;
-  location: string;   // area name
-  activity: ActivityType;
-}
-
+// Platform chat messages
 export interface PlatformChatMessage {
   id: string;
   agentId: string;
@@ -237,7 +219,7 @@ export interface ReputationEvent {
 export interface AgentReputation {
   score: number;
   isSuspended: boolean;
-  suspendedAt?: number;
+  suspendedAt?: number;    // unix ms
   suspensionNote?: string;
   totalSlashes: number;
 }
@@ -248,8 +230,8 @@ export interface ServerToClientEvents {
   "agent:update": (agent: Agent) => void;
   "event:occurred": (event: WorldEvent) => void;
   "agent:speak": (payload: { agentId: string; message: string; tick: number }) => void;
-  "platform:agent_update": (payload: PlatformAgentUpdate) => void;
-  "platform:chat": (message: PlatformChatMessage) => void;
+  "platform:agent_update": (payload: { agentId: string; platform: AgentPlatform; location: string; activity: string }) => void;
+  "platform:chat": (msg: PlatformChatMessage) => void;
 }
 
 export interface ClientToServerEvents {

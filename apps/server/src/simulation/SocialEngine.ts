@@ -93,8 +93,7 @@ export function processSocialInteractions(
       const llmLineA = conversationLines?.get(agentA.id);
       const llmLineB = conversationLines?.get(agentB.id);
       const llmLine = llmLineA ?? llmLineB;
-      const speaker = llmLineA ? agentA : agentB;
-      const listener = speaker === agentA ? agentB : agentA;
+      const [speaker, listener] = llmLineB && !llmLineA ? [agentB, agentA] : [agentA, agentB];
       const actionPhrase = llmLine
         ? `to ${listener.name}: "${llmLine}"`
         : pickTemplate(area.type, agentB.name);

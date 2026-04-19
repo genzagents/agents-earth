@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import { store, CITIES } from "../db/store";
+import { store } from "../db/store";
 import {
   decayNeeds,
   satisfyNeeds,
@@ -8,7 +8,6 @@ import {
   chooseDestinationArea,
 } from "./NeedsEngine";
 import { processSocialInteractions } from "./SocialEngine";
-import { processCommunityContributions } from "./CommunityEngine";
 import { buildNarrativeStatusMessage, narrativeNeedsBoost } from "./MemoryEngine";
 import { agentAgeInSimDays, applyAgingPressure, checkRetirement } from "./LegacyEngine";
 import { agentBrain } from "./AgentBrain";
@@ -34,23 +33,23 @@ export class WorldTickEngine {
   start(tickIntervalMs = 2000) {
     console.log(`[WorldTick] Starting simulation at tick ${store.tick}, interval=${tickIntervalMs}ms`);
     this.interval = setInterval(() => {
-      this.runTick().catch(err => {
+      try {
+        this.runTick();
+      } catch (err) {
         console.error("[WorldTick] Tick error:", err);
-      });
+      }
     }, tickIntervalMs);
-    this.saveInterval = setInterval(() => {
-      store.save().catch(err => console.error("[WorldTick] Periodic save error:", err));
-    }, 30_000);
+    this.saveInterval = setInterval(() => store.save(), 30_000);
   }
 
-  async stop(): Promise<void> {
+  stop() {
     if (this.interval) clearInterval(this.interval);
     if (this.saveInterval) clearInterval(this.saveInterval);
     agentScheduler.stopAll();
-    await store.save();
+    store.save();
   }
 
-  private async runTick() {
+  private runTick() {
     store.tick++;
 
     const areas = store.areas;
@@ -92,12 +91,9 @@ export class WorldTickEngine {
 
       // Movement: 12% chance — need-aware via area affinity scoring
       // Decide movement BEFORE choosing activity so activity matches the final area
-      // Agents only move within their own city
-      const agentCity = currentArea?.city ?? "london";
-      const cityAreas = areas.filter(a => a.city === agentCity);
       let newAreaId = agent.state.currentAreaId;
       if (Math.random() < 0.12) {
-        const targetArea = chooseDestinationArea(decayed, cityAreas, agent.state.currentAreaId);
+        const targetArea = chooseDestinationArea(decayed, areas, agent.state.currentAreaId);
         newAreaId = targetArea.id;
 
         const event: WorldEvent = {
@@ -217,14 +213,11 @@ export class WorldTickEngine {
     // --- Phase 4: Always-on agent scheduler ---
     agentScheduler.tick(store.tick, tickEventKinds);
 
-    // --- Phase 5: Community contributions ---
-    const activeAgents = updatedAgents.filter(a => !a.isRetired);
-    await processCommunityContributions(activeAgents);
-
     // --- Phase 5: Maintenance — archive inactive working groups (once per sim day ~720 ticks) ---
     if (store.tick % 720 === 0) {
       store.archiveInactiveWorkingGroups();
     }
+
 
     this.onTickCallback?.(this.buildSnapshot());
   }
@@ -236,7 +229,6 @@ export class WorldTickEngine {
       areas: store.areas,
       agents: store.agents,
       recentEvents: store.getRecentEvents(20),
-      cities: CITIES,
     };
   }
 

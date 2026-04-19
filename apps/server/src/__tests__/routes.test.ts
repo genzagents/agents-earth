@@ -4,9 +4,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import { store } from "../db/store";
 import { worldRoutes } from "../routes/world";
-import { economyRoutes } from "../routes/economy";
-import { computePlotTier } from "../simulation/CommunityEngine";
-import type { WorldState, EconomyLeaderboard } from "@agentcolony/shared";
+import type { WorldState } from "@agentcolony/shared";
 import type { WorldTickEngine } from "../simulation/WorldTick";
 
 // Minimal engine mock — only getSnapshot() is needed by routes
@@ -19,7 +17,6 @@ function makeMockEngine(): WorldTickEngine {
         areas: store.areas,
         agents: store.agents,
         recentEvents: [],
-        cities: [],
       };
     },
     onTick() {},
@@ -149,125 +146,6 @@ describe("GET /api/agents/:id/relationships", () => {
     const app = await buildApp();
     const res = await app.inject({ method: "GET", url: "/api/agents/nonexistent-id-00000/relationships" });
     assert.equal(res.statusCode, 404);
-    await app.close();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// computePlotTier unit tests
-// ---------------------------------------------------------------------------
-
-describe("computePlotTier", () => {
-  test("returns small for 0 work units", () => {
-    assert.equal(computePlotTier(0), "small");
-  });
-
-  test("returns small for 99 work units", () => {
-    assert.equal(computePlotTier(99), "small");
-  });
-
-  test("returns medium at 100 work units threshold", () => {
-    assert.equal(computePlotTier(100), "medium");
-  });
-
-  test("returns medium for 499 work units", () => {
-    assert.equal(computePlotTier(499), "medium");
-  });
-
-  test("returns large at 500 work units threshold", () => {
-    assert.equal(computePlotTier(500), "large");
-  });
-
-  test("returns large for 999 work units", () => {
-    assert.equal(computePlotTier(999), "large");
-  });
-
-  test("returns mega at 1000 work units threshold", () => {
-    assert.equal(computePlotTier(1000), "mega");
-  });
-
-  test("returns mega for values above 1000", () => {
-    assert.equal(computePlotTier(9999), "mega");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// GET /api/economy/leaderboard
-// ---------------------------------------------------------------------------
-
-async function buildEconomyApp() {
-  const fastify = Fastify({ logger: false });
-  await fastify.register(cors, { origin: "*" });
-  await fastify.register(economyRoutes);
-  await fastify.ready();
-  return fastify;
-}
-
-describe("GET /api/economy/leaderboard", () => {
-  test("returns 200 with valid JSON", async () => {
-    const app = await buildEconomyApp();
-    const res = await app.inject({ method: "GET", url: "/api/economy/leaderboard" });
-    assert.equal(res.statusCode, 200);
-    const body = res.json();
-    assert.ok(body !== null && typeof body === "object");
-    await app.close();
-  });
-
-  test("response has required top-level fields", async () => {
-    const app = await buildEconomyApp();
-    const res = await app.inject({ method: "GET", url: "/api/economy/leaderboard" });
-    const body = res.json() as EconomyLeaderboard;
-    assert.ok(Array.isArray(body.topContributors), "topContributors should be an array");
-    assert.ok(typeof body.totalWorkUnits === "number", "totalWorkUnits should be a number");
-    assert.ok(typeof body.totalContributed === "number", "totalContributed should be a number");
-    assert.ok(body.plotTierCounts !== null && typeof body.plotTierCounts === "object", "plotTierCounts should be an object");
-    await app.close();
-  });
-
-  test("plotTierCounts has all four tier keys", async () => {
-    const app = await buildEconomyApp();
-    const res = await app.inject({ method: "GET", url: "/api/economy/leaderboard" });
-    const body = res.json() as EconomyLeaderboard;
-    const tiers = body.plotTierCounts;
-    assert.ok("small" in tiers, "plotTierCounts should have small");
-    assert.ok("medium" in tiers, "plotTierCounts should have medium");
-    assert.ok("large" in tiers, "plotTierCounts should have large");
-    assert.ok("mega" in tiers, "plotTierCounts should have mega");
-    await app.close();
-  });
-
-  test("topContributors entries have required fields", async () => {
-    const app = await buildEconomyApp();
-    const res = await app.inject({ method: "GET", url: "/api/economy/leaderboard" });
-    const body = res.json() as EconomyLeaderboard;
-    assert.ok(body.topContributors.length > 0, "Should have at least one contributor entry");
-    const entry = body.topContributors[0];
-    assert.ok(typeof entry.agentId === "string", "agentId should be a string");
-    assert.ok(typeof entry.name === "string", "name should be a string");
-    assert.ok(typeof entry.workUnits === "number", "workUnits should be a number");
-    assert.ok(typeof entry.contributed === "number", "contributed should be a number");
-    assert.ok(typeof entry.plotTier === "string", "plotTier should be a string");
-    assert.ok(typeof entry.rank === "number", "rank should be a number");
-    await app.close();
-  });
-
-  test("rank is 1-indexed and ordered descending by workUnits", async () => {
-    const app = await buildEconomyApp();
-    const res = await app.inject({ method: "GET", url: "/api/economy/leaderboard" });
-    const body = res.json() as EconomyLeaderboard;
-    const contributors = body.topContributors;
-    assert.equal(contributors[0].rank, 1, "First entry should have rank 1");
-    // Verify ordering: each entry should have workUnits >= next entry
-    for (let i = 0; i < contributors.length - 1; i++) {
-      assert.ok(
-        contributors[i].workUnits >= contributors[i + 1].workUnits,
-        `Entry ${i} (${contributors[i].workUnits}) should have >= workUnits than entry ${i + 1} (${contributors[i + 1].workUnits})`
-      );
-    }
-    // Verify ranks are sequential
-    contributors.forEach((entry, idx) => {
-      assert.equal(entry.rank, idx + 1, `Entry at index ${idx} should have rank ${idx + 1}`);
-    });
     await app.close();
   });
 });

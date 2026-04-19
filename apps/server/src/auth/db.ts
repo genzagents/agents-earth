@@ -1,4 +1,6 @@
-import { Pool } from "pg";
+// Lazy pool — avoids crashing at module load when pg is not installed (e.g. in tests)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _pool: any | null = null;
 
 const {
   SUPABASE_DB_HOST = "db.ihdfohtjjtjfjxqsacgm.supabase.co",
@@ -8,15 +10,30 @@ const {
   SUPABASE_DB_PASSWORD = "",
 } = process.env;
 
-export const pool = new Pool({
-  host: SUPABASE_DB_HOST,
-  port: parseInt(SUPABASE_DB_PORT, 10),
-  database: SUPABASE_DB_NAME,
-  user: SUPABASE_DB_USER,
-  password: SUPABASE_DB_PASSWORD,
-  ssl: { rejectUnauthorized: false },
-  max: 10,
-  idleTimeoutMillis: 30000,
+function getPool(): import("pg").Pool {
+  if (!_pool) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Pool } = require("pg") as typeof import("pg");
+    _pool = new Pool({
+      host: SUPABASE_DB_HOST,
+      port: parseInt(SUPABASE_DB_PORT, 10),
+      database: SUPABASE_DB_NAME,
+      user: SUPABASE_DB_USER,
+      password: SUPABASE_DB_PASSWORD,
+      ssl: { rejectUnauthorized: false },
+      max: 10,
+      idleTimeoutMillis: 30000,
+    });
+  }
+  return _pool;
+}
+
+// Proxy pool so callers can still do `pool.query(...)` without changing call sites
+export const pool: import("pg").Pool = new Proxy({} as import("pg").Pool, {
+  get(_target, prop) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (getPool() as unknown as Record<string | symbol, unknown>)[prop];
+  },
 });
 
 /** Ensure the auth schema tables exist. Call once at startup. */

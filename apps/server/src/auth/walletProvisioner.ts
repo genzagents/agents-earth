@@ -1,19 +1,23 @@
-import { PrivyClient } from "@privy-io/server-auth";
 import { updateUserWallet } from "./userStore";
 
 const PRIVY_APP_ID = process.env.PRIVY_APP_ID ?? "";
 const PRIVY_APP_SECRET = process.env.PRIVY_APP_SECRET ?? "";
 
-let privyClient: PrivyClient | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let privyClientCache: any = null;
 
-function getPrivyClient(): PrivyClient {
-  if (!privyClient) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getPrivyClient(): any {
+  if (!privyClientCache) {
     if (!PRIVY_APP_ID || !PRIVY_APP_SECRET) {
       throw new Error("PRIVY_APP_ID and PRIVY_APP_SECRET env vars are required for wallet provisioning");
     }
-    privyClient = new PrivyClient(PRIVY_APP_ID, PRIVY_APP_SECRET);
+    // Deferred require so missing package doesn't crash on module load (e.g. in tests)
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { PrivyClient } = require("@privy-io/server-auth");
+    privyClientCache = new PrivyClient(PRIVY_APP_ID, PRIVY_APP_SECRET);
   }
-  return privyClient;
+  return privyClientCache;
 }
 
 /**
@@ -41,7 +45,8 @@ export async function provisionWallet(userId: string, email: string): Promise<st
 
     // Find the embedded EVM wallet address
     const evmWallet = privyUser.linkedAccounts.find(
-      (a) => a.type === "wallet" && a.walletClientType === "privy"
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (a: any) => a.type === "wallet" && a.walletClientType === "privy"
     );
 
     if (!evmWallet || evmWallet.type !== "wallet") {
@@ -49,7 +54,11 @@ export async function provisionWallet(userId: string, email: string): Promise<st
       return null;
     }
 
-    const address = evmWallet.address;
+    const address = evmWallet.address ?? null;
+    if (!address) {
+      console.warn("[wallet] EVM wallet has no address for user", userId);
+      return null;
+    }
 
     // Persist on user record
     await updateUserWallet(userId, address);

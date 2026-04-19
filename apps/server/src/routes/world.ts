@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import Busboy, { type FileInfo } from "busboy";
 import type { FastifyInstance } from "fastify";
-import { store, CITIES } from "../db/store";
+import { store } from "../db/store";
 import type { WorldTickEngine } from "../simulation/WorldTick";
 import type { Agent, AgentTrait, ActivityType, Memory } from "@agentcolony/shared";
 import { agentBrain } from "../simulation/AgentBrain";
@@ -34,7 +34,6 @@ interface CreateAgentBody {
   avatar: string;
   traits: AgentTrait[];
   startingAreaId?: string;
-  city?: string;
 }
 
 export async function worldRoutes(fastify: FastifyInstance, opts: { engine: WorldTickEngine }) {
@@ -47,34 +46,12 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     (_req, body, done) => done(null, body)
   );
 
-  fastify.get("/api/cities", async () => {
-    return CITIES.map(city => ({
-      ...city,
-      agentCount: store.getAgentsByCity(city.slug).filter(a => !a.isRetired).length,
-      areaCount: store.getAreasByCity(city.slug).length,
-    }));
+  fastify.get("/api/world", async () => {
+    return engine.getSnapshot();
   });
 
-  fastify.get<{ Querystring: { city?: string } }>("/api/world", async (req) => {
-    const snapshot = engine.getSnapshot();
-    const { city } = req.query;
-    if (!city) return snapshot;
-
-    const cityAreaIds = new Set(store.getAreasByCity(city).map(a => a.id));
-    return {
-      ...snapshot,
-      areas: snapshot.areas.filter(a => a.city === city),
-      agents: snapshot.agents.filter(a => cityAreaIds.has(a.state.currentAreaId)),
-      recentEvents: snapshot.recentEvents.filter(e =>
-        !e.areaId || cityAreaIds.has(e.areaId)
-      ),
-    };
-  });
-
-  fastify.get<{ Querystring: { city?: string } }>("/api/agents", async (req) => {
-    const { city } = req.query;
-    const agents = city ? store.getAgentsByCity(city) : store.agents;
-    return agents.map(a => ({
+  fastify.get("/api/agents", async () => {
+    return store.agents.map(a => ({
       id: a.id,
       name: a.name,
       avatar: a.avatar,
@@ -126,19 +103,18 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
           avatar: { type: "string" },
           traits: { type: "array", items: { type: "string" }, maxItems: 5 },
           startingAreaId: { type: "string" },
-          city: { type: "string" },
         },
       },
     },
   }, async (req, reply) => {
-    const { name, bio, avatar, traits, startingAreaId, city } = req.body;
+    const { name, bio, avatar, traits, startingAreaId } = req.body;
 
-    const candidateAreas = city ? store.getAreasByCity(city) : store.areas;
+    const areas = store.areas;
     const area = startingAreaId
-      ? store.areas.find(a => a.id === startingAreaId)
-      : candidateAreas[Math.floor(Math.random() * candidateAreas.length)];
+      ? areas.find(a => a.id === startingAreaId)
+      : areas[Math.floor(Math.random() * areas.length)];
 
-    if (!area) return reply.code(400).send({ error: "Invalid startingAreaId or city" });
+    if (!area) return reply.code(400).send({ error: "Invalid startingAreaId" });
 
     const newAgent: Agent = {
       id: uuidv4(),
@@ -151,7 +127,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
         mood: "content",
         currentActivity: "exploring" as ActivityType,
         currentAreaId: area.id,
-        statusMessage: `${name} has just arrived in ${area.city === "tokyo" ? "Tokyo" : "the city"}.`,
+        statusMessage: `${name} has just arrived in the city.`,
         lastUpdated: store.tick,
       },
       relationships: [],
