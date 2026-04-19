@@ -79,6 +79,19 @@ export interface Relationship {
   lastMet: number; // sim tick
 }
 
+export type ProvenanceEventKind =
+  | "agent_created"
+  | "wallet_provisioned"
+  | "did_created"
+  | "did_anchored"
+  | "agent_retired";
+
+export interface ProvenanceEntry {
+  event: ProvenanceEventKind;
+  timestamp: string; // ISO-8601
+  detail?: string;
+}
+
 export interface Agent {
   id: string;
   name: string;
@@ -93,6 +106,7 @@ export interface Agent {
   legacyNote?: string;
   platform?: AgentPlatform;
   walletAddress?: string; // EVM wallet on Base (Privy-provisioned)
+  reputationScore?: number; // derived: relationships.length + memories count
 }
 
 export interface Memory {

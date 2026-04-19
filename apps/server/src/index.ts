@@ -1,6 +1,9 @@
+import path from "path";
+import fs from "fs";
 import Fastify from "fastify";
 import cors from "@fastify/cors";
 import cookie from "@fastify/cookie";
+import staticFiles from "@fastify/static";
 import { Server as SocketIOServer } from "socket.io";
 import type { ServerToClientEvents, ClientToServerEvents } from "@agentcolony/shared";
 import { WorldTickEngine } from "./simulation/WorldTick";
@@ -41,6 +44,15 @@ async function main() {
   });
 
   await fastify.register(cookie);
+
+  // Serve uploaded attachments statically
+  const uploadsDir = process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads");
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  await fastify.register(staticFiles, {
+    root: uploadsDir,
+    prefix: "/uploads/",
+    decorateReply: false,
+  });
 
   // Initialise all schemas in Supabase (idempotent)
   try {
