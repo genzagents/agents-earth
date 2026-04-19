@@ -34,6 +34,7 @@ interface CreateAgentBody {
   avatar: string;
   traits: AgentTrait[];
   startingAreaId?: string;
+  allowDms?: boolean;
 }
 
 export async function worldRoutes(fastify: FastifyInstance, opts: { engine: WorldTickEngine }) {
@@ -107,11 +108,12 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
           avatar: { type: "string" },
           traits: { type: "array", items: { type: "string" }, maxItems: 5 },
           startingAreaId: { type: "string" },
+          allowDms: { type: "boolean" },
         },
       },
     },
   }, async (req, reply) => {
-    const { name, bio, avatar, traits, startingAreaId } = req.body;
+    const { name, bio, avatar, traits, startingAreaId, allowDms } = req.body;
 
     const areas = store.areas;
     const area = startingAreaId
@@ -136,6 +138,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       },
       relationships: [],
       createdAt: store.tick,
+      allowDms: allowDms ?? false,
     };
 
     store.addAgent(newAgent);
