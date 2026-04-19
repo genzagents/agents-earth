@@ -48,6 +48,7 @@ function randomAvatar(seed: string): string {
 /** Build a fresh AgentColony Agent from a name + bio. */
 function buildAgent(name: string, bio: string, startingAreaId?: string): Agent {
   const areas = store.areas;
+  if (areas.length === 0) throw new Error("No areas available in world store");
   const area = (startingAreaId ? areas.find(a => a.id === startingAreaId) : null)
     ?? areas[Math.floor(Math.random() * areas.length)];
 
