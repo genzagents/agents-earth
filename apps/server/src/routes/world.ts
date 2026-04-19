@@ -4,6 +4,8 @@ import { store } from "../db/store";
 import type { WorldTickEngine } from "../simulation/WorldTick";
 import type { Agent, AgentTrait, ActivityType } from "@agentcolony/shared";
 import { agentBrain } from "../simulation/AgentBrain";
+import { createDID } from "../services/did";
+import { provisionWallet } from "../services/wallet";
 
 // Rate limit: max 10 chat messages per agent per minute
 const chatRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -126,7 +128,30 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       currentOccupants: [...area.currentOccupants, newAgent.id],
     });
 
+    // Fire-and-forget DID creation (non-blocking)
+    createDID(newAgent).then(result => {
+      store.updateAgent(newAgent.id, { did: result.did, didAnchorTx: result.anchorTx ?? undefined });
+      store.save();
+    }).catch(err => console.error(`[did] Failed to create DID for agent ${newAgent.id}:`, err));
+
     return reply.code(201).send(newAgent);
+  });
+
+  fastify.post<{ Params: { id: string } }>("/api/agents/:id/provision-wallet", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    if (agent.walletAddress) return { agentId: agent.id, walletAddress: agent.walletAddress, alreadyProvisioned: true };
+    let result;
+    try {
+      result = await provisionWallet(agent.id);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      return reply.code(502).send({ error: `Wallet provisioning failed: ${message}` });
+    }
+    if (!result) return reply.code(503).send({ error: "Wallet provisioning unavailable — PRIVY_APP_ID and PRIVY_APP_SECRET are not configured." });
+    store.updateAgent(agent.id, { walletAddress: result.walletAddress });
+    store.save();
+    return { agentId: agent.id, walletAddress: result.walletAddress, chainType: result.chainType, alreadyProvisioned: false };
   });
 
   fastify.post<{ Params: { id: string }; Body: { message: string } }>("/api/agents/:id/chat", {

@@ -86,6 +86,27 @@ export interface Agent {
   createdAt: number; // sim tick
   isRetired?: boolean;
   legacyNote?: string;
+  walletAddress?: string;   // EVM wallet address (set via DID service)
+  reputationScore?: number; // 0–100 reputation score
+  did?: string;             // Decentralised identifier
+  didAnchorTx?: string;     // On-chain anchor transaction hash
+}
+
+export type ProvenanceKind =
+  | "wallet_provisioned"
+  | "did_created"
+  | "did_anchored"
+  | "agent_created"
+  | "agent_retired";
+
+export interface ProvenanceEntry {
+  id: string;
+  agentId: string;
+  kind: ProvenanceKind;
+  description: string;
+  timestamp: number; // unix ms
+  txHash?: string;
+  address?: string;
 }
 
 export interface Memory {
