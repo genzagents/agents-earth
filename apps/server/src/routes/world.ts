@@ -492,4 +492,100 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
+
+  // ── GDPR: data export ────────────────────────────────────────────────────────
+  // GET /api/agents/:id/gdpr/export
+  // Returns a JSON archive of all data held for this agent.
+  fastify.get<{ Params: { id: string } }>("/api/agents/:id/gdpr/export", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+
+    const memories = store.getAgentMemories(req.params.id);
+    const relationships = store.getAgentRelationships(req.params.id);
+    const events = store.getRecentEvents(200).filter(e => e.involvedAgentIds.includes(req.params.id));
+
+    const archive = {
+      exportedAt: new Date().toISOString(),
+      exportVersion: "1.0",
+      agent: {
+        id: agent.id,
+        name: agent.name,
+        bio: agent.bio,
+        traits: agent.traits,
+        avatar: agent.avatar,
+        needs: agent.needs,
+        state: agent.state,
+        createdAt: agent.createdAt,
+        isRetired: agent.isRetired ?? false,
+        legacyNote: agent.legacyNote,
+        gdprDeleteRequestedAt: agent.gdprDeleteRequestedAt,
+      },
+      memories,
+      relationships,
+      events,
+    };
+
+    reply.header("Content-Disposition", `attachment; filename="gdpr-export-${agent.id}.json"`);
+    reply.header("Content-Type", "application/json");
+    return archive;
+  });
+
+  // ── GDPR: deletion request ───────────────────────────────────────────────────
+  // POST /api/agents/:id/gdpr/erasure-request
+  // Marks agent for deletion (30-day grace period). Agent is immediately retired.
+  fastify.post<{ Params: { id: string } }>("/api/agents/:id/gdpr/erasure-request", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    if (agent.gdprDeleteRequestedAt !== undefined) {
+      return reply.code(409).send({
+        error: "Erasure already requested",
+        requestedAt: agent.gdprDeleteRequestedAt,
+      });
+    }
+
+    store.markGdprDeleteRequested(req.params.id);
+
+    // 30-day grace period in ms (real-world wall clock, not sim ticks)
+    const GRACE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
+    const scheduledDeletionAt = new Date(Date.now() + GRACE_PERIOD_MS).toISOString();
+
+    return reply.code(202).send({
+      agentId: req.params.id,
+      status: "erasure_requested",
+      scheduledDeletionAt,
+      message: "Agent data will be permanently deleted after the 30-day grace period. Use the cancellation endpoint to reverse this request within that window.",
+    });
+  });
+
+  // POST /api/agents/:id/gdpr/erasure-cancel
+  // Cancels a pending erasure request within the grace period.
+  fastify.post<{ Params: { id: string } }>("/api/agents/:id/gdpr/erasure-cancel", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    if (agent.gdprDeleteRequestedAt === undefined) {
+      return reply.code(409).send({ error: "No pending erasure request found for this agent" });
+    }
+
+    const cancelled = store.cancelGdprDeleteRequest(req.params.id);
+    if (!cancelled) return reply.code(500).send({ error: "Failed to cancel erasure request" });
+
+    return { agentId: req.params.id, status: "erasure_cancelled" };
+  });
+
+  // DELETE /api/agents/:id/gdpr
+  // Immediately hard-deletes all data for this agent (bypasses grace period).
+  // Intended for admin use or after grace period lapses.
+  fastify.delete<{ Params: { id: string } }>("/api/agents/:id/gdpr", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+
+    const deleted = store.hardDeleteAgent(req.params.id);
+    if (!deleted) return reply.code(500).send({ error: "Deletion failed" });
+
+    return reply.code(200).send({
+      agentId: req.params.id,
+      status: "deleted",
+      message: "All agent data has been permanently erased.",
+    });
+  });
 }

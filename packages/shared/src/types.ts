@@ -107,6 +107,7 @@ export interface Agent {
   always_on?: boolean;
   pollIntervalTicks?: number;  // fire brain every N ticks (default 30 ≈ 60s at 2s/tick)
   watchEventKinds?: string[];  // wake on these WorldEvent kinds
+  gdprDeleteRequestedAt?: number; // sim tick when deletion was requested (30-day grace period)
 }
 
 export interface Memory {
