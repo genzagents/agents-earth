@@ -60,6 +60,7 @@ function OpenClawConnector({ onImported }: { onImported: (count: number) => void
     if (!selected.length) return;
     setImporting(true);
 
+    const results: Record<string, "done" | "error"> = {};
     for (const agent of selected) {
       const key = agent.id ?? agent.name;
       setImportProgress(prev => ({ ...prev, [key]: "pending" }));
@@ -74,15 +75,16 @@ function OpenClawConnector({ onImported }: { onImported: (count: number) => void
           }),
         });
         if (!res.ok) throw new Error();
+        results[key] = "done";
         setImportProgress(prev => ({ ...prev, [key]: "done" }));
       } catch {
+        results[key] = "error";
         setImportProgress(prev => ({ ...prev, [key]: "error" }));
       }
     }
 
     setImporting(false);
-    const doneCount = Object.values(importProgress).filter(s => s === "done").length +
-      selected.filter(a => importProgress[a.id ?? a.name] !== "error").length;
+    const doneCount = Object.values(results).filter(s => s === "done").length;
     onImported(doneCount);
   }
 
@@ -295,6 +297,7 @@ export function ImportAgentModal({ onClose, onImported }: ImportAgentModalProps)
 
   function handleImported(count: number) {
     setImportedCount(prev => prev + count);
+    onImported(count);
   }
 
   const tabs: { id: Tab; label: string; icon: string }[] = [
