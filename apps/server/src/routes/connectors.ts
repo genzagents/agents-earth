@@ -319,11 +319,12 @@ export async function connectorRoutes(fastify: FastifyInstance) {
     let resolvedBio = bio ?? "";
 
     if (manifest) {
-      resolvedName = resolvedName || String(manifest.name ?? manifest.gizmo?.display?.name ?? "");
+      const gizmo = manifest.gizmo as Record<string, Record<string, string>> | undefined;
+      resolvedName = resolvedName || String(manifest.name ?? gizmo?.display?.name ?? "");
       resolvedBio = resolvedBio || String(
         manifest.description ??
         manifest.instructions ??
-        manifest.gizmo?.display?.description ??
+        gizmo?.display?.description ??
         ""
       );
     }
