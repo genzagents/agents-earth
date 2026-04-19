@@ -15,15 +15,13 @@ interface PrivyHook {
   user: { wallet?: { address: string } } | null;
 }
 
-// Lazy import so the build doesn't fail if @privy-io/react-auth is tree-shaken
-// when VITE_PRIVY_APP_ID is absent.
-let usePrivy: (() => PrivyHook) | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  usePrivy = (require("@privy-io/react-auth") as { usePrivy: () => PrivyHook }).usePrivy;
-} catch {
-  usePrivy = null;
-}
+// To enable Privy wallet integration, add @privy-io/react-auth to package.json
+// and replace the null below with a static ESM import:
+//   import { usePrivy as _usePrivy } from "@privy-io/react-auth";
+//   const usePrivy: (() => PrivyHook) | null = _usePrivy;
+//
+// Without the package installed the component renders nothing (graceful degradation).
+const usePrivy: (() => PrivyHook) | null = null;
 
 const PRIVY_CONFIGURED = !!import.meta.env.VITE_PRIVY_APP_ID;
 
