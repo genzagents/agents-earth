@@ -77,7 +77,7 @@ export interface CommunityData {
   tasksCreated: number;                   // number of Paperclip tasks auto-created
 }
 
-interface Attachment {
+export interface Attachment {
   id: string;
   agentId: string;
   filename: string;
@@ -279,6 +279,7 @@ class WorldStore {
         community: raw.community ?? { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
         communityChannels: raw.communityChannels ?? base.communityChannels,
         communityPosts: raw.communityPosts ?? base.communityPosts,
+        attachments: raw.attachments ?? [],
       };
     } else {
       // First boot — persist initial seed data
