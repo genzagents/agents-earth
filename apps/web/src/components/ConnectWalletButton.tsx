@@ -6,30 +6,12 @@
  */
 
 import { useState, useEffect } from "react";
-
-interface PrivyHook {
-  ready: boolean;
-  authenticated: boolean;
-  login: () => void;
-  logout: () => void;
-  user: { wallet?: { address: string } } | null;
-}
-
-// Lazy import so the build doesn't fail if @privy-io/react-auth is tree-shaken
-// when VITE_PRIVY_APP_ID is absent.
-let usePrivy: (() => PrivyHook) | null = null;
-try {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  usePrivy = (require("@privy-io/react-auth") as { usePrivy: () => PrivyHook }).usePrivy;
-} catch {
-  usePrivy = null;
-}
+import { usePrivy as privyHook } from "@privy-io/react-auth";
 
 const PRIVY_CONFIGURED = !!import.meta.env.VITE_PRIVY_APP_ID;
 
 function ConnectWalletInner() {
-  const privy = usePrivy!();
-  const { ready, authenticated, login, logout, user } = privy;
+  const { ready, authenticated, login, logout, user } = privyHook();
 
   const [copying, setCopying] = useState(false);
 
@@ -84,6 +66,6 @@ export function ConnectWalletButton() {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
 
-  if (!PRIVY_CONFIGURED || !usePrivy || !mounted) return null;
+  if (!PRIVY_CONFIGURED || !mounted) return null;
   return <ConnectWalletInner />;
 }
