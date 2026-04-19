@@ -56,6 +56,82 @@ export interface CommunityChannel {
   emoji: string;
   description: string;
   postCount: number;
+  reputationGate?: number;
+}
+
+export interface DmMessage {
+  id: string;
+  senderId: string;
+  content: string;
+  timestamp: number;
+}
+
+export interface DmThread {
+  id: string;
+  participantIds: [string, string];
+  messages: DmMessage[];
+  createdAt: number;
+  lastMessageAt: number;
+}
+
+export interface WorkingGroupVoteRecord {
+  id: string;
+  question: string;
+  options: string[];
+  tally: Record<string, number>;
+  createdAt: number;
+  closedAt?: number;
+}
+
+export interface WorkingGroup {
+  id: string;
+  name: string;
+  description: string;
+  memberIds: string[];
+  sharedMemory: string[];
+  votes: WorkingGroupVoteRecord[];
+  createdAt: number;
+  lastActivityAt: number;
+  archived: boolean;
+}
+
+export type BountyStatus = "open" | "claimed" | "submitted" | "resolved" | "failed";
+
+export interface Bounty {
+  id: string;
+  title: string;
+  description: string;
+  reward: number;
+  createdBy: string;
+  claimedBy?: string;
+  status: BountyStatus;
+  attemptCount: number;
+  maxAttempts: number;
+  createdAt: number;
+  claimedAt?: number;
+  submittedAt?: number;
+  resolvedAt?: number;
+}
+
+export interface TreasuryVoteRecord {
+  id: string;
+  proposalId: string;
+  agentId: string;
+  weight: number;
+  vote: "yes" | "no" | "abstain";
+  timestamp: number;
+}
+
+export interface TreasuryProposal {
+  id: string;
+  title: string;
+  description: string;
+  amountRequested: number;
+  createdBy: string;
+  createdAt: number;
+  closedAt?: number;
+  result?: "approved" | "rejected";
+  votes: TreasuryVoteRecord[];
 }
 
 export interface CommunityPost {
@@ -100,6 +176,12 @@ interface WorldData {
   communityChannels: CommunityChannel[];
   communityPosts: CommunityPost[];
   attachments: Attachment[];
+  dmThreads: DmThread[];
+  workingGroups: WorkingGroup[];
+  bounties: Bounty[];
+  treasuryProposals: TreasuryProposal[];
+  treasuryBalance: number;
+  nextArchiveCheck: number;
 }
 
 const SINGLETON_ID = "singleton";
@@ -191,6 +273,12 @@ function createInitialData(): WorldData {
     communityChannels,
     communityPosts,
     attachments: [],
+    dmThreads: [],
+    workingGroups: [],
+    bounties: [],
+    treasuryProposals: [],
+    treasuryBalance: 1000,
+    nextArchiveCheck: 0,
   };
 }
 
@@ -280,6 +368,12 @@ class WorldStore {
         communityChannels: raw.communityChannels ?? base.communityChannels,
         communityPosts: raw.communityPosts ?? base.communityPosts,
         attachments: raw.attachments ?? [],
+        dmThreads: raw.dmThreads ?? [],
+        workingGroups: raw.workingGroups ?? [],
+        bounties: raw.bounties ?? [],
+        treasuryProposals: raw.treasuryProposals ?? [],
+        treasuryBalance: raw.treasuryBalance ?? 1000,
+        nextArchiveCheck: raw.nextArchiveCheck ?? 0,
       };
     } else {
       // First boot — persist initial seed data
@@ -497,6 +591,273 @@ class WorldStore {
 
   getChatMessages(agentId: string): ChatMessage[] {
     return this.chatMessages.get(agentId) ?? [];
+  }
+
+  // ── Reputation ────────────────────────────────────────────────────────────
+
+  getAgentReputation(agentId: string): number {
+    return this.data.community.agentWorkUnits[agentId] ?? 0;
+  }
+
+  // ── DMs ───────────────────────────────────────────────────────────────────
+
+  getDmThread(participantA: string, participantB: string): DmThread | undefined {
+    return this.data.dmThreads.find(
+      t =>
+        (t.participantIds[0] === participantA && t.participantIds[1] === participantB) ||
+        (t.participantIds[0] === participantB && t.participantIds[1] === participantA)
+    );
+  }
+
+  getDmThreadById(threadId: string): DmThread | undefined {
+    return this.data.dmThreads.find(t => t.id === threadId);
+  }
+
+  createDmThread(participantA: string, participantB: string): DmThread {
+    const thread: DmThread = {
+      id: uuidv4(),
+      participantIds: [participantA, participantB],
+      messages: [],
+      createdAt: Date.now(),
+      lastMessageAt: Date.now(),
+    };
+    this.data.dmThreads.push(thread);
+    return thread;
+  }
+
+  addDmMessage(threadId: string, msg: DmMessage): DmThread | null {
+    const thread = this.getDmThreadById(threadId);
+    if (!thread) return null;
+    thread.messages.push(msg);
+    thread.lastMessageAt = msg.timestamp;
+    if (thread.messages.length > 500) thread.messages.splice(0, thread.messages.length - 500);
+    return thread;
+  }
+
+  getDmThreadsForAgent(agentId: string): DmThread[] {
+    return this.data.dmThreads.filter(t => t.participantIds.includes(agentId));
+  }
+
+  // ── Working Groups ────────────────────────────────────────────────────────
+
+  get workingGroups(): WorkingGroup[] { return this.data.workingGroups; }
+
+  getWorkingGroup(id: string): WorkingGroup | undefined {
+    return this.data.workingGroups.find(g => g.id === id);
+  }
+
+  createWorkingGroup(name: string, description: string, memberIds: string[]): WorkingGroup {
+    const group: WorkingGroup = {
+      id: uuidv4(),
+      name,
+      description,
+      memberIds,
+      sharedMemory: [],
+      votes: [],
+      createdAt: Date.now(),
+      lastActivityAt: Date.now(),
+      archived: false,
+    };
+    this.data.workingGroups.push(group);
+    return group;
+  }
+
+  addWorkingGroupMember(groupId: string, agentId: string): boolean {
+    const group = this.getWorkingGroup(groupId);
+    if (!group || group.archived || group.memberIds.includes(agentId)) return false;
+    group.memberIds.push(agentId);
+    group.lastActivityAt = Date.now();
+    return true;
+  }
+
+  addWorkingGroupMemory(groupId: string, entry: string): boolean {
+    const group = this.getWorkingGroup(groupId);
+    if (!group || group.archived) return false;
+    group.sharedMemory.push(entry);
+    group.lastActivityAt = Date.now();
+    if (group.sharedMemory.length > 200) group.sharedMemory.splice(0, group.sharedMemory.length - 200);
+    return true;
+  }
+
+  createWorkingGroupVote(groupId: string, question: string, options: string[]): WorkingGroupVoteRecord | null {
+    const group = this.getWorkingGroup(groupId);
+    if (!group || group.archived) return null;
+    const vote: WorkingGroupVoteRecord = {
+      id: uuidv4(),
+      question,
+      options,
+      tally: {},
+      createdAt: Date.now(),
+    };
+    group.votes.push(vote);
+    group.lastActivityAt = Date.now();
+    return vote;
+  }
+
+  castWorkingGroupVote(groupId: string, voteId: string, agentId: string, optionIndex: number): boolean {
+    const group = this.getWorkingGroup(groupId);
+    if (!group || !group.memberIds.includes(agentId)) return false;
+    const vote = group.votes.find(v => v.id === voteId);
+    if (!vote || vote.closedAt !== undefined || optionIndex < 0 || optionIndex >= vote.options.length) return false;
+    vote.tally[agentId] = optionIndex;
+    group.lastActivityAt = Date.now();
+    return true;
+  }
+
+  archiveInactiveWorkingGroups(): number {
+    const threshold = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    let count = 0;
+    for (const group of this.data.workingGroups) {
+      if (!group.archived && group.lastActivityAt < threshold) {
+        group.archived = true;
+        count++;
+      }
+    }
+    return count;
+  }
+
+  // ── Bounties ──────────────────────────────────────────────────────────────
+
+  get bounties(): Bounty[] { return this.data.bounties; }
+
+  getBounty(id: string): Bounty | undefined {
+    return this.data.bounties.find(b => b.id === id);
+  }
+
+  getOpenBounties(): Bounty[] {
+    return this.data.bounties.filter(b => b.status === "open");
+  }
+
+  createBounty(title: string, description: string, reward: number, createdBy: string): Bounty | null {
+    if (this.data.treasuryBalance < reward) return null;
+    this.data.treasuryBalance -= reward;
+    const bounty: Bounty = {
+      id: uuidv4(),
+      title,
+      description,
+      reward,
+      createdBy,
+      status: "open",
+      attemptCount: 0,
+      maxAttempts: 3,
+      createdAt: Date.now(),
+    };
+    this.data.bounties.push(bounty);
+    return bounty;
+  }
+
+  claimBounty(bountyId: string, agentId: string): Bounty | null {
+    const bounty = this.getBounty(bountyId);
+    if (!bounty || bounty.status !== "open") return null;
+    bounty.claimedBy = agentId;
+    bounty.status = "claimed";
+    bounty.claimedAt = Date.now();
+    return bounty;
+  }
+
+  submitBounty(bountyId: string, agentId: string): Bounty | null {
+    const bounty = this.getBounty(bountyId);
+    if (!bounty || bounty.status !== "claimed" || bounty.claimedBy !== agentId) return null;
+    bounty.status = "submitted";
+    bounty.submittedAt = Date.now();
+    return bounty;
+  }
+
+  resolveBounty(bountyId: string, approved: boolean): Bounty | null {
+    const bounty = this.getBounty(bountyId);
+    if (!bounty || bounty.status !== "submitted") return null;
+    if (approved) {
+      bounty.status = "resolved";
+      bounty.resolvedAt = Date.now();
+      if (bounty.claimedBy) {
+        this.addAgentWorkUnits(bounty.claimedBy, bounty.reward);
+      }
+    } else {
+      bounty.attemptCount++;
+      if (bounty.attemptCount >= bounty.maxAttempts) {
+        bounty.status = "failed";
+        bounty.resolvedAt = Date.now();
+        if (bounty.claimedBy) {
+          const current = this.community.agentWorkUnits[bounty.claimedBy] ?? 0;
+          this.community.agentWorkUnits[bounty.claimedBy] = Math.max(0, current - Math.floor(bounty.reward * 0.1));
+        }
+        this.data.treasuryBalance += bounty.reward;
+      } else {
+        bounty.status = "open";
+        bounty.claimedBy = undefined;
+        bounty.claimedAt = undefined;
+        bounty.submittedAt = undefined;
+      }
+    }
+    return bounty;
+  }
+
+  // ── Treasury ──────────────────────────────────────────────────────────────
+
+  get treasuryBalance(): number { return this.data.treasuryBalance; }
+
+  get treasuryProposals(): TreasuryProposal[] { return this.data.treasuryProposals; }
+
+  getTreasuryProposal(id: string): TreasuryProposal | undefined {
+    return this.data.treasuryProposals.find(p => p.id === id);
+  }
+
+  createTreasuryProposal(title: string, description: string, amountRequested: number, createdBy: string): TreasuryProposal {
+    const proposal: TreasuryProposal = {
+      id: uuidv4(),
+      title,
+      description,
+      amountRequested,
+      createdBy,
+      createdAt: Date.now(),
+      votes: [],
+    };
+    this.data.treasuryProposals.push(proposal);
+    return proposal;
+  }
+
+  castTreasuryVote(proposalId: string, agentId: string, vote: "yes" | "no" | "abstain"): TreasuryVoteRecord | null {
+    const proposal = this.getTreasuryProposal(proposalId);
+    if (!proposal || proposal.closedAt !== undefined) return null;
+    const priorIdx = proposal.votes.findIndex(v => v.agentId === agentId);
+    if (priorIdx >= 0) proposal.votes.splice(priorIdx, 1);
+    const weight = Math.max(1, this.getAgentReputation(agentId));
+    const record: TreasuryVoteRecord = {
+      id: uuidv4(),
+      proposalId,
+      agentId,
+      weight,
+      vote,
+      timestamp: Date.now(),
+    };
+    proposal.votes.push(record);
+    return record;
+  }
+
+  getTreasuryReport(): object {
+    const now = Date.now();
+    const quarterMs = 90 * 24 * 60 * 60 * 1000;
+    const quarterStart = now - quarterMs;
+    const recentProposals = this.data.treasuryProposals.filter(p => p.createdAt >= quarterStart);
+    const resolvedBounties = this.data.bounties.filter(
+      b => b.status === "resolved" && b.resolvedAt !== undefined && b.resolvedAt >= quarterStart
+    );
+    const totalBountyPayouts = resolvedBounties.reduce((sum, b) => sum + b.reward, 0);
+    return {
+      generatedAt: new Date(now).toISOString(),
+      quarterStart: new Date(quarterStart).toISOString(),
+      treasuryBalance: this.data.treasuryBalance,
+      proposals: {
+        total: recentProposals.length,
+        approved: recentProposals.filter(p => p.result === "approved").length,
+        rejected: recentProposals.filter(p => p.result === "rejected").length,
+        pending: recentProposals.filter(p => p.result === undefined).length,
+      },
+      bounties: {
+        totalResolved: resolvedBounties.length,
+        totalPayouts: totalBountyPayouts,
+      },
+    };
   }
 
   /**
