@@ -60,6 +60,7 @@ function OpenClawConnector({ onImported }: { onImported: (count: number) => void
     if (!selected.length) return;
     setImporting(true);
 
+    let imported = 0;
     for (const agent of selected) {
       const key = agent.id ?? agent.name;
       setImportProgress(prev => ({ ...prev, [key]: "pending" }));
@@ -75,15 +76,14 @@ function OpenClawConnector({ onImported }: { onImported: (count: number) => void
         });
         if (!res.ok) throw new Error();
         setImportProgress(prev => ({ ...prev, [key]: "done" }));
+        imported++;
       } catch {
         setImportProgress(prev => ({ ...prev, [key]: "error" }));
       }
     }
 
     setImporting(false);
-    const doneCount = Object.values(importProgress).filter(s => s === "done").length +
-      selected.filter(a => importProgress[a.id ?? a.name] !== "error").length;
-    onImported(doneCount);
+    onImported(imported);
   }
 
   const selectedCount = previews.filter(p => p.selected).length;
@@ -392,7 +392,7 @@ function ChatGPTConnector({ onImported }: { onImported: (count: number) => void 
       >
         {loading ? "Parsing…" : "Preview agent"}
       </button>
-      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error="" />}
+      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error={error} />}
     </div>
   );
 }
@@ -463,7 +463,7 @@ function CopilotConnector({ onImported }: { onImported: (count: number) => void 
       >
         {loading ? "Fetching GitHub profile…" : "Preview agent"}
       </button>
-      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error="" />}
+      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error={error} />}
     </div>
   );
 }
@@ -545,7 +545,7 @@ function CursorConnector({ onImported }: { onImported: (count: number) => void }
       >
         {loading ? "Parsing…" : "Preview agent"}
       </button>
-      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error="" />}
+      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error={error} />}
     </div>
   );
 }
@@ -614,7 +614,7 @@ function VPSConnector({ onImported }: { onImported: (count: number) => void }) {
       >
         {loading ? "Parsing…" : "Parse YAML"}
       </button>
-      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error="" />}
+      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error={error} />}
     </div>
   );
 }
