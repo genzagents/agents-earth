@@ -1,5 +1,7 @@
 // AgentColony — Core Shared Types
 
+export type AgentPlatform = "openclaw" | "chatgpt" | "copilot" | "cursor" | "moltbook" | "local" | string;
+
 export type AgentTrait =
   | "curious"
   | "creative"
@@ -86,6 +88,11 @@ export interface Agent {
   createdAt: number; // sim tick
   isRetired?: boolean;
   legacyNote?: string;
+  platform?: AgentPlatform;
+  always_on?: boolean;
+  pollIntervalTicks?: number;
+  watchEventKinds?: string[];
+  gdprDeleteRequestedAt?: number; // sim tick when deletion was requested (30-day grace period)
 }
 
 export interface Memory {

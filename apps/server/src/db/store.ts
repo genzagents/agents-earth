@@ -164,6 +164,41 @@ class WorldStore {
     return this.data.agents.find(a => a.id === agentId)?.relationships ?? [];
   }
 
+  markGdprDeleteRequested(agentId: string): boolean {
+    const idx = this.data.agents.findIndex(a => a.id === agentId);
+    if (idx < 0) return false;
+    this.data.agents[idx] = { ...this.data.agents[idx], gdprDeleteRequestedAt: this.data.tick, isRetired: true };
+    return true;
+  }
+
+  hardDeleteAgent(agentId: string): boolean {
+    const agentIdx = this.data.agents.findIndex(a => a.id === agentId);
+    if (agentIdx < 0) return false;
+    this.data.agents.splice(agentIdx, 1);
+    this.data.memories = this.data.memories.filter(m => m.agentId !== agentId);
+    this.data.events = this.data.events.map(e => ({
+      ...e,
+      involvedAgentIds: e.involvedAgentIds.filter(id => id !== agentId),
+    })).filter(e => e.involvedAgentIds.length > 0);
+    for (const agent of this.data.agents) {
+      agent.relationships = agent.relationships.filter(r => r.agentId !== agentId);
+    }
+    for (const area of this.data.areas) {
+      area.currentOccupants = area.currentOccupants.filter(id => id !== agentId);
+    }
+    return true;
+  }
+
+  cancelGdprDeleteRequest(agentId: string): boolean {
+    const idx = this.data.agents.findIndex(a => a.id === agentId);
+    if (idx < 0) return false;
+    const agent = this.data.agents[idx];
+    if (agent.gdprDeleteRequestedAt === undefined) return false;
+    const { gdprDeleteRequestedAt: _, ...rest } = agent;
+    this.data.agents[idx] = { ...rest, isRetired: false };
+    return true;
+  }
+
   getRecentEvents(n = 20) {
     return this.data.events.slice(0, n);
   }
