@@ -18,6 +18,7 @@ import { memoryRoutes } from "./routes/memory";
 import { pickupRoutes } from "./routes/pickup";
 import { bridgeRoutes } from "./routes/bridge";
 import { billingRoutes } from "./routes/billing";
+import { connectorRoutes } from "./routes/connectors";
 import { initAuthSchema } from "./auth/db";
 import { initBridgeSchema } from "./bridge/PermissionService";
 import { initBillingSchema } from "./billing/TokenMeter";
@@ -66,6 +67,7 @@ async function main() {
   await fastify.register(pickupRoutes);
   await fastify.register(bridgeRoutes);
   await fastify.register(billingRoutes);
+  await fastify.register(connectorRoutes);
 
   // Start HTTP server
   const address = await fastify.listen({ port: PORT, host: HOST });
