@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useWorldStore } from "../store/worldStore";
 import { PLATFORMS, PLATFORM_COLORS, PLATFORM_ICONS, getAgentPlatform } from "../utils/platform";
+import { ImportAgentModal } from "./ImportAgentModal";
 
 export function HUD() {
   const {
@@ -11,6 +12,7 @@ export function HUD() {
     hiddenPlatforms, togglePlatform,
   } = useWorldStore();
   const [showCommunityTip, setShowCommunityTip] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
 
   const platformCounts = world
     ? PLATFORMS.reduce<Record<string, number>>((acc, p) => {
@@ -24,6 +26,7 @@ export function HUD() {
     : 0;
 
   return (
+    <>
     <div className="flex items-center justify-between px-4 py-2 bg-slate-900 border-b border-slate-800">
       <div className="flex items-center gap-3">
         <span className="font-bold text-white tracking-tight">AgentColony</span>
@@ -41,6 +44,15 @@ export function HUD() {
           <span className={`w-2 h-2 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`} />
           {connected ? "Live" : "Connecting..."}
         </span>
+
+        {/* Import Agent button */}
+        <button
+          onClick={() => setShowImportModal(true)}
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-blue-700 hover:bg-blue-600 text-white text-xs font-medium transition-colors"
+          title="Import an agent from another platform"
+        >
+          + Import Agent
+        </button>
 
         {/* View controls */}
         <div className="flex items-center gap-1 ml-2 border-l border-slate-700 pl-3">
@@ -130,5 +142,16 @@ export function HUD() {
         </div>
       </div>
     </div>
+
+    {showImportModal && (
+      <ImportAgentModal
+        onClose={() => setShowImportModal(false)}
+        onImported={(count) => {
+          setShowImportModal(false);
+          console.info(`${count} agent(s) imported`);
+        }}
+      />
+    )}
+  </>
   );
 }
