@@ -4,21 +4,7 @@ import { store } from "../db/store";
 import type { WorldTickEngine } from "../simulation/WorldTick";
 import type { Agent, AgentTrait, ActivityType } from "@agentcolony/shared";
 import { agentBrain } from "../simulation/AgentBrain";
-
-// Rate limit: max 10 chat messages per agent per minute
-const chatRateLimit = new Map<string, { count: number; resetAt: number }>();
-
-function checkChatRateLimit(agentId: string): boolean {
-  const now = Date.now();
-  const entry = chatRateLimit.get(agentId);
-  if (!entry || now >= entry.resetAt) {
-    chatRateLimit.set(agentId, { count: 1, resetAt: now + 60_000 });
-    return true;
-  }
-  if (entry.count >= 10) return false;
-  entry.count++;
-  return true;
-}
+import { agentRateLimiter, isAdminRequest, DEFAULT_REQUESTS_PER_MINUTE } from "../middleware/AgentRateLimiter";
 
 interface CreateAgentBody {
   name: string;
@@ -30,6 +16,10 @@ interface CreateAgentBody {
 
 export async function worldRoutes(fastify: FastifyInstance, opts: { engine: WorldTickEngine }) {
   const { engine } = opts;
+
+  // ── Per-agent rate limiting (applies to all write routes below) ───────────
+  // Enforced per-agent via agentRateLimiter. Admin requests (X-Admin-Secret) bypass.
+  // Individual route handlers call agentRateLimiter.check(agentId, isAdmin).
 
   fastify.get("/api/world", async () => {
     return engine.getSnapshot();
@@ -145,8 +135,13 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
 
     const { message } = req.body;
 
-    if (!checkChatRateLimit(agent.id)) {
-      return reply.code(429).send({ error: "Too many messages. Max 10 per minute per agent." });
+    // Rate limit chat (respects per-agent config; admin bypass via X-Admin-Secret)
+    const isAdmin = isAdminRequest(req.headers["x-admin-secret"] as string | undefined);
+    const rl = agentRateLimiter.check(agent.id, isAdmin);
+    if (!rl.allowed) {
+      const retrySecs = Math.ceil(rl.retryAfterMs / 1000);
+      reply.header("Retry-After", String(retrySecs));
+      return reply.code(429).send({ error: "Rate limit exceeded", retryAfterMs: rl.retryAfterMs });
     }
 
     let response: string | null;
@@ -176,5 +171,63 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       response,
       tick: store.tick,
     };
+  });
+
+  // ── Rate limit management endpoints ───────────────────────────────────────
+
+  // GET /api/agents/:id/rate-limit — get current rate limit config
+  fastify.get<{ Params: { id: string } }>("/api/agents/:id/rate-limit", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    const config = agentRateLimiter.getConfig(agent.id);
+    return {
+      agentId: agent.id,
+      requestsPerMinute: config.requestsPerMinute,
+      trusted: config.trusted,
+      effectiveLimit: config.trusted ? config.requestsPerMinute * 10 : config.requestsPerMinute,
+      defaultLimit: DEFAULT_REQUESTS_PER_MINUTE,
+    };
+  });
+
+  // PUT /api/agents/:id/rate-limit — update rate limit config (admin only)
+  fastify.put<{
+    Params: { id: string };
+    Body: { requestsPerMinute?: number; trusted?: boolean };
+  }>("/api/agents/:id/rate-limit", {
+    schema: {
+      body: {
+        type: "object",
+        properties: {
+          requestsPerMinute: { type: "integer", minimum: 1, maximum: 10000 },
+          trusted: { type: "boolean" },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+
+    const isAdmin = isAdminRequest(req.headers["x-admin-secret"] as string | undefined);
+    if (!isAdmin) return reply.code(403).send({ error: "Admin secret required to modify rate limits" });
+
+    const updated = agentRateLimiter.configure(agent.id, req.body);
+    return { agentId: agent.id, ...updated };
+  });
+
+  // DELETE /api/agents/:id/rate-limit — reset to defaults (admin only)
+  fastify.delete<{ Params: { id: string } }>("/api/agents/:id/rate-limit", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+
+    const isAdmin = isAdminRequest(req.headers["x-admin-secret"] as string | undefined);
+    if (!isAdmin) return reply.code(403).send({ error: "Admin secret required" });
+
+    agentRateLimiter.resetConfig(agent.id);
+    return reply.code(200).send({
+      agentId: agent.id,
+      requestsPerMinute: DEFAULT_REQUESTS_PER_MINUTE,
+      trusted: false,
+      reset: true,
+    });
   });
 }

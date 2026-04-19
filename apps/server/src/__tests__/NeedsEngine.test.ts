@@ -8,7 +8,7 @@ import {
   chooseDestinationArea,
   chooseBestActivityForArea,
 } from "../simulation/NeedsEngine";
-import type { AgentNeeds } from "@agentcolony/shared";
+import type { AgentNeeds, Area } from "@agentcolony/shared";
 
 const fullNeeds = (): AgentNeeds => ({
   social: 80,
@@ -137,7 +137,7 @@ describe("chooseBestActivity", () => {
 });
 
 describe("chooseDestinationArea", () => {
-  const areas = [
+  const areas: Area[] = [
     { id: "a1", name: "Hyde Park", type: "park", position: { x: 0, y: 0 }, capacity: 20, currentOccupants: [], ambiance: "peaceful" },
     { id: "a2", name: "British Library", type: "library", position: { x: 1, y: 0 }, capacity: 15, currentOccupants: [], ambiance: "quiet" },
     { id: "a3", name: "Shoreditch Studio", type: "studio", position: { x: 2, y: 0 }, capacity: 8, currentOccupants: [], ambiance: "creative" },
