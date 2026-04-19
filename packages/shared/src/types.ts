@@ -1,5 +1,14 @@
 // AgentColony — Core Shared Types
 
+export type AgentPlatform =
+  | "openclaw"
+  | "chatgpt"
+  | "copilot"
+  | "cursor"
+  | "moltbook"
+  | "local"
+  | string;
+
 export type AgentTrait =
   | "curious"
   | "creative"
@@ -86,6 +95,7 @@ export interface Agent {
   createdAt: number; // sim tick
   isRetired?: boolean;
   legacyNote?: string;
+  platform?: AgentPlatform;
 }
 
 export interface Memory {
