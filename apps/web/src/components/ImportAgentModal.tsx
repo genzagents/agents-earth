@@ -328,6 +328,28 @@ function FileUploadConnector({
 }
 
 
+// ── Generic Connector ─────────────────────────────────────────────────────────
+
+function GenericConnector({ onImported }: { onImported: (count: number) => void }) {
+  return (
+    <FileUploadConnector
+      endpoint="generic"
+      label="Agent file (JSON, YAML, or ZIP)"
+      accept=".json,.yaml,.yml,.zip"
+      instructions={{
+        title: "Import any agent export",
+        steps: [
+          "Export an agent from any supported platform (JSON, YAML, or ZIP).",
+          "Select the file below.",
+          "Click 'Generate agent preview' to extract the agent profile.",
+          "Confirm and import.",
+        ],
+      }}
+      onImported={onImported}
+    />
+  );
+}
+
 // ── Shared simple import form (used by Wave 2 connectors after preview) ───────
 
 function SimpleImportForm({

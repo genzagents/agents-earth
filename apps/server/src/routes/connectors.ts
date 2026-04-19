@@ -294,15 +294,15 @@ export async function connectorRoutes(fastify: FastifyInstance) {
   // ── OpenClaw: preview ─────────────────────────────────────────────────────
 
   fastify.post<{
-    Body: { serverUrl: string; apiKey?: string };
+    Body: { serverUrl: string; apiKey: string };
   }>("/api/connectors/openclaw/preview", {
     schema: {
       body: {
         type: "object",
-        required: ["serverUrl"],
+        required: ["serverUrl", "apiKey"],
         properties: {
           serverUrl: { type: "string", minLength: 1 },
-          apiKey: { type: "string" },
+          apiKey: { type: "string", minLength: 1 },
         },
       },
     },
