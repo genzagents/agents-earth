@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { pool } from "./pgClient";
+import { memoryEncryption } from "../services/EncryptionService";
 import type {
   Agent,
   Area,
@@ -76,6 +77,63 @@ export interface CommunityData {
   tasksCreated: number;                   // number of Paperclip tasks auto-created
 }
 
+// ── Governance / on-chain community types ─────────────────────────────────────
+
+export interface WorkingGroup {
+  id: string;
+  name: string;
+  description: string;
+  memberAgentIds: string[];
+  walletAddress?: string;    // deployed WorkingGroupWallet address on Base L2
+  walletTxHash?: string;     // deployment tx hash
+  createdAt: number;
+}
+
+export type BountyStatus = "open" | "escrowed" | "released" | "refunded" | "cancelled";
+
+export interface Bounty {
+  id: string;
+  title: string;
+  description: string;
+  amountWei: string;         // native ETH as string (bigint-safe)
+  depositorAgentId?: string;
+  recipientAgentId?: string;
+  status: BountyStatus;
+  escrowTxHash?: string;
+  releaseTxHash?: string;
+  refundTxHash?: string;
+  workingGroupId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type VoteChoice = "yes" | "no" | "abstain";
+export type ProposalStatus = "open" | "finalized" | "cancelled";
+
+export interface GovernanceVote {
+  agentId: string;
+  choice: VoteChoice;
+  reputationWeight: number;
+  didSignature?: string;     // EIP-191 signature from agent's DID key
+  castAt: number;
+  onChainTxHash?: string;
+}
+
+export interface GovernanceProposal {
+  id: string;
+  title: string;
+  description: string;
+  creatorAgentId: string;
+  status: ProposalStatus;
+  deadline?: number;         // Unix ms; undefined = open-ended
+  votes: GovernanceVote[];
+  tally: { yes: number; no: number; abstain: number };
+  onChainTxHash?: string;    // createProposal tx hash
+  workingGroupId?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
 interface WorldData {
   tick: number;
   agents: Agent[];
@@ -87,6 +145,9 @@ interface WorldData {
   community: CommunityData;
   communityChannels: CommunityChannel[];
   communityPosts: CommunityPost[];
+  workingGroups: WorkingGroup[];
+  bounties: Bounty[];
+  proposals: GovernanceProposal[];
 }
 
 const SINGLETON_ID = "singleton";
@@ -177,6 +238,9 @@ function createInitialData(): WorldData {
     community: { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
     communityChannels,
     communityPosts,
+    workingGroups: [],
+    bounties: [],
+    proposals: [],
   };
 }
 
@@ -265,6 +329,9 @@ class WorldStore {
         community: raw.community ?? { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
         communityChannels: raw.communityChannels ?? base.communityChannels,
         communityPosts: raw.communityPosts ?? base.communityPosts,
+        workingGroups: raw.workingGroups ?? [],
+        bounties: raw.bounties ?? [],
+        proposals: raw.proposals ?? [],
       };
     } else {
       // First boot — persist initial seed data
@@ -307,6 +374,12 @@ class WorldStore {
   addMemory(memory: Memory) {
     this.data.memories.unshift(memory);
     if (this.data.memories.length > 1000) this.data.memories.length = 1000;
+    if (memoryEncryption.isEnabled) {
+      memoryEncryption.encrypt(memory.description).then(encrypted => {
+        const idx = this.data.memories.findIndex(m => m.id === memory.id);
+        if (idx >= 0) this.data.memories[idx] = { ...this.data.memories[idx], description: encrypted };
+      }).catch(() => undefined);
+    }
   }
 
   addAgent(agent: Agent) {
@@ -326,8 +399,13 @@ class WorldStore {
     return this.data.agents.filter(a => cityAreaIds.has(a.state.currentAreaId));
   }
 
-  getAgentMemories(agentId: string) {
-    return this.data.memories.filter(m => m.agentId === agentId).slice(0, 50);
+  async getAgentMemories(agentId: string): Promise<Memory[]> {
+    const raw = this.data.memories.filter(m => m.agentId === agentId).slice(0, 50);
+    if (!memoryEncryption.isEnabled) return raw;
+    return Promise.all(raw.map(async m => ({
+      ...m,
+      description: await memoryEncryption.decrypt(m.description),
+    })));
   }
 
   getAgentRelationships(agentId: string) {
@@ -434,6 +512,68 @@ class WorldStore {
 
   getChatMessages(agentId: string): ChatMessage[] {
     return this.chatMessages.get(agentId) ?? [];
+  }
+
+  // ── Working groups ──────────────────────────────────────────────────────────
+
+  get workingGroups(): WorkingGroup[] { return this.data.workingGroups; }
+
+  addWorkingGroup(group: WorkingGroup): void {
+    this.data.workingGroups.push(group);
+  }
+
+  getWorkingGroup(id: string): WorkingGroup | undefined {
+    return this.data.workingGroups.find(g => g.id === id);
+  }
+
+  updateWorkingGroup(id: string, updates: Partial<WorkingGroup>): void {
+    const idx = this.data.workingGroups.findIndex(g => g.id === id);
+    if (idx >= 0) this.data.workingGroups[idx] = { ...this.data.workingGroups[idx], ...updates };
+  }
+
+  // ── Bounties ────────────────────────────────────────────────────────────────
+
+  get bounties(): Bounty[] { return this.data.bounties; }
+
+  addBounty(bounty: Bounty): void {
+    this.data.bounties.push(bounty);
+  }
+
+  getBounty(id: string): Bounty | undefined {
+    return this.data.bounties.find(b => b.id === id);
+  }
+
+  updateBounty(id: string, updates: Partial<Bounty>): void {
+    const idx = this.data.bounties.findIndex(b => b.id === id);
+    if (idx >= 0) this.data.bounties[idx] = { ...this.data.bounties[idx], ...updates };
+  }
+
+  // ── Governance proposals ────────────────────────────────────────────────────
+
+  get proposals(): GovernanceProposal[] { return this.data.proposals; }
+
+  addProposal(proposal: GovernanceProposal): void {
+    this.data.proposals.push(proposal);
+  }
+
+  getProposal(id: string): GovernanceProposal | undefined {
+    return this.data.proposals.find(p => p.id === id);
+  }
+
+  updateProposal(id: string, updates: Partial<GovernanceProposal>): void {
+    const idx = this.data.proposals.findIndex(p => p.id === id);
+    if (idx >= 0) this.data.proposals[idx] = { ...this.data.proposals[idx], ...updates };
+  }
+
+  addVoteToProposal(proposalId: string, vote: GovernanceVote): boolean {
+    const proposal = this.getProposal(proposalId);
+    if (!proposal || proposal.status !== "open") return false;
+    const alreadyVoted = proposal.votes.some(v => v.agentId === vote.agentId);
+    if (alreadyVoted) return false;
+    proposal.votes.push(vote);
+    proposal.tally[vote.choice] += vote.reputationWeight;
+    proposal.updatedAt = Date.now();
+    return true;
   }
 
   /**

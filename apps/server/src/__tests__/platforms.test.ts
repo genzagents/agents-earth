@@ -314,7 +314,7 @@ describe("POST /webhooks/openclaw", () => {
     assert.equal(res.statusCode, 200);
     const agentId = store.getPlatformAgentId("openclaw", "oc-ext-1");
     assert.ok(agentId !== undefined);
-    const memories = store.getAgentMemories(agentId!);
+    const memories = await store.getAgentMemories(agentId!);
     assert.ok(memories.some((m) => m.description.includes("Hello world")));
     await app.close();
   });
@@ -458,7 +458,7 @@ describe("POST /webhooks/openfang", () => {
     });
     assert.equal(res.statusCode, 200);
     const agentId = store.getPlatformAgentId("openfang", "of-1");
-    const memories = store.getAgentMemories(agentId!);
+    const memories = await store.getAgentMemories(agentId!);
     assert.ok(memories.some((m) => m.description.includes("GitHub")));
     await app.close();
   });

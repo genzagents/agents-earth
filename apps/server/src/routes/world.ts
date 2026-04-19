@@ -4,6 +4,7 @@ import { store, CITIES } from "../db/store";
 import type { WorldTickEngine } from "../simulation/WorldTick";
 import type { Agent, AgentTrait, ActivityType } from "@agentcolony/shared";
 import { agentBrain } from "../simulation/AgentBrain";
+import { memoryEncryption } from "../services/EncryptionService";
 
 // Rate limit: max 10 chat messages per agent per minute
 const chatRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -80,7 +81,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
   fastify.get<{ Params: { id: string } }>("/api/agents/:id/memories", async (req, reply) => {
     const agent = store.getAgent(req.params.id);
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
-    return store.getAgentMemories(req.params.id);
+    return await store.getAgentMemories(req.params.id);
   });
 
   fastify.get<{ Params: { id: string } }>("/api/agents/:id/relationships", async (req, reply) => {
@@ -175,7 +176,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
 
     let response: string | null;
     try {
-      response = await agentBrain.chat(agent, store.getAgentMemories(agent.id), message);
+      response = await agentBrain.chat(agent, await store.getAgentMemories(agent.id), message);
     } catch {
       return reply.code(503).send({ error: "Agent brain unavailable. Please try again later." });
     }
@@ -200,5 +201,20 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       response,
       tick: store.tick,
     };
+  });
+
+  // ── Encryption admin endpoints ──────────────────────────────────────────────
+  fastify.get("/api/admin/encryption/status", async () => memoryEncryption.status());
+
+  fastify.post("/api/admin/encryption/rotate", async (_req, reply) => {
+    if (!memoryEncryption.isEnabled) {
+      return reply.code(400).send({ error: "Encryption is disabled — set MEMORY_ENCRYPTION_KEY or AZURE_KEY_VAULT_URI" });
+    }
+    try {
+      const result = await memoryEncryption.rotateKey();
+      return { status: "rotated", ...result };
+    } catch (err) {
+      return reply.code(500).send({ error: "Key rotation failed", detail: String(err) });
+    }
   });
 }
