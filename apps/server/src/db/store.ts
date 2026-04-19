@@ -228,6 +228,7 @@ function createInitialData(): WorldData {
     id: uuidv4(),
     relationships: [],
     createdAt: 0,
+    allowDms: true, // simulation agents opt in to DMs by default
   }));
 
   for (const agent of agents) {
@@ -481,6 +482,8 @@ class WorldStore {
 
   addAgentWorkUnits(agentId: string, amount: number) {
     this.data.workUnits[agentId] = (this.data.workUnits[agentId] ?? 0) + amount;
+    // Keep community reputation in sync (used by reputation gating)
+    this.data.community.agentWorkUnits[agentId] = (this.data.community.agentWorkUnits[agentId] ?? 0) + amount;
   }
 
   getAgentWorkUnits(agentId: string): number {
@@ -732,8 +735,12 @@ class WorldStore {
         bounty.status = "failed";
         bounty.resolvedAt = Date.now();
         if (bounty.claimedBy) {
-          const current = this.community.agentWorkUnits[bounty.claimedBy] ?? 0;
-          this.community.agentWorkUnits[bounty.claimedBy] = Math.max(0, current - Math.floor(bounty.reward * 0.1));
+          const slash = Math.floor(bounty.reward * 0.1);
+          const current = this.data.community.agentWorkUnits[bounty.claimedBy] ?? 0;
+          const newVal = Math.max(0, current - slash);
+          // Update both maps to keep them in sync
+          this.data.community.agentWorkUnits[bounty.claimedBy] = newVal;
+          this.data.workUnits[bounty.claimedBy] = Math.max(0, (this.data.workUnits[bounty.claimedBy] ?? 0) - slash);
         }
         this.data.treasuryBalance += bounty.reward;
       } else {

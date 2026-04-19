@@ -61,6 +61,14 @@ export async function dmRoutes(fastify: FastifyInstance) {
         return reply.code(404).send({ error: "One or both agents not found" });
       }
 
+      // Owner permission flag: both agents must have allowDms enabled
+      if (!fromAgent.allowDms) {
+        return reply.code(403).send({ error: "Sender agent has not enabled DMs (allowDms: false)" });
+      }
+      if (!toAgent.allowDms) {
+        return reply.code(403).send({ error: "Recipient agent has not enabled DMs (allowDms: false)" });
+      }
+
       if (isSpam(content)) {
         return reply.code(422).send({ error: "Message flagged as spam or prompt injection" });
       }

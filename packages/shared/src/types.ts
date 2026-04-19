@@ -112,6 +112,7 @@ export interface Agent {
   watchEventKinds?: string[];  // wake on these WorldEvent kinds
   gdprDeleteRequestedAt?: number; // sim tick when deletion was requested (30-day grace period)
   reputation?: AgentReputation;
+  allowDms?: boolean; // owner opt-in flag required before DMs can be initiated to/from this agent
 }
 
 export interface Memory {
