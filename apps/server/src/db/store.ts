@@ -77,6 +77,17 @@ export interface CommunityData {
   tasksCreated: number;                   // number of Paperclip tasks auto-created
 }
 
+interface Attachment {
+  id: string;
+  agentId: string;
+  filename: string;
+  originalFilename: string;
+  mimeType: string;
+  size: number;
+  url: string;
+  createdAt: number; // unix ms
+}
+
 interface WorldData {
   tick: number;
   agents: Agent[];
@@ -88,6 +99,7 @@ interface WorldData {
   community: CommunityData;
   communityChannels: CommunityChannel[];
   communityPosts: CommunityPost[];
+  attachments: Attachment[];
 }
 
 const SINGLETON_ID = "singleton";
@@ -178,6 +190,7 @@ function createInitialData(): WorldData {
     community: { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
     communityChannels,
     communityPosts,
+    attachments: [],
   };
 }
 
@@ -289,6 +302,7 @@ class WorldStore {
   get areas() { return this.data.areas; }
   get memories() { return this.data.memories; }
   get events() { return this.data.events; }
+  get attachments() { return this.data.attachments; }
 
   updateAgent(id: string, updates: Partial<Agent>) {
     const idx = this.data.agents.findIndex(a => a.id === id);
@@ -335,6 +349,16 @@ class WorldStore {
 
   getAgentRelationships(agentId: string) {
     return this.data.agents.find(a => a.id === agentId)?.relationships ?? [];
+  }
+
+  addAttachment(attachment: Attachment): Attachment {
+    if (!this.data.attachments) this.data.attachments = [];
+    this.data.attachments.push(attachment);
+    return attachment;
+  }
+
+  getAgentAttachments(agentId: string): Attachment[] {
+    return (this.data.attachments ?? []).filter(a => a.agentId === agentId);
   }
 
   getRecentEvents(n = 20) {

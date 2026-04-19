@@ -44,6 +44,79 @@ class AgentBrain {
   }
 
   /**
+   * Route a prompt to the best available LLM.
+   * Priority: ANTHROPIC → OPENAI → GEMINI → OLLAMA
+   */
+  private async complete(prompt: string, maxTokens: number): Promise<string> {
+    // Anthropic Claude (primary)
+    if (this.client) {
+      const res = await this.client.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: maxTokens,
+        messages: [{ role: "user", content: prompt }],
+      });
+      return res.content[0].type === "text" ? res.content[0].text.trim() : "";
+    }
+
+    // OpenAI GPT-4o (secondary)
+    if (process.env.OPENAI_API_KEY) {
+      const model = process.env.OPENAI_MODEL ?? "gpt-4o-mini";
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
+        body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: "user", content: prompt }] }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) throw new Error(`OpenAI ${res.status}`);
+      const data = await res.json() as { choices: { message: { content: string } }[] };
+      return data.choices[0]?.message?.content?.trim() ?? "";
+    }
+
+    // Google Gemini (tertiary)
+    if (process.env.GEMINI_API_KEY) {
+      const model = process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: maxTokens } }),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) throw new Error(`Gemini ${res.status}`);
+      const data = await res.json() as { candidates: { content: { parts: { text: string }[] } }[] };
+      return data.candidates[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+    }
+
+    // Ollama / local open-source models (Llama, DeepSeek, etc.)
+    if (process.env.OLLAMA_BASE_URL || process.env.OLLAMA_MODEL) {
+      const base = (process.env.OLLAMA_BASE_URL ?? "http://localhost:11434").replace(/\/$/, "");
+      const model = process.env.OLLAMA_MODEL ?? "llama3";
+      const res = await fetch(`${base}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, prompt, stream: false, options: { num_predict: maxTokens } }),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) throw new Error(`Ollama ${res.status}`);
+      const data = await res.json() as { response: string };
+      return data.response?.trim() ?? "";
+    }
+
+    throw new Error("No LLM provider configured");
+  }
+
+  /** Returns true when at least one LLM provider is configured. */
+  private get hasProvider(): boolean {
+    return !!(
+      this.client ||
+      process.env.OPENAI_API_KEY ||
+      process.env.GEMINI_API_KEY ||
+      process.env.OLLAMA_BASE_URL ||
+      process.env.OLLAMA_MODEL
+    );
+  }
+
+  /**
    * Returns the cached BrainOutput for the agent synchronously.
    * Triggers a background LLM refresh if the cache is missing or stale.
    */
@@ -66,11 +139,11 @@ class AgentBrain {
   }
 
   /**
-   * Generates a one-line poetic narration for a world event via Claude.
-   * Returns empty string on failure or when no API key is configured.
+   * Generates a one-line poetic narration for a world event.
+   * Returns empty string on failure or when no provider is configured.
    */
   async narrate(event: WorldEvent, agents: Agent[]): Promise<string> {
-    if (!this.client) return "";
+    if (!this.hasProvider) return "";
 
     const involved = agents
       .filter(a => event.involvedAgentIds.includes(a.id))
@@ -80,15 +153,7 @@ class AgentBrain {
     const prompt = `Write one poetic sentence (max 20 words) narrating this city event: "${event.description}". Agents: ${involved || "unknown"}. Output only the sentence, no quotes.`;
 
     try {
-      const response = await this.client.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 60,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      return response.content[0].type === "text"
-        ? response.content[0].text.trim()
-        : "";
+      return await this.complete(prompt, 60);
     } catch {
       return "";
     }
@@ -109,7 +174,7 @@ class AgentBrain {
   }
 
   private async fetchFromLLM(agent: Agent, memories: Memory[]): Promise<BrainOutput> {
-    if (!this.client) return EMPTY_OUTPUT;
+    if (!this.hasProvider) return EMPTY_OUTPUT;
 
     const recentMems = [...memories]
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -137,14 +202,7 @@ Respond with a JSON object with exactly these 3 fields:
 Be true to your personality. Respond ONLY with valid JSON, no markdown.`;
 
     try {
-      const response = await this.client.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 200,
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const text =
-        response.content[0].type === "text" ? response.content[0].text.trim() : "";
+      const text = await this.complete(prompt, 200);
 
       // Extract JSON even if the model wrapped it in markdown fences
       const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -167,7 +225,7 @@ Be true to your personality. Respond ONLY with valid JSON, no markdown.`;
    * Throws on LLM API failure so callers can return 503.
    */
   async chat(agent: Agent, memories: Memory[], userMessage: string): Promise<string | null> {
-    if (!this.client) return null;
+    if (!this.hasProvider) return null;
 
     const recentMems = [...memories]
       .sort((a, b) => b.createdAt - a.createdAt)
@@ -177,13 +235,7 @@ Be true to your personality. Respond ONLY with valid JSON, no markdown.`;
 
     const prompt = `You are ${agent.name}. Bio: ${agent.bio}. Traits: ${agent.traits.join(", ")}. Current mood: ${agent.state.mood}. Recent memories: ${recentMems || "none yet"}. A user says: "${userMessage}". Respond in character in 1-3 sentences.`;
 
-    const response = await this.client.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 150,
-      messages: [{ role: "user", content: prompt }],
-    });
-
-    return response.content[0].type === "text" ? response.content[0].text.trim() : "";
+    return await this.complete(prompt, 150);
   }
 }
 
