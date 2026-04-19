@@ -4,6 +4,7 @@ import { Server as SocketIOServer } from "socket.io";
 import type { ServerToClientEvents, ClientToServerEvents } from "@agentcolony/shared";
 import { WorldTickEngine } from "./simulation/WorldTick";
 import { worldRoutes } from "./routes/world";
+import { connectorRoutes } from "./routes/connectors";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -23,6 +24,7 @@ async function main() {
 
   // Register routes
   await fastify.register(worldRoutes, { engine });
+  await fastify.register(connectorRoutes);
 
   // Start HTTP server
   const address = await fastify.listen({ port: PORT, host: HOST });
