@@ -262,6 +262,11 @@ export const agentRoutes: FastifyPluginAsync = async (fastify) => {
 
       await pipeline(data.file, fs.createWriteStream(dest));
 
+      if (data.file.truncated) {
+        fs.unlinkSync(dest);
+        return reply.code(413).send({ error: "File exceeds 10 MB limit" });
+      }
+
       const baseUrl = process.env.PUBLIC_URL || "http://localhost:3001";
       return reply.code(201).send({
         url: `${baseUrl}/uploads/${uniqueName}`,
