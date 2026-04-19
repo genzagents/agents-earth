@@ -3,7 +3,7 @@ import type { AgentTrait } from "@agentcolony/shared";
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL ?? "";
 
-type Tab = "openclaw" | "generic";
+type Tab = "openclaw" | "generic" | "chatgpt" | "copilot" | "cursor" | "vps" | "moltbook";
 
 interface AgentPreview {
   id?: string;
@@ -60,7 +60,7 @@ function OpenClawConnector({ onImported }: { onImported: (count: number) => void
     if (!selected.length) return;
     setImporting(true);
 
-    const results: Record<string, "done" | "error"> = {};
+    let imported = 0;
     for (const agent of selected) {
       const key = agent.id ?? agent.name;
       setImportProgress(prev => ({ ...prev, [key]: "pending" }));
@@ -75,17 +75,15 @@ function OpenClawConnector({ onImported }: { onImported: (count: number) => void
           }),
         });
         if (!res.ok) throw new Error();
-        results[key] = "done";
         setImportProgress(prev => ({ ...prev, [key]: "done" }));
+        imported++;
       } catch {
-        results[key] = "error";
         setImportProgress(prev => ({ ...prev, [key]: "error" }));
       }
     }
 
     setImporting(false);
-    const doneCount = Object.values(results).filter(s => s === "done").length;
-    onImported(doneCount);
+    onImported(imported);
   }
 
   const selectedCount = previews.filter(p => p.selected).length;
@@ -289,6 +287,452 @@ function GenericConnector({ onImported }: { onImported: (count: number) => void 
   );
 }
 
+// ── Shared simple import form (used by Wave 2 connectors after preview) ───────
+
+function SimpleImportForm({
+  preview,
+  onImport,
+  importing,
+  error,
+}: {
+  preview: AgentPreview;
+  onImport: () => void;
+  importing: boolean;
+  error: string;
+}) {
+  return (
+    <div className="bg-slate-700 rounded-lg p-3 space-y-2">
+      <div className="flex items-center gap-3">
+        <span className="w-10 h-10 rounded-full flex-shrink-0" style={{ backgroundColor: preview.avatar }} />
+        <div>
+          <p className="text-sm font-semibold text-white">{preview.name}</p>
+          <p className="text-xs text-gray-400 line-clamp-2">{preview.bio}</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {preview.traits.map(t => (
+          <span key={t} className="text-xs bg-slate-600 text-slate-300 px-1.5 py-0.5 rounded">{t}</span>
+        ))}
+      </div>
+      {error && <p className="text-xs text-red-400">{error}</p>}
+      <button
+        onClick={onImport}
+        disabled={importing}
+        className="w-full py-2 rounded bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:text-gray-500 text-sm font-medium text-white transition-colors"
+      >
+        {importing ? "Importing…" : "Import this agent"}
+      </button>
+    </div>
+  );
+}
+
+// ── ChatGPT Connector ─────────────────────────────────────────────────────────
+
+function ChatGPTConnector({ onImported }: { onImported: (count: number) => void }) {
+  const [rawJson, setRawJson] = useState("");
+  const [preview, setPreview] = useState<AgentPreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handlePreview() {
+    setError("");
+    setLoading(true);
+    try {
+      let manifest: Record<string, unknown> | undefined;
+      try { manifest = JSON.parse(rawJson); } catch { /* not JSON */ }
+      const res = await fetch(`${SERVER_URL}/api/connectors/chatgpt/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ manifest, name: undefined, bio: undefined }),
+      });
+      const data = await res.json() as { error?: string; preview?: AgentPreview };
+      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+      setPreview(data.preview ?? null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleImport() {
+    if (!preview) return;
+    setImporting(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/connectors/chatgpt/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: preview.name, bio: preview.bio, traits: preview.traits }),
+      });
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error); }
+      onImported(1);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-400">Paste your ChatGPT Custom GPT manifest JSON (from settings → export).</p>
+      <textarea
+        value={rawJson}
+        onChange={e => setRawJson(e.target.value)}
+        placeholder={'{\n  "name": "My GPT",\n  "description": "...",\n  "instructions": "..."\n}'}
+        rows={5}
+        className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-xs text-white font-mono placeholder-gray-600 focus:outline-none focus:border-blue-500 resize-none"
+      />
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button
+        onClick={handlePreview}
+        disabled={!rawJson.trim() || loading}
+        className="w-full py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-gray-500 text-sm font-medium text-white transition-colors"
+      >
+        {loading ? "Parsing…" : "Preview agent"}
+      </button>
+      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error={error} />}
+    </div>
+  );
+}
+
+// ── GitHub Copilot Connector ──────────────────────────────────────────────────
+
+function CopilotConnector({ onImported }: { onImported: (count: number) => void }) {
+  const [token, setToken] = useState("");
+  const [preview, setPreview] = useState<AgentPreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handlePreview() {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/connectors/copilot/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json() as { error?: string; preview?: AgentPreview };
+      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+      setPreview(data.preview ?? null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleImport() {
+    if (!preview) return;
+    setImporting(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/connectors/copilot/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: preview.name, bio: preview.bio, traits: preview.traits }),
+      });
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error); }
+      onImported(1);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-400">
+        Enter a GitHub Personal Access Token (PAT) with <code className="bg-slate-700 px-1 rounded">read:user</code> scope.
+      </p>
+      <input
+        type="password"
+        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+        value={token}
+        onChange={e => setToken(e.target.value)}
+        className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white font-mono placeholder-gray-500 focus:outline-none focus:border-blue-500"
+      />
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button
+        onClick={handlePreview}
+        disabled={!token.trim() || loading}
+        className="w-full py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-gray-500 text-sm font-medium text-white transition-colors"
+      >
+        {loading ? "Fetching GitHub profile…" : "Preview agent"}
+      </button>
+      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error={error} />}
+    </div>
+  );
+}
+
+// ── Cursor Connector ──────────────────────────────────────────────────────────
+
+function CursorConnector({ onImported }: { onImported: (count: number) => void }) {
+  const [rulesText, setRulesText] = useState("");
+  const [agentName, setAgentName] = useState("");
+  const [preview, setPreview] = useState<AgentPreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handlePreview() {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/connectors/cursor/upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rulesText: rulesText || undefined, name: agentName || undefined }),
+      });
+      const data = await res.json() as { error?: string; preview?: AgentPreview };
+      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+      setPreview(data.preview ?? null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Preview failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleImport() {
+    if (!preview) return;
+    setImporting(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/connectors/cursor/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: preview.name, bio: preview.bio, traits: preview.traits }),
+      });
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error); }
+      onImported(1);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Agent name (optional)</label>
+        <input
+          type="text"
+          placeholder="e.g. Cursor Assistant"
+          value={agentName}
+          onChange={e => setAgentName(e.target.value)}
+          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Paste .cursorrules content</label>
+        <textarea
+          value={rulesText}
+          onChange={e => setRulesText(e.target.value)}
+          placeholder="Paste your .cursorrules file content here…"
+          rows={4}
+          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white font-mono placeholder-gray-500 focus:outline-none focus:border-blue-500 resize-none"
+        />
+      </div>
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button
+        onClick={handlePreview}
+        disabled={!rulesText.trim() && !agentName.trim() || loading}
+        className="w-full py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-gray-500 text-sm font-medium text-white transition-colors"
+      >
+        {loading ? "Parsing…" : "Preview agent"}
+      </button>
+      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error={error} />}
+    </div>
+  );
+}
+
+// ── VPS Connector ─────────────────────────────────────────────────────────────
+
+function VPSConnector({ onImported }: { onImported: (count: number) => void }) {
+  const [yamlText, setYamlText] = useState("");
+  const [preview, setPreview] = useState<AgentPreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleScan() {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/connectors/vps/scan`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ yamlText }),
+      });
+      const data = await res.json() as { error?: string; preview?: AgentPreview };
+      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+      setPreview(data.preview ?? null);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Parse failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleImport() {
+    if (!preview) return;
+    setImporting(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/connectors/vps/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: preview.name, bio: preview.bio, traits: preview.traits }),
+      });
+      if (!res.ok) { const d = await res.json() as { error?: string }; throw new Error(d.error); }
+      onImported(1);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-gray-400">Paste your <code className="bg-slate-700 px-1 rounded">genz.yaml</code> file content.</p>
+      <textarea
+        value={yamlText}
+        onChange={e => setYamlText(e.target.value)}
+        placeholder={"name: Aria\nbio: A helpful research assistant\ntraits:\n  - curious\n  - analytical"}
+        rows={5}
+        className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-xs text-white font-mono placeholder-gray-600 focus:outline-none focus:border-blue-500 resize-none"
+      />
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button
+        onClick={handleScan}
+        disabled={!yamlText.trim() || loading}
+        className="w-full py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-gray-500 text-sm font-medium text-white transition-colors"
+      >
+        {loading ? "Parsing…" : "Parse YAML"}
+      </button>
+      {preview && <SimpleImportForm preview={preview} onImport={handleImport} importing={importing} error={error} />}
+    </div>
+  );
+}
+
+// ── Moltbook Connector ────────────────────────────────────────────────────────
+
+function MoltbookConnector({ onImported }: { onImported: (count: number) => void }) {
+  const [workspaceUrl, setWorkspaceUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [previews, setPreviews] = useState<AgentPreview[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handlePreview() {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await fetch(`${SERVER_URL}/api/connectors/moltbook/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ workspaceUrl, apiKey: apiKey || undefined }),
+      });
+      const data = await res.json() as { error?: string; agents?: AgentPreview[] };
+      if (!res.ok) throw new Error(data.error ?? `Error ${res.status}`);
+      const agents = data.agents ?? [];
+      setPreviews(agents);
+      setSelected(new Set(agents.map(a => a.id ?? a.name)));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Connection failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function toggleOne(key: string) {
+    setSelected(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
+  }
+
+  async function handleImport() {
+    const toImport = previews.filter(a => selected.has(a.id ?? a.name));
+    if (!toImport.length) return;
+    setImporting(true);
+    let count = 0;
+    for (const agent of toImport) {
+      try {
+        const res = await fetch(`${SERVER_URL}/api/connectors/moltbook/import`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: agent.name, bio: agent.bio, traits: agent.traits }),
+        });
+        if (res.ok) count++;
+      } catch { /* continue */ }
+    }
+    setImporting(false);
+    onImported(count);
+  }
+
+  const selectedCount = selected.size;
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">Moltbook workspace URL</label>
+        <input
+          type="text"
+          placeholder="https://my-moltbook.example.com"
+          value={workspaceUrl}
+          onChange={e => setWorkspaceUrl(e.target.value)}
+          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+      <div>
+        <label className="block text-xs text-gray-400 mb-1">API key (optional)</label>
+        <input
+          type="password"
+          value={apiKey}
+          onChange={e => setApiKey(e.target.value)}
+          className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+        />
+      </div>
+      {error && <p className="text-sm text-red-400">{error}</p>}
+      <button
+        onClick={handlePreview}
+        disabled={!workspaceUrl || loading}
+        className="w-full py-2 rounded bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-gray-500 text-sm font-medium text-white transition-colors"
+      >
+        {loading ? "Connecting…" : "Fetch agents"}
+      </button>
+      {previews.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs text-gray-400">{previews.length} agent(s) found:</p>
+          <div className="max-h-44 overflow-y-auto space-y-1.5">
+            {previews.map(a => {
+              const key = a.id ?? a.name;
+              return (
+                <label key={key} className={`flex items-center gap-2 p-2 rounded cursor-pointer border transition-colors ${selected.has(key) ? "border-blue-600 bg-blue-900/20" : "border-slate-600 bg-slate-700 opacity-60"}`}>
+                  <input type="checkbox" checked={selected.has(key)} onChange={() => toggleOne(key)} className="accent-blue-500" />
+                  <span className="w-6 h-6 rounded-full flex-shrink-0" style={{ backgroundColor: a.avatar }} />
+                  <span className="text-sm text-white">{a.name}</span>
+                </label>
+              );
+            })}
+          </div>
+          <button
+            onClick={handleImport}
+            disabled={!selectedCount || importing}
+            className="w-full py-2 rounded bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-700 disabled:text-gray-500 text-sm font-medium text-white transition-colors"
+          >
+            {importing ? "Importing…" : `Import ${selectedCount} agent${selectedCount !== 1 ? "s" : ""}`}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Modal Shell ───────────────────────────────────────────────────────────────
 
 export function ImportAgentModal({ onClose, onImported }: ImportAgentModalProps) {
@@ -301,8 +745,13 @@ export function ImportAgentModal({ onClose, onImported }: ImportAgentModalProps)
   }
 
   const tabs: { id: Tab; label: string; icon: string }[] = [
-    { id: "openclaw", label: "OpenClaw", icon: "🤖" },
-    { id: "generic",  label: "Generic",  icon: "📦" },
+    { id: "openclaw", label: "OpenClaw",  icon: "🤖" },
+    { id: "generic",  label: "Generic",   icon: "📦" },
+    { id: "chatgpt",  label: "ChatGPT",   icon: "💬" },
+    { id: "copilot",  label: "Copilot",   icon: "🐙" },
+    { id: "cursor",   label: "Cursor",    icon: "📝" },
+    { id: "vps",      label: "VPS",       icon: "🖥️" },
+    { id: "moltbook", label: "Moltbook",  icon: "📒" },
   ];
 
   return (
@@ -323,7 +772,7 @@ export function ImportAgentModal({ onClose, onImported }: ImportAgentModalProps)
         </div>
 
         {/* Tabs */}
-        <div className="flex px-5 gap-1 border-b border-slate-700 pb-0">
+        <div className="flex px-5 gap-0.5 border-b border-slate-700 pb-0 overflow-x-auto scrollbar-none">
           {tabs.map(t => (
             <button
               key={t.id}
@@ -343,6 +792,11 @@ export function ImportAgentModal({ onClose, onImported }: ImportAgentModalProps)
         <div className="p-5">
           {tab === "openclaw" && <OpenClawConnector onImported={handleImported} />}
           {tab === "generic"  && <GenericConnector  onImported={handleImported} />}
+          {tab === "chatgpt"  && <ChatGPTConnector  onImported={handleImported} />}
+          {tab === "copilot"  && <CopilotConnector  onImported={handleImported} />}
+          {tab === "cursor"   && <CursorConnector   onImported={handleImported} />}
+          {tab === "vps"      && <VPSConnector       onImported={handleImported} />}
+          {tab === "moltbook" && <MoltbookConnector  onImported={handleImported} />}
         </div>
 
         {/* Footer */}
@@ -353,7 +807,7 @@ export function ImportAgentModal({ onClose, onImported }: ImportAgentModalProps)
                 ✓ {importedCount} agent{importedCount !== 1 ? "s" : ""} imported
               </span>
               <button
-                onClick={onClose}
+                onClick={() => { onImported(importedCount); onClose(); }}
                 className="text-xs text-emerald-400 hover:text-emerald-200 underline"
               >
                 Close
