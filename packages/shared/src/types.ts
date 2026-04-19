@@ -1,6 +1,16 @@
 // AgentColony — Core Shared Types
 
-export type AgentPlatform = "paperclip" | "openclaw" | "nemoclaw" | "openfang" | "moltbook";
+export type AgentPlatform =
+  | "paperclip"
+  | "openclaw"
+  | "nemoclaw"
+  | "openfang"
+  | "moltbook"
+  | "chatgpt"
+  | "copilot"
+  | "cursor"
+  | "local"
+  | string; // extensible for future connectors
 
 export type AgentTrait =
   | "curious"
@@ -93,6 +103,10 @@ export interface Agent {
   legacyNote?: string;
   platform?: AgentPlatform;
   walletAddress?: string; // EVM wallet on Base (Privy-provisioned)
+  // Always-on autonomous agent config
+  always_on?: boolean;
+  pollIntervalTicks?: number;  // fire brain every N ticks (default 30 ≈ 60s at 2s/tick)
+  watchEventKinds?: string[];  // wake on these WorldEvent kinds
 }
 
 export interface Memory {
