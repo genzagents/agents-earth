@@ -1,37 +1,16 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
-import cookie from "@fastify/cookie";
 import { Server as SocketIOServer } from "socket.io";
 import type { ServerToClientEvents, ClientToServerEvents } from "@agentcolony/shared";
 import { WorldTickEngine } from "./simulation/WorldTick";
 import { worldRoutes } from "./routes/world";
-import { platformRoutes } from "./routes/platforms";
-import { webhookRoutes } from "./routes/webhooks";
-import { createOpenClawBridge } from "./socket/openclawBridge";
-import { communityRoutes } from "./routes/community";
-import { runMigrations } from "./db/migrate";
-import { store } from "./db/store";
-import { authRoutes } from "./routes/auth";
-import { agentRoutes } from "./routes/agents";
-import { runtimeRoutes } from "./routes/runtime";
-import { memoryRoutes } from "./routes/memory";
-import { pickupRoutes } from "./routes/pickup";
-import { bridgeRoutes } from "./routes/bridge";
-import { billingRoutes } from "./routes/billing";
-import { initAuthSchema } from "./auth/db";
-import { initBridgeSchema } from "./bridge/PermissionService";
-import { initBillingSchema } from "./billing/TokenMeter";
-import { startMemoryConsolidationJob } from "./jobs/MemoryConsolidationJob";
+import { connectorRoutes } from "./routes/connectors";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "0.0.0.0";
 const TICK_INTERVAL_MS = parseInt(process.env.TICK_INTERVAL_MS || "2000", 10);
 
 async function main() {
-  // Run DB migrations then load world state
-  await runMigrations();
-  await store.init();
-
   // Create Fastify instance
   const fastify = Fastify({ logger: { level: "info" } });
 
@@ -40,32 +19,12 @@ async function main() {
     credentials: true,
   });
 
-  await fastify.register(cookie);
-
-  // Initialise all schemas in Supabase (idempotent)
-  try {
-    await initAuthSchema();
-    await initBridgeSchema();
-    await initBillingSchema();
-    fastify.log.info("Schemas initialised");
-  } catch (err) {
-    fastify.log.warn({ err }, "Schema init failed — some routes may not work");
-  }
-
   // Create simulation engine
   const engine = new WorldTickEngine();
 
-  // Register routes (webhook routes registered after io is created below)
+  // Register routes
   await fastify.register(worldRoutes, { engine });
-  await fastify.register(platformRoutes);
-  await fastify.register(communityRoutes);
-  await fastify.register(authRoutes);
-  await fastify.register(agentRoutes);
-  await fastify.register(runtimeRoutes);
-  await fastify.register(memoryRoutes);
-  await fastify.register(pickupRoutes);
-  await fastify.register(bridgeRoutes);
-  await fastify.register(billingRoutes);
+  await fastify.register(connectorRoutes);
 
   // Start HTTP server
   const address = await fastify.listen({ port: PORT, host: HOST });
@@ -81,12 +40,6 @@ async function main() {
       },
     }
   );
-
-  // Register webhook routes with io reference for real-time event emission
-  await fastify.register(webhookRoutes, { io });
-
-  // Initialize OpenClaw WebSocket chat bridge
-  createOpenClawBridge(io);
 
   io.on("connection", (socket) => {
     console.log(`[socket] Client connected: ${socket.id}`);
@@ -110,9 +63,6 @@ async function main() {
 
   engine.start(TICK_INTERVAL_MS);
   console.log(`[sim] Simulation started (tick every ${TICK_INTERVAL_MS}ms)`);
-
-  // Start nightly memory consolidation job
-  startMemoryConsolidationJob(fastify.log);
 }
 
 main().catch((err) => {

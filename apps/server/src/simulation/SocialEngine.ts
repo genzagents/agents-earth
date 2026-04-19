@@ -89,12 +89,15 @@ export function processSocialInteractions(
       const area = areaMap[areaId];
       if (!area) continue;
 
-      const llmLine = conversationLines?.get(agentA.id) ?? conversationLines?.get(agentB.id);
+      const llmLineA = conversationLines?.get(agentA.id);
+      const llmLineB = conversationLines?.get(agentB.id);
+      const llmLine = llmLineA ?? llmLineB;
+      const [speaker, listener] = llmLineB && !llmLineA ? [agentB, agentA] : [agentA, agentB];
       const actionPhrase = llmLine
-        ? `to ${agentB.name}: "${llmLine}"`
+        ? `to ${listener.name}: "${llmLine}"`
         : pickTemplate(area.type, agentB.name);
       const description = llmLine
-        ? `${agentA.name} says ${actionPhrase}`
+        ? `${speaker.name} says ${actionPhrase}`
         : `${agentA.name} ${actionPhrase}`;
 
       events.push({
