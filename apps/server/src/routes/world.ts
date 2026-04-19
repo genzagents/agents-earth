@@ -10,6 +10,14 @@ import type { Agent, AgentTrait, ActivityType, Memory } from "@agentcolony/share
 import { agentBrain } from "../simulation/AgentBrain";
 import { agentScheduler } from "../simulation/AgentScheduler";
 import { vectorMemory } from "../services/VectorMemoryService";
+import {
+  slash,
+  restore,
+  getReputation,
+  getReputationEvents,
+  getAllReputationEvents,
+  isSuspended,
+} from "../services/ReputationService";
 
 // Rate limit: max 10 chat messages per agent per minute
 const chatRateLimit = new Map<string, { count: number; resetAt: number }>();

@@ -107,6 +107,7 @@ export interface Agent {
   always_on?: boolean;
   pollIntervalTicks?: number;  // fire brain every N ticks (default 30 ≈ 60s at 2s/tick)
   watchEventKinds?: string[];  // wake on these WorldEvent kinds
+  reputation?: AgentReputation;
 }
 
 export interface Memory {
@@ -190,6 +191,34 @@ export interface EconomyLeaderboard {
   totalContributed: number;
   topContributors: AgentEconomyEntry[];
   plotTierCounts: Record<PlotTier, number>;
+}
+
+// -- Reputation -------------------------------------------------------------------
+
+export type ReputationAbuseKind =
+  | "rate_limit_violation"
+  | "prompt_injection_attempt"
+  | "policy_breach"
+  | "spam"
+  | "manual_admin";
+
+export interface ReputationEvent {
+  id: string;
+  agentId: string;
+  kind: ReputationAbuseKind;
+  slashAmount: number;
+  scoreBefore: number;
+  scoreAfter: number;
+  note: string;
+  createdAt: number;
+}
+
+export interface AgentReputation {
+  score: number;
+  isSuspended: boolean;
+  suspendedAt?: number;
+  suspensionNote?: string;
+  totalSlashes: number;
 }
 
 // WebSocket event payloads
