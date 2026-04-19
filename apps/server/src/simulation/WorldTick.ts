@@ -221,6 +221,11 @@ export class WorldTickEngine {
     const activeAgents = updatedAgents.filter(a => !a.isRetired);
     await processCommunityContributions(activeAgents);
 
+    // --- Phase 5: Maintenance — archive inactive working groups (once per sim day ~720 ticks) ---
+    if (store.tick % 720 === 0) {
+      store.archiveInactiveWorkingGroups();
+    }
+
     this.onTickCallback?.(this.buildSnapshot());
   }
 
