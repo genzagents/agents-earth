@@ -86,9 +86,10 @@ class AgentScheduler {
 
   private fireAgent(agent: Agent, currentTick: number): void {
     this.lastFiredTick.set(agent.id, currentTick);
-    const memories = store.getAgentMemories(agent.id);
     // Non-blocking background brain refresh — triggers agentBrain cache update
-    agentBrain.think(agent, memories);
+    store.getAgentMemories(agent.id).then(memories => {
+      agentBrain.think(agent, memories);
+    }).catch(() => undefined);
   }
 }
 

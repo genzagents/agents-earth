@@ -83,7 +83,7 @@ export class WorldTickEngine {
       decayed = applyAgingPressure(decayed, ageInDays);
 
       // Apply memory-based needs boost
-      const agentMemories = store.getAgentMemories(agent.id);
+      const agentMemories = await store.getAgentMemories(agent.id);
       const memBoost = narrativeNeedsBoost(agentMemories, store.tick);
       for (const [k, v] of Object.entries(memBoost)) {
         const key = k as keyof typeof decayed;

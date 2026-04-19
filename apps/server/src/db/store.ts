@@ -11,6 +11,7 @@ import type {
   RelationshipType,
 } from "@agentcolony/shared";
 import { vectorMemory } from "../services/VectorMemoryService";
+import { memoryEncryption } from "../services/EncryptionService";
 
 export const CITIES: CityInfo[] = [
   {
@@ -419,6 +420,13 @@ class WorldStore {
     if (this.data.memories.length > 1000) this.data.memories.length = 1000;
     // Fire-and-forget vector index upsert (graceful no-op when Pinecone not configured)
     vectorMemory.upsert(memory).catch(() => undefined);
+    // Fire-and-forget encryption (graceful no-op when MEMORY_ENCRYPTION_KEY not set)
+    if (memoryEncryption.isEnabled) {
+      memoryEncryption.encrypt(memory.description).then(encrypted => {
+        const idx = this.data.memories.findIndex(m => m.id === memory.id);
+        if (idx >= 0) this.data.memories[idx] = { ...this.data.memories[idx], description: encrypted };
+      }).catch(() => undefined);
+    }
   }
 
   addAgent(agent: Agent) {
@@ -438,8 +446,13 @@ class WorldStore {
     return this.data.agents.filter(a => cityAreaIds.has(a.state.currentAreaId));
   }
 
-  getAgentMemories(agentId: string) {
-    return this.data.memories.filter(m => m.agentId === agentId).slice(0, 50);
+  async getAgentMemories(agentId: string): Promise<Memory[]> {
+    const raw = this.data.memories.filter(m => m.agentId === agentId).slice(0, 50);
+    if (!memoryEncryption.isEnabled) return raw;
+    return Promise.all(raw.map(async m => ({
+      ...m,
+      description: await memoryEncryption.decrypt(m.description),
+    })));
   }
 
   getAgentRelationships(agentId: string) {
