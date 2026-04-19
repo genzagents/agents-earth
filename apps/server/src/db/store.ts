@@ -441,6 +441,7 @@ class WorldStore {
     return (this.data.attachments ?? []).filter(a => a.agentId === agentId);
   }
 
+
   getRecentEvents(n = 20) {
     return this.data.events.slice(0, n);
   }

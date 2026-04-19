@@ -652,6 +652,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     return reply.code(200).send({ agentId: agent.id, action: promptFilter.getDefaultAction() });
   });
 
+
   // ── GDPR: data export ────────────────────────────────────────────────────────
   // GET /api/agents/:id/gdpr/export
   // Returns a JSON archive of all data held for this agent.
@@ -872,4 +873,5 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       return reply.code(200).send(result);
     },
   );
+
 }

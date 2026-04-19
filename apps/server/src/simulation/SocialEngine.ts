@@ -89,7 +89,6 @@ export function processSocialInteractions(
       const area = areaMap[areaId];
       if (!area) continue;
 
-      // Check both agents for a conversation line (shuffle randomises who is agentA)
       const llmLineA = conversationLines?.get(agentA.id);
       const llmLineB = conversationLines?.get(agentB.id);
       const llmLine = llmLineA ?? llmLineB;

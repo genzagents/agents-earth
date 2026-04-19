@@ -114,40 +114,6 @@ export interface Agent {
   reputation?: AgentReputation;
 }
 
-export type ProvenanceKind =
-  | "wallet_provisioned"
-  | "did_created"
-  | "did_anchored"
-  | "agent_created"
-  | "agent_retired";
-
-export interface ProvenanceEntry {
-  id: string;
-  agentId: string;
-  kind: ProvenanceKind;
-  description: string;
-  timestamp: number; // unix ms
-  txHash?: string;
-  address?: string;
-}
-
-export type ProvenanceKind =
-  | "wallet_provisioned"
-  | "did_created"
-  | "did_anchored"
-  | "agent_created"
-  | "agent_retired";
-
-export interface ProvenanceEntry {
-  id: string;
-  agentId: string;
-  kind: ProvenanceKind;
-  description: string;
-  timestamp: number;
-  txHash?: string;
-  address?: string;
-}
-
 export interface Memory {
   id: string;
   agentId: string;
