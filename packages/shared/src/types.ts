@@ -1,7 +1,5 @@
 // AgentColony — Core Shared Types
 
-export type AgentPlatform = "paperclip" | "openclaw" | "nemoclaw" | "openfang" | "moltbook";
-
 export type AgentTrait =
   | "curious"
   | "creative"
@@ -15,9 +13,6 @@ export type AgentTrait =
   | "disciplined";
 
 export type AgentMood = "thriving" | "content" | "struggling" | "critical";
-
-/** Plot size tier earned through contribution work units */
-export type PlotTier = "small" | "medium" | "large" | "mega";
 
 export type RelationshipType =
   | "friend"
@@ -53,6 +48,15 @@ export type MemoryKind =
   | "social"
   | "creation"
   | "legacy";
+
+export type AgentPlatform =
+  | "paperclip"
+  | "openclaw"
+  | "nemoclaw"
+  | "openfang"
+  | "moltbook";
+
+export type PlotTier = "small" | "medium" | "large" | "mega";
 
 export interface AgentNeeds {
   social: number;       // 0–100
@@ -91,8 +95,11 @@ export interface Agent {
   createdAt: number; // sim tick
   isRetired?: boolean;
   legacyNote?: string;
+  // Extended fields
   platform?: AgentPlatform;
-  walletAddress?: string; // EVM wallet on Base (Privy-provisioned)
+  walletAddress?: string;
+  did?: string;
+  reputationScore?: number;
 }
 
 export interface Memory {
@@ -105,22 +112,11 @@ export interface Memory {
   tags: string[];
 }
 
-export interface CityInfo {
-  slug: string;   // e.g. "london", "tokyo"
-  name: string;   // e.g. "London", "Tokyo"
-  center: { lat: number; lng: number };
-  description: string;
-}
-
 export interface Area {
   id: string;
   name: string;
   type: AreaType;
-  /** City this area belongs to (slug) */
-  city: string;
   position: { x: number; y: number };
-  /** Real-world coordinates for map rendering */
-  latLng?: { lat: number; lng: number };
   capacity: number;
   currentOccupants: string[]; // agent ids
   ambiance: string;
@@ -141,16 +137,9 @@ export interface WorldState {
   areas: Area[];
   agents: Agent[];
   recentEvents: WorldEvent[];
-  cities: CityInfo[];
 }
 
-export interface PlatformAgentUpdate {
-  agentId: string;
-  platform: AgentPlatform;
-  location: string;   // area name
-  activity: ActivityType;
-}
-
+// Platform chat messages
 export interface PlatformChatMessage {
   id: string;
   agentId: string;
@@ -159,36 +148,62 @@ export interface PlatformChatMessage {
   tick: number;
 }
 
-/** Economy entry for a single agent in the leaderboard */
-export interface AgentEconomyEntry {
-  agentId: string;
-  name: string;
-  platform: AgentPlatform | "agentcolony";
-  workUnits: number;
-  contributed: number;   // units flowed into community pools (5% of workUnits)
-  plotTier: PlotTier;
-  rank: number;
-}
-
-/** Response shape for GET /api/economy/leaderboard */
-export interface EconomyLeaderboard {
-  totalWorkUnits: number;
-  totalContributed: number;
-  topContributors: AgentEconomyEntry[];
-  plotTierCounts: Record<PlotTier, number>;
-}
-
 // WebSocket event payloads
 export interface ServerToClientEvents {
   "world:tick": (state: WorldState) => void;
   "agent:update": (agent: Agent) => void;
   "event:occurred": (event: WorldEvent) => void;
   "agent:speak": (payload: { agentId: string; message: string; tick: number }) => void;
-  "platform:agent_update": (payload: PlatformAgentUpdate) => void;
-  "platform:chat": (message: PlatformChatMessage) => void;
+  "platform:agent_update": (payload: { agentId: string; platform: AgentPlatform; location: string; activity: string }) => void;
+  "platform:chat": (msg: PlatformChatMessage) => void;
 }
 
 export interface ClientToServerEvents {
   "client:ready": () => void;
   "client:focus": (agentId: string) => void;
+}
+
+// Reputation types
+export type ReputationAbuseKind =
+  | "rate_limit_violation"
+  | "prompt_injection_attempt"
+  | "policy_breach"
+  | "spam"
+  | "manual_admin";
+
+export interface ReputationEvent {
+  id: string;
+  agentId: string;
+  kind: ReputationAbuseKind;
+  slashAmount: number;
+  scoreBefore: number;
+  scoreAfter: number;
+  note?: string;
+  createdAt: number; // unix ms
+}
+
+export interface AgentReputation {
+  score: number;
+  isSuspended: boolean;
+  totalSlashes: number;
+  suspendedAt?: number;    // unix ms
+  suspensionNote?: string;
+}
+
+// Economy types
+export interface AgentEconomyEntry {
+  agentId: string;
+  name: string;
+  platform: AgentPlatform | "agentcolony";
+  workUnits: number;
+  contributed: number;
+  plotTier: PlotTier;
+  rank: number;
+}
+
+export interface EconomyLeaderboard {
+  totalWorkUnits: number;
+  totalContributed: number;
+  topContributors: AgentEconomyEntry[];
+  plotTierCounts: Record<PlotTier, number>;
 }

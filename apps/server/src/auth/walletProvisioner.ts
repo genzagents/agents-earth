@@ -49,7 +49,11 @@ export async function provisionWallet(userId: string, email: string): Promise<st
       return null;
     }
 
-    const address = evmWallet.address;
+    const address = evmWallet.address ?? null;
+    if (!address) {
+      console.warn("[wallet] EVM wallet has no address for user", userId);
+      return null;
+    }
 
     // Persist on user record
     await updateUserWallet(userId, address);

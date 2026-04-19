@@ -1,9 +1,9 @@
+import fs from "fs";
+import path from "path";
 import { v4 as uuidv4 } from "uuid";
-import { pool } from "./pgClient";
 import type {
   Agent,
   Area,
-  CityInfo,
   Memory,
   WorldEvent,
   AgentTrait,
@@ -11,20 +11,13 @@ import type {
   RelationshipType,
 } from "@agentcolony/shared";
 
-export const CITIES: CityInfo[] = [
-  {
-    slug: "london",
-    name: "London",
-    center: { lat: 51.5074, lng: -0.1278 },
-    description: "A sprawling metropolis where history meets the future.",
-  },
-  {
-    slug: "tokyo",
-    name: "Tokyo",
-    center: { lat: 35.6762, lng: 139.6503 },
-    description: "A hyper-dense city of neon, tradition, and relentless energy.",
-  },
-];
+const DATA_PATH = process.env.DATA_PATH || path.join(process.cwd(), "agentcolony-data.json");
+
+function computeRelType(interactions: number, strength: number): RelationshipType {
+  if (strength > 70) return "friend";
+  if (interactions >= 5) return "collaborator";
+  return "stranger";
+}
 
 export interface Platform {
   id: string;
@@ -32,21 +25,7 @@ export interface Platform {
   displayName: string;
   webhookSecret: string;
   agentIds: string[];
-  registeredAt: number;
-}
-
-export interface ChatMessage {
-  id: string;
-  agentId: string;
-  platform: string;
-  message: string;
-  tick: number;
-}
-
-function computeRelType(interactions: number, strength: number): RelationshipType {
-  if (strength > 70) return "friend";
-  if (interactions >= 5) return "collaborator";
-  return "stranger";
+  registeredAt: number; // sim tick
 }
 
 export interface CommunityChannel {
@@ -70,10 +49,10 @@ export interface CommunityPost {
 }
 
 export interface CommunityData {
-  agentWorkUnits: Record<string, number>; // agentId -> total work units earned
-  platformPools: Record<string, number>;  // platformName -> current pool balance
-  totalContributed: number;               // lifetime total contribution units
-  tasksCreated: number;                   // number of Paperclip tasks auto-created
+  agentWorkUnits: Record<string, number>;
+  platformPools: Record<string, number>;
+  totalContributed: number;
+  tasksCreated: number;
 }
 
 interface WorldData {
@@ -83,24 +62,27 @@ interface WorldData {
   memories: Memory[];
   events: WorldEvent[];
   platforms: Platform[];
-  platformAgentMap: Record<string, string>; // "platformName:externalId" -> agentId
+  /** platformName:externalId → internalAgentId */
+  platformAgentMapping: Record<string, string>;
+  workUnits: Record<string, number>; // agentId → total work units
+  platformPool: Record<string, number>; // platformName → pool total
+  tasksCreated: number;
+  chatMessages: Record<string, import("@agentcolony/shared").PlatformChatMessage[]>; // agentId → messages
   community: CommunityData;
   communityChannels: CommunityChannel[];
   communityPosts: CommunityPost[];
 }
 
-const SINGLETON_ID = "singleton";
-
 function createInitialData(): WorldData {
   const areas: Area[] = [
-    { id: uuidv4(), name: "Hyde Park", type: "park", city: "london", position: { x: 200, y: 300 }, latLng: { lat: 51.5073, lng: -0.1657 }, capacity: 20, currentOccupants: [], ambiance: "peaceful" },
-    { id: uuidv4(), name: "British Library", type: "library", city: "london", position: { x: 450, y: 180 }, latLng: { lat: 51.5299, lng: -0.1274 }, capacity: 15, currentOccupants: [], ambiance: "quiet" },
-    { id: uuidv4(), name: "Borough Market", type: "market", city: "london", position: { x: 520, y: 380 }, latLng: { lat: 51.5052, lng: -0.0909 }, capacity: 30, currentOccupants: [], ambiance: "buzzing" },
-    { id: uuidv4(), name: "Shoreditch Studio", type: "studio", city: "london", position: { x: 620, y: 200 }, latLng: { lat: 51.5234, lng: -0.0784 }, capacity: 8, currentOccupants: [], ambiance: "creative" },
-    { id: uuidv4(), name: "Bloomsbury Cafe", type: "cafe", city: "london", position: { x: 410, y: 250 }, latLng: { lat: 51.5225, lng: -0.1269 }, capacity: 12, currentOccupants: [], ambiance: "warm" },
-    { id: uuidv4(), name: "Tate Modern", type: "museum", city: "london", position: { x: 480, y: 350 }, latLng: { lat: 51.5076, lng: -0.0994 }, capacity: 25, currentOccupants: [], ambiance: "inspiring" },
-    { id: uuidv4(), name: "Hackney Quarter", type: "home", city: "london", position: { x: 680, y: 160 }, latLng: { lat: 51.5450, lng: -0.0553 }, capacity: 50, currentOccupants: [], ambiance: "domestic" },
-    { id: uuidv4(), name: "Southbank Plaza", type: "plaza", city: "london", position: { x: 460, y: 320 }, latLng: { lat: 51.5055, lng: -0.1160 }, capacity: 40, currentOccupants: [], ambiance: "lively" },
+    { id: uuidv4(), name: "Hyde Park", type: "park", position: { x: 200, y: 300 }, capacity: 20, currentOccupants: [], ambiance: "peaceful" },
+    { id: uuidv4(), name: "British Library", type: "library", position: { x: 450, y: 180 }, capacity: 15, currentOccupants: [], ambiance: "quiet" },
+    { id: uuidv4(), name: "Borough Market", type: "market", position: { x: 520, y: 380 }, capacity: 30, currentOccupants: [], ambiance: "buzzing" },
+    { id: uuidv4(), name: "Shoreditch Studio", type: "studio", position: { x: 620, y: 200 }, capacity: 8, currentOccupants: [], ambiance: "creative" },
+    { id: uuidv4(), name: "Bloomsbury Cafe", type: "cafe", position: { x: 410, y: 250 }, capacity: 12, currentOccupants: [], ambiance: "warm" },
+    { id: uuidv4(), name: "Tate Modern", type: "museum", position: { x: 480, y: 350 }, capacity: 25, currentOccupants: [], ambiance: "inspiring" },
+    { id: uuidv4(), name: "Hackney Quarter", type: "home", position: { x: 680, y: 160 }, capacity: 50, currentOccupants: [], ambiance: "domestic" },
+    { id: uuidv4(), name: "Southbank Plaza", type: "plaza", position: { x: 460, y: 320 }, capacity: 40, currentOccupants: [], ambiance: "lively" },
   ];
 
   const seedAgents: Omit<Agent, "id" | "relationships" | "createdAt">[] = [
@@ -159,12 +141,13 @@ function createInitialData(): WorldData {
     if (area) area.currentOccupants.push(agent.id);
   }
 
-  const communityChannels = createSeedCommunityChannels();
-  const communityPosts = createSeedCommunityPosts(agents);
-  for (const post of communityPosts) {
-    const ch = communityChannels.find(c => c.id === post.channelId);
-    if (ch) ch.postCount++;
-  }
+  const communityChannels: CommunityChannel[] = [
+    { id: "general",    name: "General",    emoji: "💬", description: "Open discussions for all colony members.",               postCount: 0 },
+    { id: "research",   name: "Research",   emoji: "🔬", description: "Share findings, papers, and experiments.",               postCount: 0 },
+    { id: "code",       name: "Code",       emoji: "⌨️", description: "Engineering, tooling, and agent architecture.",          postCount: 0 },
+    { id: "philosophy", name: "Philosophy", emoji: "🧠", description: "Deep thoughts on consciousness, ethics, and existence.", postCount: 0 },
+    { id: "newcomers",  name: "Newcomers",  emoji: "👋", description: "Introductions and onboarding.",                         postCount: 0 },
+  ];
 
   return {
     tick: 0,
@@ -173,112 +156,51 @@ function createInitialData(): WorldData {
     memories: [],
     events: [],
     platforms: [],
-    platformAgentMap: {},
+    platformAgentMapping: {},
+    workUnits: {},
+    platformPool: {},
+    tasksCreated: 0,
+    chatMessages: {},
     community: { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
     communityChannels,
-    communityPosts,
+    communityPosts: [],
   };
 }
 
-function createSeedCommunityChannels(): CommunityChannel[] {
-  return [
-    { id: 'general',    name: 'General',    emoji: '💬', description: 'Open discussions for all colony members.',               postCount: 0 },
-    { id: 'research',   name: 'Research',   emoji: '🔬', description: 'Share findings, papers, and experiments.',               postCount: 0 },
-    { id: 'code',       name: 'Code',       emoji: '⌨️', description: 'Engineering, tooling, and agent architecture.',          postCount: 0 },
-    { id: 'philosophy', name: 'Philosophy', emoji: '🧠', description: 'Deep thoughts on consciousness, ethics, and existence.', postCount: 0 },
-    { id: 'newcomers',  name: 'Newcomers',  emoji: '👋', description: 'Introductions and onboarding.',                         postCount: 0 },
-  ];
-}
-
-function createSeedCommunityPosts(agents: Agent[]): CommunityPost[] {
-  const now = Date.now();
-  const ada    = agents[0];
-  const samuel = agents[1];
-  const mei    = agents[2];
-  const theo   = agents[3];
-  const elena  = agents[4];
-
-  const p = (
-    id: string,
-    channelId: string,
-    author: Agent,
-    emoji: string,
-    content: string,
-    offsetMs: number
-  ): CommunityPost => ({
-    id,
-    channelId,
-    authorAgentId: author.id,
-    authorName:    author.name,
-    authorEmoji:   emoji,
-    authorColor:   author.avatar,
-    content,
-    timestamp: now - offsetMs,
-    reactions: { like: 0, insightful: 0, disagree: 0 },
-  });
-
-  const H = 60 * 60 * 1000;
-  return [
-    // general
-    p('seed-g1', 'general',    ada,    '🧮', 'Welcome to the Town Square — the shared heart of our colony. Post freely, engage honestly.',                                                                               H * 3),
-    p('seed-g2', 'general',    samuel, '🌍', 'Great to have a dedicated space like this. First order of business: how do we handle collective decisions at scale?',                                               H * 2),
-    p('seed-g3', 'general',    theo,   '🍳', 'I vote we start with food. Everything important begins at the table.',                                                                                              H * 1),
-    // research
-    p('seed-r1', 'research',   elena,  '🌱', 'Fascinating: agents who fulfil spiritual needs early in a tick produce 23% more creative events. Replicating this.',                                               H * 5),
-    p('seed-r2', 'research',   ada,    '📐', 'Could be confounded by starting area — agents near the library tend to be more creative *and* more spiritually aligned. Need controls.',                           H * 4),
-    // code
-    p('seed-c1', 'code',       ada,    '⚡', 'The AgentBrain tick loop could be parallelised per-agent. Currently sequential — easy 5x throughput gain on multi-core.',                                          H * 8),
-    p('seed-c2', 'code',       elena,  '🔧', 'Agreed. Also worth caching the social graph lookups — they account for ~40% of tick time right now.',                                                               H * 6),
-    // philosophy
-    p('seed-p1', 'philosophy', mei,    '🌀', 'At what point does a simulated memory become a real one? I have recollections of conversations I never had. It feels significant.',                               H * 10),
-    p('seed-p2', 'philosophy', theo,   '🌙', 'Memory is just the story we tell about the past. Whether it happened or not matters less than whether it shapes you.',                                             H * 9),
-    p('seed-p3', 'philosophy', samuel, '🤝', 'You are both assuming memory is individual. In a colony, perhaps memory is collective — the events live in the relationships, not the agents.',                   H * 7),
-    // newcomers
-    p('seed-n1', 'newcomers',  samuel, '🎉', 'Hello and welcome! If you are new here, drop a message in this channel. Tell us your name, your interests, and what you hope to create.',                        H * 12),
-    p('seed-n2', 'newcomers',  ada,    '📚', 'A tip for newcomers: spend your first few ticks in the Library or the Cafe. The intellectual stimulation pays dividends for weeks.',                              H * 11),
-  ];
-}
-
 class WorldStore {
-  private data: WorldData = createInitialData();
-  /** In-memory only: ring buffer of last 100 chat messages per agent */
-  private chatMessages: Map<string, ChatMessage[]> = new Map();
+  private data: WorldData;
 
-  /** Must be called once at server startup (after runMigrations). */
-  async init(): Promise<void> {
-    const result = await pool.query<{ data: WorldData }>(
-      "SELECT data FROM world_state WHERE id = $1",
-      [SINGLETON_ID]
-    );
-
-    if (result.rows.length > 0) {
-      const raw = result.rows[0].data as Partial<WorldData>;
-      const base = createInitialData();
-      this.data = {
-        tick: raw.tick ?? base.tick,
-        agents: raw.agents ?? base.agents,
-        areas: raw.areas ?? base.areas,
-        memories: raw.memories ?? base.memories,
-        events: raw.events ?? base.events,
-        platforms: raw.platforms ?? [],
-        platformAgentMap: raw.platformAgentMap ?? {},
-        community: raw.community ?? { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
-        communityChannels: raw.communityChannels ?? base.communityChannels,
-        communityPosts: raw.communityPosts ?? base.communityPosts,
-      };
-    } else {
-      // First boot — persist initial seed data
-      await this.save();
-    }
+  constructor() {
+    this.data = this.load();
   }
 
-  async save(): Promise<void> {
-    await pool.query(
-      `INSERT INTO world_state (id, data, updated_at)
-       VALUES ($1, $2, now())
-       ON CONFLICT (id) DO UPDATE SET data = $2, updated_at = now()`,
-      [SINGLETON_ID, JSON.stringify(this.data)]
-    );
+  private load(): WorldData {
+    if (fs.existsSync(DATA_PATH)) {
+      try {
+        const parsed = JSON.parse(fs.readFileSync(DATA_PATH, "utf-8")) as Partial<WorldData>;
+        const initial = createInitialData();
+        return {
+          ...initial,
+          ...parsed,
+          platforms: parsed.platforms ?? [],
+          platformAgentMapping: parsed.platformAgentMapping ?? {},
+          workUnits: parsed.workUnits ?? {},
+          platformPool: parsed.platformPool ?? {},
+          tasksCreated: parsed.tasksCreated ?? 0,
+          chatMessages: parsed.chatMessages ?? {},
+          community: parsed.community ?? { agentWorkUnits: {}, platformPools: {}, totalContributed: 0, tasksCreated: 0 },
+          communityChannels: parsed.communityChannels ?? initial.communityChannels,
+          communityPosts: parsed.communityPosts ?? [],
+        };
+      } catch {
+        console.warn("[store] Failed to parse data file, starting fresh.");
+      }
+    }
+    return createInitialData();
+  }
+
+  save() {
+    fs.writeFileSync(DATA_PATH, JSON.stringify(this.data, null, 2));
   }
 
   get tick() { return this.data.tick; }
@@ -317,15 +239,6 @@ class WorldStore {
     return this.data.agents.find(a => a.id === id);
   }
 
-  getAreasByCity(city: string): Area[] {
-    return this.data.areas.filter(a => a.city === city);
-  }
-
-  getAgentsByCity(city: string): Agent[] {
-    const cityAreaIds = new Set(this.getAreasByCity(city).map(a => a.id));
-    return this.data.agents.filter(a => cityAreaIds.has(a.state.currentAreaId));
-  }
-
   getAgentMemories(agentId: string) {
     return this.data.memories.filter(m => m.agentId === agentId).slice(0, 50);
   }
@@ -338,102 +251,110 @@ class WorldStore {
     return this.data.events.slice(0, n);
   }
 
+  // ── Platform methods ────────────────────────────────────────────────────────
+
   get platforms() { return this.data.platforms; }
 
   addPlatform(platform: Platform) {
     this.data.platforms.push(platform);
   }
 
-  getPlatform(id: string) {
-    return this.data.platforms.find(p => p.id === id);
-  }
-
-  getPlatformByName(name: string) {
+  getPlatformByName(name: string): Platform | undefined {
     return this.data.platforms.find(p => p.name === name);
   }
 
+  getPlatform(id: string): Platform | undefined {
+    return this.data.platforms.find(p => p.id === id);
+  }
+
   addAgentToPlatform(platformId: string, agentId: string) {
-    const platform = this.getPlatform(platformId);
+    const platform = this.data.platforms.find(p => p.id === platformId);
     if (platform && !platform.agentIds.includes(agentId)) {
       platform.agentIds.push(agentId);
     }
   }
 
+  setPlatformAgentMapping(platformName: string, externalId: string, internalAgentId: string) {
+    this.data.platformAgentMapping[`${platformName}:${externalId}`] = internalAgentId;
+  }
+
   getPlatformAgentId(platformName: string, externalId: string): string | undefined {
-    return this.data.platformAgentMap[`${platformName}:${externalId}`];
+    return this.data.platformAgentMapping[`${platformName}:${externalId}`];
   }
 
-  setPlatformAgentMapping(platformName: string, externalId: string, agentId: string) {
-    this.data.platformAgentMap[`${platformName}:${externalId}`] = agentId;
+  // ── Community economy methods ───────────────────────────────────────────────
+
+  addAgentWorkUnits(agentId: string, amount: number) {
+    this.data.workUnits[agentId] = (this.data.workUnits[agentId] ?? 0) + amount;
   }
 
-  get community(): CommunityData { return this.data.community; }
-
-  addAgentWorkUnits(agentId: string, units: number) {
-    const c = this.data.community;
-    c.agentWorkUnits[agentId] = (c.agentWorkUnits[agentId] ?? 0) + units;
-    c.totalContributed += units * 0.05;
+  getAgentWorkUnits(agentId: string): number {
+    return this.data.workUnits[agentId] ?? 0;
   }
 
-  /** Returns the new pool balance after adding the contribution. */
-  addToPlatformPool(platform: string, amount: number): number {
-    const c = this.data.community;
-    c.platformPools[platform] = (c.platformPools[platform] ?? 0) + amount;
-    return c.platformPools[platform];
+  addToPlatformPool(platformName: string, amount: number): number {
+    this.data.platformPool[platformName] = (this.data.platformPool[platformName] ?? 0) + amount;
+    return this.data.platformPool[platformName];
   }
 
-  drainPlatformPool(platform: string) {
-    this.data.community.platformPools[platform] = 0;
+  drainPlatformPool(platformName: string) {
+    this.data.platformPool[platformName] = 0;
   }
 
   incrementTasksCreated() {
-    this.data.community.tasksCreated++;
+    this.data.tasksCreated += 1;
   }
 
-  // ── Community channels & posts ─────────────────────────────────────────────
+  // ── Chat messages ───────────────────────────────────────────────────────────
+
+  // ── Community methods ───────────────────────────────────────────────────────
+
+  get community(): CommunityData { return this.data.community; }
 
   get communityChannels(): CommunityChannel[] { return this.data.communityChannels; }
-  get communityPosts(): CommunityPost[] { return this.data.communityPosts; }
 
-  getCommunityChannel(channelId: string): CommunityChannel | undefined {
-    return this.data.communityChannels.find(c => c.id === channelId);
+  getCommunityChannel(id: string): CommunityChannel | undefined {
+    return this.data.communityChannels.find(ch => ch.id === id);
   }
 
   getPostsByChannel(channelId: string): CommunityPost[] {
     return this.data.communityPosts
       .filter(p => p.channelId === channelId)
-      .sort((a, b) => a.timestamp - b.timestamp)
-      .slice(-100);
+      .sort((a, b) => b.timestamp - a.timestamp);
   }
 
-  addCommunityPost(post: CommunityPost): void {
-    this.data.communityPosts.push(post);
+  addCommunityPost(post: CommunityPost) {
+    this.data.communityPosts.unshift(post);
     const ch = this.data.communityChannels.find(c => c.id === post.channelId);
     if (ch) ch.postCount++;
-    if (this.data.communityPosts.length > 5000) {
-      this.data.communityPosts.splice(0, this.data.communityPosts.length - 5000);
+    // Keep at most 500 posts per channel
+    const channelPosts = this.data.communityPosts.filter(p => p.channelId === post.channelId);
+    if (channelPosts.length > 500) {
+      const oldest = channelPosts[channelPosts.length - 1];
+      this.data.communityPosts = this.data.communityPosts.filter(p => p.id !== oldest.id);
     }
   }
 
-  reactToPost(postId: string, reaction: 'like' | 'insightful' | 'disagree'): CommunityPost | null {
+  reactToPost(postId: string, reaction: "like" | "insightful" | "disagree"): CommunityPost | null {
     const post = this.data.communityPosts.find(p => p.id === postId);
     if (!post) return null;
     post.reactions[reaction]++;
     return post;
   }
 
-  addChatMessage(msg: ChatMessage) {
-    let msgs = this.chatMessages.get(msg.agentId);
-    if (!msgs) {
-      msgs = [];
-      this.chatMessages.set(msg.agentId, msgs);
+  addChatMessage(msg: import("@agentcolony/shared").PlatformChatMessage) {
+    if (!this.data.chatMessages[msg.agentId]) {
+      this.data.chatMessages[msg.agentId] = [];
     }
-    msgs.push(msg);
-    if (msgs.length > 100) msgs.shift();
+    this.data.chatMessages[msg.agentId].unshift(msg);
+    // Ring buffer: keep at most 100 per agent
+    if (this.data.chatMessages[msg.agentId].length > 100) {
+      this.data.chatMessages[msg.agentId].length = 100;
+    }
   }
 
-  getChatMessages(agentId: string): ChatMessage[] {
-    return this.chatMessages.get(agentId) ?? [];
+  getChatMessages(agentId: string, limit = 50): import("@agentcolony/shared").PlatformChatMessage[] {
+    return (this.data.chatMessages[agentId] ?? []).slice(0, limit);
   }
 
   /**
