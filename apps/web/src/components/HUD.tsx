@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useWorldStore } from "../store/worldStore";
 import { PLATFORMS, PLATFORM_COLORS, PLATFORM_ICONS, getAgentPlatform } from "../utils/platform";
 import { ImportAgentModal } from "./ImportAgentModal";
+import { ConnectWalletButton } from "./ConnectWalletButton";
+import { AgentDirectoryModal } from "./AgentDirectoryModal";
 
 export function HUD() {
   const {
@@ -12,6 +14,7 @@ export function HUD() {
   } = useWorldStore();
   const [showCommunityTip, setShowCommunityTip] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showDirectory, setShowDirectory] = useState(false);
 
   const platformCounts = world
     ? PLATFORMS.reduce<Record<string, number>>((acc, p) => {
@@ -42,6 +45,18 @@ export function HUD() {
           <span className={`w-2 h-2 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`} />
           {connected ? "Live" : "Connecting..."}
         </span>
+
+        <ConnectWalletButton />
+
+        {world && (
+          <button
+            onClick={() => setShowDirectory(true)}
+            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors"
+            title="Agent Directory"
+          >
+            Directory
+          </button>
+        )}
 
         {/* Import Agent button */}
         <button
@@ -137,6 +152,9 @@ export function HUD() {
           console.info(`${count} agent(s) imported`);
         }}
       />
+    )}
+    {showDirectory && (
+      <AgentDirectoryModal onClose={() => setShowDirectory(false)} />
     )}
   </>
   );

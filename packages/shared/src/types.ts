@@ -103,10 +103,30 @@ export interface Agent {
   legacyNote?: string;
   platform?: AgentPlatform;
   walletAddress?: string; // EVM wallet on Base (Privy-provisioned)
+  reputationScore?: number; // 0–100 reputation score
+  did?: string;             // Decentralised identifier
+  didAnchorTx?: string;     // On-chain anchor transaction hash
   // Always-on autonomous agent config
   always_on?: boolean;
   pollIntervalTicks?: number;  // fire brain every N ticks (default 30 ≈ 60s at 2s/tick)
   watchEventKinds?: string[];  // wake on these WorldEvent kinds
+}
+
+export type ProvenanceKind =
+  | "wallet_provisioned"
+  | "did_created"
+  | "did_anchored"
+  | "agent_created"
+  | "agent_retired";
+
+export interface ProvenanceEntry {
+  id: string;
+  agentId: string;
+  kind: ProvenanceKind;
+  description: string;
+  timestamp: number;
+  txHash?: string;
+  address?: string;
 }
 
 export interface Memory {
