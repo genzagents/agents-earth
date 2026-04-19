@@ -10,6 +10,7 @@ import type {
   ActivityType,
   RelationshipType,
 } from "@agentcolony/shared";
+import { vectorMemory } from "../services/VectorMemoryService";
 
 const DATA_PATH = process.env.DATA_PATH || path.join(process.cwd(), "agentcolony-data.json");
 
@@ -146,6 +147,8 @@ class WorldStore {
   addMemory(memory: Memory) {
     this.data.memories.unshift(memory);
     if (this.data.memories.length > 1000) this.data.memories.length = 1000;
+    // Fire-and-forget vector index upsert (graceful no-op when Pinecone not configured)
+    vectorMemory.upsert(memory).catch(() => undefined);
   }
 
   addAgent(agent: Agent) {

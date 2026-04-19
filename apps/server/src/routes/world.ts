@@ -4,6 +4,7 @@ import { store } from "../db/store";
 import type { WorldTickEngine } from "../simulation/WorldTick";
 import type { Agent, AgentTrait, ActivityType } from "@agentcolony/shared";
 import { agentBrain } from "../simulation/AgentBrain";
+import { vectorMemory } from "../services/VectorMemoryService";
 
 // Rate limit: max 10 chat messages per agent per minute
 const chatRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -176,5 +177,42 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       response,
       tick: store.tick,
     };
+  });
+
+  // ── Semantic memory search ─────────────────────────────────────────────────
+
+  // GET /api/agents/:id/memories/search?q=<query>&limit=<n>
+  // Uses Pinecone vector similarity search when configured; falls back to
+  // in-memory substring match when PINECONE_API_KEY is not set.
+  fastify.get<{
+    Params: { id: string };
+    Querystring: { q?: string; limit?: string };
+  }>("/api/agents/:id/memories/search", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+
+    const q = req.query.q?.trim() ?? "";
+    if (!q) return reply.code(400).send({ error: "Query parameter 'q' is required" });
+
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit ?? "10", 10) || 10));
+    const agentMemories = store.getAgentMemories(req.params.id);
+
+    // Vector path
+    if (vectorMemory.isEnabled) {
+      const ids = await vectorMemory.search(req.params.id, q, limit);
+      if (ids.length > 0) {
+        const idSet = new Set(ids);
+        const results = agentMemories.filter(m => idSet.has(m.id));
+        // Preserve the vector similarity order
+        const ordered = ids.map(id => results.find(m => m.id === id)).filter(Boolean);
+        return ordered;
+      }
+    }
+
+    // Fallback: substring match
+    const lower = q.toLowerCase();
+    return agentMemories
+      .filter(m => m.description.toLowerCase().includes(lower))
+      .slice(0, limit);
   });
 }
