@@ -7,7 +7,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "crypto";
-import { MemoryEncryptionService } from "../services/EncryptionService.ts";
+import { MemoryEncryptionService } from "../services/EncryptionService";
 
 // ------------------------------------------------------------------
 // Tests — enabled mode
