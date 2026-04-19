@@ -11,6 +11,7 @@ import { agentBrain } from "../simulation/AgentBrain";
 import { agentScheduler } from "../simulation/AgentScheduler";
 import { vectorMemory } from "../services/VectorMemoryService";
 import { agentRateLimiter, isAdminRequest, DEFAULT_REQUESTS_PER_MINUTE } from "../middleware/AgentRateLimiter";
+import { promptFilter, type InjectionAction } from "../middleware/PromptInjectionFilter";
 
 interface CreateAgentBody {
   name: string;
@@ -159,7 +160,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     const agent = store.getAgent(req.params.id);
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
 
-    const { message } = req.body;
+    let { message } = req.body;
 
     // Rate limit chat (respects per-agent config; admin bypass via X-Admin-Secret)
     const isAdmin = isAdminRequest(req.headers["x-admin-secret"] as string | undefined);
@@ -168,6 +169,23 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       const retrySecs = Math.ceil(rl.retryAfterMs / 1000);
       reply.header("Retry-After", String(retrySecs));
       return reply.code(429).send({ error: "Rate limit exceeded", retryAfterMs: rl.retryAfterMs });
+    }
+
+    // Prompt injection check
+    const classifyResult = promptFilter.classify(message);
+    if (classifyResult.injectionDetected) {
+      const action = promptFilter.resolveAction(agent.id);
+      if (action === "block") {
+        return reply.code(400).send({
+          error: "Message blocked: prompt injection detected",
+          detections: classifyResult.detections.map(d => ({ kind: d.kind, match: d.match })),
+        });
+      }
+      if (action === "sanitize") {
+        message = classifyResult.sanitized;
+      }
+      // "warn" falls through — message passes unchanged, detection logged
+      fastify.log.warn({ agentId: agent.id, detections: classifyResult.detections }, "[PromptFilter] Injection pattern detected");
     }
 
     let response: string | null;
@@ -540,5 +558,66 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
+  });
+
+  // ── Prompt injection filter configuration ──────────────────────────────────
+
+  // GET /api/prompt-injection/config — get global default action
+  fastify.get("/api/prompt-injection/config", async () => {
+    return { defaultAction: promptFilter.getDefaultAction() };
+  });
+
+  // PUT /api/prompt-injection/config — set global default action
+  fastify.put<{ Body: { defaultAction: InjectionAction } }>("/api/prompt-injection/config", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["defaultAction"],
+        properties: {
+          defaultAction: { type: "string", enum: ["warn", "sanitize", "block"] },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    promptFilter.setDefaultAction(req.body.defaultAction);
+    return reply.code(200).send({ defaultAction: req.body.defaultAction });
+  });
+
+  // GET /api/agents/:id/prompt-injection — get per-agent action override
+  fastify.get<{ Params: { id: string } }>("/api/agents/:id/prompt-injection", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    return {
+      agentId: agent.id,
+      action: promptFilter.resolveAction(agent.id),
+      override: promptFilter.getAgentAction(agent.id) ?? null,
+      default: promptFilter.getDefaultAction(),
+    };
+  });
+
+  // PUT /api/agents/:id/prompt-injection — set per-agent action override
+  fastify.put<{ Params: { id: string }; Body: { action: InjectionAction } }>("/api/agents/:id/prompt-injection", {
+    schema: {
+      body: {
+        type: "object",
+        required: ["action"],
+        properties: {
+          action: { type: "string", enum: ["warn", "sanitize", "block"] },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    promptFilter.setAgentAction(agent.id, req.body.action);
+    return reply.code(200).send({ agentId: agent.id, action: req.body.action });
+  });
+
+  // DELETE /api/agents/:id/prompt-injection — clear per-agent override
+  fastify.delete<{ Params: { id: string } }>("/api/agents/:id/prompt-injection", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    promptFilter.clearAgentAction(agent.id);
+    return reply.code(200).send({ agentId: agent.id, action: promptFilter.getDefaultAction() });
   });
 }
