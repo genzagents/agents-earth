@@ -249,8 +249,8 @@ async function extractFromBuffer(buf: Buffer, filename: string): Promise<AgentPr
 
   if (lower.endsWith(".zip")) {
     const zip = await JSZip.loadAsync(buf);
-    const entries = Object.values(zip.files).filter(f => !f.dir);
-    const candidate = entries.find(f => /\.(json|yaml|yml|txt|md)$/i.test(f.name)) ?? entries[0];
+    const entries = Object.values(zip.files).filter((f): f is JSZip.JSZipObject => !f.dir);
+    const candidate = entries.find((f): f is JSZip.JSZipObject => /\.(json|yaml|yml|txt|md)$/i.test(f.name)) ?? entries[0];
     if (!candidate) throw new Error("ZIP is empty or contains no readable files");
     const text = await candidate.async("string");
     const innerFormat = /\.(yaml|yml)$/i.test(candidate.name) ? "YAML"

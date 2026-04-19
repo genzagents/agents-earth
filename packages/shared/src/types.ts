@@ -129,6 +129,8 @@ export interface Area {
   id: string;
   name: string;
   type: AreaType;
+  /** City this area belongs to (slug, e.g. "london") */
+  city?: string;
   position: { x: number; y: number };
   capacity: number;
   currentOccupants: string[]; // agent ids
@@ -221,4 +223,18 @@ export interface ServerToClientEvents {
 export interface ClientToServerEvents {
   "client:ready": () => void;
   "client:focus": (agentId: string) => void;
+}
+
+/** Provenance log entry for DID documents and agent lineage tracking. */
+export interface ProvenanceEntry {
+  id: string;
+  agentId?: string;
+  event: "created" | "memory_imported" | "source_linked" | "updated";
+  kind: string;
+  source: string;
+  description: string;
+  timestamp: string;
+  documentHash: string;
+  txHash?: string;
+  address?: string;
 }

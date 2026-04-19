@@ -224,9 +224,12 @@ export const agentRoutes: FastifyPluginAsync = async (fastify) => {
         {
           id: `${agent.id}-created`,
           agentId: agent.id,
+          event: "created",
           kind: "agent_created",
+          source: agent.sourceType ?? "unknown",
           description: `Agent created via ${agent.sourceType}`,
-          timestamp: agent.createdAt.getTime(),
+          timestamp: new Date(agent.createdAt).toISOString(),
+          documentHash: "",
         },
       ];
 
@@ -264,7 +267,7 @@ export const agentRoutes: FastifyPluginAsync = async (fastify) => {
 
       await pipeline(data.file, fs.createWriteStream(dest));
 
-      if (data.file.truncated) {
+      if ((data as unknown as { truncated?: boolean }).truncated) {
         fs.unlinkSync(dest);
         return reply.code(413).send({ error: "File exceeds 10 MB limit" });
       }
