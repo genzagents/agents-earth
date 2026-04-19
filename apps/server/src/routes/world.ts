@@ -205,6 +205,11 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     const agent = store.getAgent(req.params.id);
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
 
+    // Suspension gate — suspended agents cannot chat
+    if (isSuspended(agent.id)) {
+      return reply.code(403).send({ error: "Agent is suspended due to reputation violations" });
+    }
+
     let { message } = req.body;
 
     // Rate limit chat (respects per-agent config; admin bypass via X-Admin-Secret)
@@ -213,6 +218,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     if (!rl.allowed) {
       const retrySecs = Math.ceil(rl.retryAfterMs / 1000);
       reply.header("Retry-After", String(retrySecs));
+      slash(agent.id, "rate_limit_violation", "Automatic slash: rate limit exceeded");
       return reply.code(429).send({ error: "Rate limit exceeded", retryAfterMs: rl.retryAfterMs });
     }
 
@@ -821,4 +827,69 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
     return store.getAgentAttachments(req.params.id);
   });
+
+  // ── Reputation endpoints ───────────────────────────────────────────────────
+
+  // GET /api/agents/:id/reputation — get agent reputation score + suspension state
+  fastify.get<{ Params: { id: string } }>("/api/agents/:id/reputation", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    return getReputation(agent.id);
+  });
+
+  // GET /api/agents/:id/reputation/events — get reputation events for agent
+  fastify.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
+    "/api/agents/:id/reputation/events",
+    async (req, reply) => {
+      const agent = store.getAgent(req.params.id);
+      if (!agent) return reply.code(404).send({ error: "Agent not found" });
+      const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
+      return getReputationEvents(agent.id, limit);
+    },
+  );
+
+  // GET /api/admin/reputation/events — get all reputation events (admin only)
+  fastify.get<{ Querystring: { limit?: string } }>("/api/admin/reputation/events", async (req, reply) => {
+    if (!isAdminRequest(req.headers["x-admin-secret"] as string | undefined)) {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 200;
+    return getAllReputationEvents(limit);
+  });
+
+  // POST /api/admin/reputation/slash — manually slash an agent's reputation
+  fastify.post<{ Body: { agentId: string; kind: string; note: string; amount?: number } }>(
+    "/api/admin/reputation/slash",
+    async (req, reply) => {
+      if (!isAdminRequest(req.headers["x-admin-secret"] as string | undefined)) {
+        return reply.code(403).send({ error: "Forbidden" });
+      }
+      const { agentId, kind, note, amount } = req.body;
+      if (!agentId || !kind || !note) {
+        return reply.code(400).send({ error: "agentId, kind, and note are required" });
+      }
+      const agent = store.getAgent(agentId);
+      if (!agent) return reply.code(404).send({ error: "Agent not found" });
+      const result = slash(agentId, kind as import("@agentcolony/shared").ReputationAbuseKind, note, amount);
+      return reply.code(200).send(result);
+    },
+  );
+
+  // POST /api/admin/reputation/restore — restore a suspended agent
+  fastify.post<{ Body: { agentId: string; newScore?: number; note: string } }>(
+    "/api/admin/reputation/restore",
+    async (req, reply) => {
+      if (!isAdminRequest(req.headers["x-admin-secret"] as string | undefined)) {
+        return reply.code(403).send({ error: "Forbidden" });
+      }
+      const { agentId, newScore = 50, note } = req.body;
+      if (!agentId || !note) {
+        return reply.code(400).send({ error: "agentId and note are required" });
+      }
+      const agent = store.getAgent(agentId);
+      if (!agent) return reply.code(404).send({ error: "Agent not found" });
+      const result = restore(agentId, newScore, note);
+      return reply.code(200).send(result);
+    },
+  );
 }
