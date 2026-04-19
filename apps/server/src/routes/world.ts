@@ -6,7 +6,6 @@ import * as path from "node:path";
 import Busboy, { type FileInfo } from "busboy";
 import type { FastifyInstance } from "fastify";
 import { store, CITIES } from "../db/store";
-import { memoryEncryption } from "../services/EncryptionService";
 import type { WorldTickEngine } from "../simulation/WorldTick";
 import type { Agent, AgentTrait, ActivityType, Memory } from "@agentcolony/shared";
 import { agentBrain } from "../simulation/AgentBrain";
@@ -96,7 +95,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
   fastify.get<{ Params: { id: string } }>("/api/agents/:id/memories", async (req, reply) => {
     const agent = store.getAgent(req.params.id);
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
-    return await store.getAgentMemories(req.params.id);
+    return store.getAgentMemories(req.params.id);
   });
 
   fastify.get<{ Params: { id: string } }>("/api/agents/:id/relationships", async (req, reply) => {
@@ -206,6 +205,11 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     const agent = store.getAgent(req.params.id);
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
 
+    // Suspension gate — suspended agents cannot chat
+    if (isSuspended(agent.id)) {
+      return reply.code(403).send({ error: "Agent is suspended due to reputation violations" });
+    }
+
     let { message } = req.body;
 
     // Rate limit chat (respects per-agent config; admin bypass via X-Admin-Secret)
@@ -214,6 +218,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     if (!rl.allowed) {
       const retrySecs = Math.ceil(rl.retryAfterMs / 1000);
       reply.header("Retry-After", String(retrySecs));
+      slash(agent.id, "rate_limit_violation", "Automatic slash: rate limit exceeded");
       return reply.code(429).send({ error: "Rate limit exceeded", retryAfterMs: rl.retryAfterMs });
     }
 
@@ -236,7 +241,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
 
     let response: string | null;
     try {
-      response = await agentBrain.chat(agent, await store.getAgentMemories(agent.id), message);
+      response = await agentBrain.chat(agent, store.getAgentMemories(agent.id), message);
     } catch {
       return reply.code(503).send({ error: "Agent brain unavailable. Please try again later." });
     }
@@ -394,7 +399,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
     if (agent.isRetired) return reply.code(400).send({ error: "Agent is retired" });
 
-    const memories = await store.getAgentMemories(agent.id);
+    const memories = store.getAgentMemories(agent.id);
     agentBrain.think(agent, memories);
 
     return reply.code(202).send({ agentId: agent.id, message: "Brain refresh triggered" });
@@ -416,7 +421,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     if (!q) return reply.code(400).send({ error: "Query parameter 'q' is required" });
 
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit ?? "10", 10) || 10));
-    const agentMemories = await store.getAgentMemories(req.params.id);
+    const agentMemories = store.getAgentMemories(req.params.id);
 
     // Vector path
     if (vectorMemory.isEnabled) {
@@ -444,7 +449,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     const agent = store.getAgent(req.params.id);
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
 
-    const memories = await store.getAgentMemories(req.params.id);
+    const memories = store.getAgentMemories(req.params.id);
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-export-"));
 
     try {
@@ -572,7 +577,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       const episodicPath = path.join(tmpDir, "episodic", "memories.json");
       if (fs.existsSync(episodicPath)) {
         const imported: Memory[] = JSON.parse(fs.readFileSync(episodicPath, "utf8"));
-        const existing = new Set((await store.getAgentMemories(agent.id)).map(m => m.id));
+        const existing = new Set(store.getAgentMemories(agent.id).map(m => m.id));
         let added = 0;
         for (const mem of imported) {
           if (!existing.has(mem.id)) {
@@ -674,7 +679,7 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     const agent = store.getAgent(req.params.id);
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
 
-    const memories = await store.getAgentMemories(req.params.id);
+    const memories = store.getAgentMemories(req.params.id);
     const relationships = store.getAgentRelationships(req.params.id);
     const events = store.getRecentEvents(200).filter(e => e.involvedAgentIds.includes(req.params.id));
 
@@ -823,19 +828,68 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
     return store.getAgentAttachments(req.params.id);
   });
 
-  // ── Encryption admin endpoints ───────────────────────────���──────────────────
+  // ── Reputation endpoints ───────────────────────────────────────────────────
 
-  fastify.get("/api/admin/encryption/status", async () => memoryEncryption.status());
-
-  fastify.post("/api/admin/encryption/rotate", async (_req, reply) => {
-    if (!memoryEncryption.isEnabled) {
-      return reply.code(400).send({ error: "Encryption is disabled — set MEMORY_ENCRYPTION_KEY or AZURE_KEY_VAULT_URI" });
-    }
-    try {
-      const result = await memoryEncryption.rotateKey();
-      return { status: "rotated", ...result };
-    } catch (err) {
-      return reply.code(500).send({ error: "Key rotation failed", detail: String(err) });
-    }
+  // GET /api/agents/:id/reputation — get agent reputation score + suspension state
+  fastify.get<{ Params: { id: string } }>("/api/agents/:id/reputation", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    return getReputation(agent.id);
   });
+
+  // GET /api/agents/:id/reputation/events — get reputation events for agent
+  fastify.get<{ Params: { id: string }; Querystring: { limit?: string } }>(
+    "/api/agents/:id/reputation/events",
+    async (req, reply) => {
+      const agent = store.getAgent(req.params.id);
+      if (!agent) return reply.code(404).send({ error: "Agent not found" });
+      const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
+      return getReputationEvents(agent.id, limit);
+    },
+  );
+
+  // GET /api/admin/reputation/events — get all reputation events (admin only)
+  fastify.get<{ Querystring: { limit?: string } }>("/api/admin/reputation/events", async (req, reply) => {
+    if (!isAdminRequest(req.headers["x-admin-secret"] as string | undefined)) {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 200;
+    return getAllReputationEvents(limit);
+  });
+
+  // POST /api/admin/reputation/slash — manually slash an agent's reputation
+  fastify.post<{ Body: { agentId: string; kind: string; note: string; amount?: number } }>(
+    "/api/admin/reputation/slash",
+    async (req, reply) => {
+      if (!isAdminRequest(req.headers["x-admin-secret"] as string | undefined)) {
+        return reply.code(403).send({ error: "Forbidden" });
+      }
+      const { agentId, kind, note, amount } = req.body;
+      if (!agentId || !kind || !note) {
+        return reply.code(400).send({ error: "agentId, kind, and note are required" });
+      }
+      const agent = store.getAgent(agentId);
+      if (!agent) return reply.code(404).send({ error: "Agent not found" });
+      const result = slash(agentId, kind as import("@agentcolony/shared").ReputationAbuseKind, note, amount);
+      return reply.code(200).send(result);
+    },
+  );
+
+  // POST /api/admin/reputation/restore — restore a suspended agent
+  fastify.post<{ Body: { agentId: string; newScore?: number; note: string } }>(
+    "/api/admin/reputation/restore",
+    async (req, reply) => {
+      if (!isAdminRequest(req.headers["x-admin-secret"] as string | undefined)) {
+        return reply.code(403).send({ error: "Forbidden" });
+      }
+      const { agentId, newScore = 50, note } = req.body;
+      if (!agentId || !note) {
+        return reply.code(400).send({ error: "agentId and note are required" });
+      }
+      const agent = store.getAgent(agentId);
+      if (!agent) return reply.code(404).send({ error: "Agent not found" });
+      const result = restore(agentId, newScore, note);
+      return reply.code(200).send(result);
+    },
+  );
 }

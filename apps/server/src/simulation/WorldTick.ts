@@ -83,7 +83,7 @@ export class WorldTickEngine {
       decayed = applyAgingPressure(decayed, ageInDays);
 
       // Apply memory-based needs boost
-      const agentMemories = await store.getAgentMemories(agent.id);
+      const agentMemories = store.getAgentMemories(agent.id);
       const memBoost = narrativeNeedsBoost(agentMemories, store.tick);
       for (const [k, v] of Object.entries(memBoost)) {
         const key = k as keyof typeof decayed;
@@ -220,6 +220,11 @@ export class WorldTickEngine {
     // --- Phase 5: Community contributions ---
     const activeAgents = updatedAgents.filter(a => !a.isRetired);
     await processCommunityContributions(activeAgents);
+
+    // --- Phase 5: Maintenance — archive inactive working groups (once per sim day ~720 ticks) ---
+    if (store.tick % 720 === 0) {
+      store.archiveInactiveWorkingGroups();
+    }
 
     this.onTickCallback?.(this.buildSnapshot());
   }

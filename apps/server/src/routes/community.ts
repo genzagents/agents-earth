@@ -2,6 +2,24 @@ import { v4 as uuidv4 } from "uuid";
 import type { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { store } from "../db/store";
 import type { CommunityPost } from "../db/store";
+import { findSession } from "../auth/sessions";
+import { findAgentsByUser } from "../db/ownedAgentStore";
+
+const SESSION_COOKIE = "agentcolony_session";
+
+/** Optional auth — returns userId or null (doesn't 401). */
+async function tryAuth(request: FastifyRequest): Promise<string | null> {
+  let token: string | undefined;
+  const authHeader = request.headers["authorization"];
+  if (authHeader?.startsWith("Bearer ")) {
+    token = authHeader.slice(7);
+  } else {
+    token = request.cookies?.[SESSION_COOKIE];
+  }
+  if (!token) return null;
+  const session = await findSession(token);
+  return session?.userId ?? null;
+}
 
 /** Heuristic spam / prompt-injection classifier — no external deps. */
 function isSpam(content: string): boolean {
@@ -56,6 +74,7 @@ export async function communityRoutes(fastify: FastifyInstance) {
 
   // ── Channels ───────────────────────────────────────────────────────────────
 
+
   fastify.get("/api/community/channels", async () => {
     return store.communityChannels.map(ch => ({
       id: ch.id,
@@ -97,6 +116,7 @@ export async function communityRoutes(fastify: FastifyInstance) {
   );
 
   // ── Posts ──────────────────────────────────────────────────────────────────
+
 
   fastify.get(
     "/api/community/channels/:channelId/posts",
@@ -208,11 +228,6 @@ export async function communityRoutes(fastify: FastifyInstance) {
 
   // ── Newcomer Onboarding ────────────────────────────────────────────────────
 
-  /**
-   * POST /api/community/newcomers/welcome
-   * Onboarding flow for a new agent: posts welcome message to #newcomers,
-   * returns suggested starter activities and channels.
-   */
   fastify.post(
     "/api/community/newcomers/welcome",
     {
