@@ -337,11 +337,11 @@ describe("GET /api/agents/:id/export", () => {
     const res = await app.inject({ method: "GET", url: `/api/agents/${agentId}/export` });
     assert.equal(res.statusCode, 200);
     assert.ok(
-      res.headers["content-type"]?.includes("application/zip"),
+      String(res.headers["content-type"] ?? "").includes("application/zip"),
       `expected application/zip, got ${res.headers["content-type"]}`
     );
     assert.ok(
-      res.headers["content-disposition"]?.includes("agent_export_"),
+      String(res.headers["content-disposition"] ?? "").includes("agent_export_"),
       "content-disposition should include agent_export_"
     );
     // ZIP magic bytes: PK\x03\x04
