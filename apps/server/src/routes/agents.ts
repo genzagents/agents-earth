@@ -58,7 +58,7 @@ export const agentRoutes: FastifyPluginAsync = async (fastify) => {
    * Create a new owned agent.
    */
   fastify.post(
-    "/api/agents",
+    "/api/my/agents",
     {
       schema: {
         body: {
@@ -110,7 +110,7 @@ export const agentRoutes: FastifyPluginAsync = async (fastify) => {
    * GET /api/agents
    * List the authenticated user's agents.
    */
-  fastify.get("/api/agents", async (request: FastifyRequest, reply: FastifyReply) => {
+  fastify.get("/api/my/agents", async (request: FastifyRequest, reply: FastifyReply) => {
     const user = await requireAuth(request, reply);
     if (!user) return;
 
@@ -123,7 +123,7 @@ export const agentRoutes: FastifyPluginAsync = async (fastify) => {
    * Get a single owned agent (must belong to caller).
    */
   fastify.get(
-    "/api/agents/:id",
+    "/api/my/agents/:id",
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -144,7 +144,7 @@ export const agentRoutes: FastifyPluginAsync = async (fastify) => {
    * Update an owned agent.
    */
   fastify.patch(
-    "/api/agents/:id",
+    "/api/my/agents/:id",
     {
       schema: {
         body: {
@@ -188,7 +188,7 @@ export const agentRoutes: FastifyPluginAsync = async (fastify) => {
    * Delete an owned agent.
    */
   fastify.delete(
-    "/api/agents/:id",
+    "/api/my/agents/:id",
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -207,7 +207,7 @@ export const agentRoutes: FastifyPluginAsync = async (fastify) => {
    * Return the provenance log for an owned agent.
    */
   fastify.get(
-    "/api/agents/:id/provenance",
+    "/api/my/agents/:id/provenance",
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
@@ -243,7 +243,7 @@ export const agentRoutes: FastifyPluginAsync = async (fastify) => {
    * Returns { url, filename, contentType }.
    */
   fastify.post(
-    "/api/agents/:id/attachments",
+    "/api/my/agents/:id/attachments",
     async (
       request: FastifyRequest<{ Params: { id: string } }>,
       reply: FastifyReply
