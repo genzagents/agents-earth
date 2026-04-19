@@ -66,7 +66,11 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
   fastify.get<{ Params: { id: string } }>("/api/agents/:id", async (req, reply) => {
     const agent = store.getAgent(req.params.id);
     if (!agent) return reply.code(404).send({ error: "Agent not found" });
-    return agent;
+    return {
+      ...agent,
+      reputationScore:
+        agent.relationships.length + store.getAgentMemories(agent.id).length,
+    };
   });
 
   fastify.get<{ Params: { id: string } }>("/api/agents/:id/memories", async (req, reply) => {

@@ -1,3 +1,7 @@
+import path from "path";
+import fs from "fs";
+import { pipeline } from "stream/promises";
+import multipart from "@fastify/multipart";
 import type { FastifyPluginAsync, FastifyRequest, FastifyReply } from "fastify";
 import { findSession } from "../auth/sessions";
 import { findUserById } from "../auth/userStore";
@@ -8,6 +12,10 @@ import {
   updateAgent,
   deleteAgent,
 } from "../db/ownedAgentStore";
+import type { ProvenanceEntry } from "@agentcolony/shared";
+
+const UPLOADS_DIR = process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads");
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 const SESSION_COOKIE = "agentcolony_session";
 
@@ -43,6 +51,8 @@ async function requireAuth(request: FastifyRequest, reply: FastifyReply) {
 }
 
 export const agentRoutes: FastifyPluginAsync = async (fastify) => {
+  await fastify.register(multipart, { limits: { fileSize: MAX_FILE_SIZE } });
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
   /**
    * POST /api/agents
    * Create a new owned agent.
@@ -189,6 +199,82 @@ export const agentRoutes: FastifyPluginAsync = async (fastify) => {
       const deleted = await deleteAgent(request.params.id, user.id);
       if (!deleted) return reply.code(404).send({ error: "Agent not found" });
       return reply.code(204).send();
+    }
+  );
+
+  /**
+   * GET /api/agents/:id/provenance
+   * Return the provenance log for an owned agent.
+   */
+  fastify.get(
+    "/api/agents/:id/provenance",
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply
+    ) => {
+      const user = await requireAuth(request, reply);
+      if (!user) return;
+
+      const agent = await findAgentById(request.params.id);
+      if (!agent || agent.userId !== user.id) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      const log: ProvenanceEntry[] = [
+        {
+          id: `${agent.id}-created`,
+          agentId: agent.id,
+          kind: "agent_created",
+          description: `Agent created via ${agent.sourceType}`,
+          timestamp: agent.createdAt.getTime(),
+        },
+      ];
+
+      return reply.send(log);
+    }
+  );
+
+  /**
+   * POST /api/agents/:id/attachments
+   * Upload a file attachment for an owned agent (multipart, field=file).
+   * Returns { url, filename, contentType }.
+   */
+  fastify.post(
+    "/api/agents/:id/attachments",
+    async (
+      request: FastifyRequest<{ Params: { id: string } }>,
+      reply: FastifyReply
+    ) => {
+      const user = await requireAuth(request, reply);
+      if (!user) return;
+
+      const agent = await findAgentById(request.params.id);
+      if (!agent || agent.userId !== user.id) {
+        return reply.code(404).send({ error: "Agent not found" });
+      }
+
+      const data = await request.file();
+      if (!data) {
+        return reply.code(400).send({ error: "No file uploaded (field must be 'file')" });
+      }
+
+      const ext = path.extname(data.filename) || "";
+      const uniqueName = `${agent.id}-${Date.now()}${ext}`;
+      const dest = path.join(UPLOADS_DIR, uniqueName);
+
+      await pipeline(data.file, fs.createWriteStream(dest));
+
+      if (data.file.truncated) {
+        fs.unlinkSync(dest);
+        return reply.code(413).send({ error: "File exceeds 10 MB limit" });
+      }
+
+      const baseUrl = process.env.PUBLIC_URL || "http://localhost:3001";
+      return reply.code(201).send({
+        url: `${baseUrl}/uploads/${uniqueName}`,
+        filename: data.filename,
+        contentType: data.mimetype,
+      });
     }
   );
 };

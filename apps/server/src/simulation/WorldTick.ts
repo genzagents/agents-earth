@@ -223,11 +223,16 @@ export class WorldTickEngine {
   }
 
   private buildSnapshot(): WorldState {
+    const agents = store.agents.map(agent => ({
+      ...agent,
+      reputationScore:
+        agent.relationships.length + store.getAgentMemories(agent.id).length,
+    }));
     return {
       tick: store.tick,
       simTime: tickToSimTime(store.tick),
       areas: store.areas,
-      agents: store.agents,
+      agents,
       recentEvents: store.getRecentEvents(20),
     };
   }
