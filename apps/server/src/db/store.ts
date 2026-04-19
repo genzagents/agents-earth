@@ -11,6 +11,7 @@ import type {
   RelationshipType,
 } from "@agentcolony/shared";
 import { vectorMemory } from "../services/VectorMemoryService";
+import { memoryEncryption } from "../services/EncryptionService";
 
 export const CITIES: CityInfo[] = [
   {
@@ -403,7 +404,10 @@ class WorldStore {
   }
 
   addMemory(memory: Memory) {
-    this.data.memories.unshift(memory);
+    const stored: Memory = memoryEncryption.isEnabled
+      ? { ...memory, description: memoryEncryption.encryptSync(memory.description) }
+      : memory;
+    this.data.memories.unshift(stored);
     if (this.data.memories.length > 1000) this.data.memories.length = 1000;
     // Fire-and-forget vector index upsert (graceful no-op when Pinecone not configured)
     vectorMemory.upsert(memory).catch(() => undefined);
@@ -426,8 +430,13 @@ class WorldStore {
     return this.data.agents.filter(a => cityAreaIds.has(a.state.currentAreaId));
   }
 
-  getAgentMemories(agentId: string) {
-    return this.data.memories.filter(m => m.agentId === agentId).slice(0, 50);
+  getAgentMemories(agentId: string): Memory[] {
+    return this.data.memories
+      .filter(m => m.agentId === agentId)
+      .slice(0, 50)
+      .map(m => memoryEncryption.isEnabled
+        ? { ...m, description: memoryEncryption.decryptSync(m.description) }
+        : m);
   }
 
   getAgentRelationships(agentId: string) {

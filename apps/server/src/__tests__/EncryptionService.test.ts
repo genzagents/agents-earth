@@ -4,26 +4,10 @@
  * Uses Node.js built-in test runner (no Jest dependency).
  */
 
-import { test, describe, before, after } from "node:test";
+import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "crypto";
-
-// ------------------------------------------------------------------
-// Helpers — dynamically import EncryptionService so we can control
-// the env var before the singleton is constructed.
-// ------------------------------------------------------------------
-
-async function loadService(encKey?: string): Promise<{ memoryEncryption: { isEnabled: boolean; encrypt: (p: string) => Promise<string>; decrypt: (c: string) => Promise<string>; status: () => object; rotateKey: () => { success: boolean; activeVersion: string | null } } }> {
-  if (encKey !== undefined) {
-    process.env.MEMORY_ENCRYPTION_KEY = encKey;
-  } else {
-    delete process.env.MEMORY_ENCRYPTION_KEY;
-  }
-  // Use a fresh module instance by deleting the require cache entry
-  const path = require.resolve("../services/EncryptionService");
-  delete require.cache[path];
-  return require("../services/EncryptionService") as ReturnType<typeof loadService> extends Promise<infer T> ? T : never;
-}
+import { MemoryEncryptionService } from "../services/EncryptionService.ts";
 
 // ------------------------------------------------------------------
 // Tests — enabled mode
@@ -31,54 +15,68 @@ async function loadService(encKey?: string): Promise<{ memoryEncryption: { isEna
 
 describe("MemoryEncryptionService — enabled", () => {
   const testKey = randomBytes(32).toString("base64");
-  let svc: Awaited<ReturnType<typeof loadService>>;
 
-  before(async () => {
-    svc = await loadService(testKey);
-  });
-
-  after(() => {
-    delete process.env.MEMORY_ENCRYPTION_KEY;
-  });
+  function makeSvc() {
+    const orig = process.env.MEMORY_ENCRYPTION_KEY;
+    process.env.MEMORY_ENCRYPTION_KEY = testKey;
+    const svc = new MemoryEncryptionService();
+    if (orig === undefined) {
+      delete process.env.MEMORY_ENCRYPTION_KEY;
+    } else {
+      process.env.MEMORY_ENCRYPTION_KEY = orig;
+    }
+    return svc;
+  }
 
   test("isEnabled is true when MEMORY_ENCRYPTION_KEY is set", () => {
-    assert.equal(svc.memoryEncryption.isEnabled, true);
+    assert.equal(makeSvc().isEnabled, true);
   });
 
-  test("encrypt produces ENCRYPTED prefix", async () => {
-    const enc = await svc.memoryEncryption.encrypt("hello world");
+  test("encryptSync produces ENCRYPTED prefix", () => {
+    const enc = makeSvc().encryptSync("hello world");
     assert.match(enc, /^ENCRYPTED:v1:/);
   });
 
-  test("encrypt + decrypt roundtrip", async () => {
+  test("encryptSync + decryptSync roundtrip", () => {
+    const svc = makeSvc();
     const plaintext = "Ada remembers the afternoon light in Hyde Park.";
-    const encrypted = await svc.memoryEncryption.encrypt(plaintext);
-    const decrypted = await svc.memoryEncryption.decrypt(encrypted);
+    const encrypted = svc.encryptSync(plaintext);
+    const decrypted = svc.decryptSync(encrypted);
     assert.equal(decrypted, plaintext);
   });
 
-  test("same plaintext produces different ciphertexts (random IV)", async () => {
+  test("same plaintext produces different ciphertexts (random IV)", () => {
+    const svc = makeSvc();
     const msg = "Same message encrypted twice.";
-    const enc1 = await svc.memoryEncryption.encrypt(msg);
-    const enc2 = await svc.memoryEncryption.encrypt(msg);
+    const enc1 = svc.encryptSync(msg);
+    const enc2 = svc.encryptSync(msg);
     assert.notEqual(enc1, enc2);
   });
 
-  test("decrypt returns plaintext unchanged when no ENCRYPTED prefix", async () => {
+  test("decryptSync returns plaintext unchanged when no ENCRYPTED prefix", () => {
     const plain = "Not encrypted at all.";
-    assert.equal(await svc.memoryEncryption.decrypt(plain), plain);
+    assert.equal(makeSvc().decryptSync(plain), plain);
   });
 
-  test("decrypt returns raw ciphertext for unknown key version", async () => {
+  test("decryptSync returns raw ciphertext for unknown key version", () => {
     const fake = "ENCRYPTED:v99:dGVzdA==";
-    assert.equal(await svc.memoryEncryption.decrypt(fake), fake);
+    assert.equal(makeSvc().decryptSync(fake), fake);
   });
 
   test("status returns expected shape", () => {
-    const s = svc.memoryEncryption.status() as Record<string, unknown>;
+    const s = makeSvc().status() as Record<string, unknown>;
     assert.equal(s.enabled, true);
     assert.equal(s.activeVersion, "v1");
     assert.ok(Array.isArray(s.keyVersions));
+  });
+
+  test("async encrypt/decrypt wrappers produce correct results", async () => {
+    const svc = makeSvc();
+    const plaintext = "Async wrapper compatibility check.";
+    const encrypted = await svc.encrypt(plaintext);
+    assert.match(encrypted, /^ENCRYPTED:v1:/);
+    const decrypted = await svc.decrypt(encrypted);
+    assert.equal(decrypted, plaintext);
   });
 });
 
@@ -87,25 +85,23 @@ describe("MemoryEncryptionService — enabled", () => {
 // ------------------------------------------------------------------
 
 describe("MemoryEncryptionService — disabled", () => {
-  let svc: Awaited<ReturnType<typeof loadService>>;
-
-  before(async () => {
-    svc = await loadService(undefined);
-  });
-
-  after(() => {
+  function makeSvc() {
+    const orig = process.env.MEMORY_ENCRYPTION_KEY;
     delete process.env.MEMORY_ENCRYPTION_KEY;
-  });
+    const svc = new MemoryEncryptionService();
+    if (orig !== undefined) process.env.MEMORY_ENCRYPTION_KEY = orig;
+    return svc;
+  }
 
   test("isEnabled is false when MEMORY_ENCRYPTION_KEY is not set", () => {
-    assert.equal(svc.memoryEncryption.isEnabled, false);
+    assert.equal(makeSvc().isEnabled, false);
   });
 
-  test("encrypt returns plaintext unchanged", async () => {
-    assert.equal(await svc.memoryEncryption.encrypt("hello"), "hello");
+  test("encryptSync returns plaintext unchanged", () => {
+    assert.equal(makeSvc().encryptSync("hello"), "hello");
   });
 
-  test("decrypt returns plaintext unchanged", async () => {
-    assert.equal(await svc.memoryEncryption.decrypt("hello"), "hello");
+  test("decryptSync returns plaintext unchanged", () => {
+    assert.equal(makeSvc().decryptSync("hello"), "hello");
   });
 });

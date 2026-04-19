@@ -12,6 +12,7 @@ import { agentBrain } from "../simulation/AgentBrain";
 import { agentScheduler } from "../simulation/AgentScheduler";
 import { vectorMemory } from "../services/VectorMemoryService";
 import { agentRateLimiter, isAdminRequest, DEFAULT_REQUESTS_PER_MINUTE } from "../middleware/AgentRateLimiter";
+import { memoryEncryption } from "../services/EncryptionService";
 import { promptFilter, type InjectionAction } from "../middleware/PromptInjectionFilter";
 import { createDID } from "../services/did";
 import { provisionWallet } from "../services/wallet";
@@ -892,4 +893,28 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       return reply.code(200).send(result);
     },
   );
+
+  // GET /api/admin/encryption/status — encryption config status (admin only)
+  fastify.get("/api/admin/encryption/status", async (req, reply) => {
+    if (!isAdminRequest(req.headers["x-admin-secret"] as string | undefined)) {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+    return reply.code(200).send(memoryEncryption.status());
+  });
+
+  // POST /api/admin/encryption/rotate — rotate encryption key (admin only)
+  // Reads MEMORY_ENCRYPTION_KEY_NEW env var and promotes it to active key.
+  fastify.post("/api/admin/encryption/rotate", async (req, reply) => {
+    if (!isAdminRequest(req.headers["x-admin-secret"] as string | undefined)) {
+      return reply.code(403).send({ error: "Forbidden" });
+    }
+    const result = memoryEncryption.rotateKey();
+    if (!result.success) {
+      return reply.code(400).send({
+        error: "Key rotation failed — ensure MEMORY_ENCRYPTION_KEY_NEW is set to a valid 32-byte base64 key",
+        activeVersion: result.activeVersion,
+      });
+    }
+    return reply.code(200).send({ success: true, activeVersion: result.activeVersion });
+  });
 }

@@ -20,7 +20,7 @@ interface KeyEntry {
   key: Buffer;
 }
 
-class MemoryEncryptionService {
+export class MemoryEncryptionService {
   private keys: Map<string, KeyEntry> = new Map();
   private activeVersion: string | null = null;
 
@@ -50,7 +50,7 @@ class MemoryEncryptionService {
     return this.activeVersion !== null;
   }
 
-  async encrypt(plaintext: string): Promise<string> {
+  encryptSync(plaintext: string): string {
     if (!this.isEnabled || !this.activeVersion) return plaintext;
 
     const entry = this.keys.get(this.activeVersion)!;
@@ -67,7 +67,7 @@ class MemoryEncryptionService {
     return `${ENCRYPTED_PREFIX}${entry.version}:${combined.toString("base64")}`;
   }
 
-  async decrypt(ciphertext: string): Promise<string> {
+  decryptSync(ciphertext: string): string {
     if (!ciphertext.startsWith(ENCRYPTED_PREFIX)) return ciphertext;
 
     const rest = ciphertext.slice(ENCRYPTED_PREFIX.length);
@@ -98,6 +98,16 @@ class MemoryEncryptionService {
       console.warn("[EncryptionService] Decryption failed — possible tampered data or wrong key");
       return ciphertext;
     }
+  }
+
+  /** @deprecated Use encryptSync — kept for async-compatible callers */
+  async encrypt(plaintext: string): Promise<string> {
+    return this.encryptSync(plaintext);
+  }
+
+  /** @deprecated Use decryptSync — kept for async-compatible callers */
+  async decrypt(ciphertext: string): Promise<string> {
+    return this.decryptSync(ciphertext);
   }
 
   status(): object {
