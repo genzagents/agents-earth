@@ -19,12 +19,24 @@ function computeRelType(interactions: number, strength: number): RelationshipTyp
   return "stranger";
 }
 
+interface Attachment {
+  id: string;
+  agentId: string;
+  filename: string;
+  originalFilename: string;
+  mimeType: string;
+  size: number;
+  url: string;
+  createdAt: number; // unix ms
+}
+
 interface WorldData {
   tick: number;
   agents: Agent[];
   areas: Area[];
   memories: Memory[];
   events: WorldEvent[];
+  attachments: Attachment[];
 }
 
 function createInitialData(): WorldData {
@@ -95,7 +107,7 @@ function createInitialData(): WorldData {
     if (area) area.currentOccupants.push(agent.id);
   }
 
-  return { tick: 0, agents, areas, memories: [], events: [] };
+  return { tick: 0, agents, areas, memories: [], events: [], attachments: [] };
 }
 
 class WorldStore {
@@ -127,6 +139,7 @@ class WorldStore {
   get areas() { return this.data.areas; }
   get memories() { return this.data.memories; }
   get events() { return this.data.events; }
+  get attachments() { return this.data.attachments; }
 
   updateAgent(id: string, updates: Partial<Agent>) {
     const idx = this.data.agents.findIndex(a => a.id === id);
@@ -162,6 +175,16 @@ class WorldStore {
 
   getAgentRelationships(agentId: string) {
     return this.data.agents.find(a => a.id === agentId)?.relationships ?? [];
+  }
+
+  addAttachment(attachment: Attachment): Attachment {
+    if (!this.data.attachments) this.data.attachments = [];
+    this.data.attachments.push(attachment);
+    return attachment;
+  }
+
+  getAgentAttachments(agentId: string): Attachment[] {
+    return (this.data.attachments ?? []).filter(a => a.agentId === agentId);
   }
 
   getRecentEvents(n = 20) {
