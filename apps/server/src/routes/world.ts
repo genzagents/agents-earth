@@ -14,6 +14,14 @@ import { agentRateLimiter, isAdminRequest, DEFAULT_REQUESTS_PER_MINUTE } from ".
 import { promptFilter, type InjectionAction } from "../middleware/PromptInjectionFilter";
 import { createDID } from "../services/did";
 import { provisionWallet } from "../services/wallet";
+import {
+  slash,
+  restore,
+  getReputation,
+  getReputationEvents,
+  getAllReputationEvents,
+  isSuspended,
+} from "../services/ReputationService";
 
 interface CreateAgentBody {
   name: string;
