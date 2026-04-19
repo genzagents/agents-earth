@@ -3,6 +3,12 @@ import { findSession } from "../auth/sessions";
 import { findUserById } from "../auth/userStore";
 import { connectorRegistry } from "../pickup/ConnectorRegistry";
 import { ClaudeDesktopConnector } from "../pickup/connectors/ClaudeDesktopConnector";
+import { OpenClawConnector } from "../pickup/connectors/OpenClawConnector";
+import { ChatGPTConnector } from "../pickup/connectors/ChatGPTConnector";
+import { GitHubCopilotConnector } from "../pickup/connectors/GitHubCopilotConnector";
+import { CursorConnector } from "../pickup/connectors/CursorConnector";
+import { MoltbookConnector } from "../pickup/connectors/MoltbookConnector";
+import { GenericConnector } from "../pickup/connectors/GenericConnector";
 import { runIngestion } from "../pickup/IngestionPipeline";
 
 const SESSION_COOKIE = "agentcolony_session";
@@ -25,6 +31,12 @@ async function requireAuth(request: FastifyRequest, reply: FastifyReply): Promis
 
 // Register built-in connectors
 connectorRegistry.register(new ClaudeDesktopConnector());
+connectorRegistry.register(new OpenClawConnector());
+connectorRegistry.register(new ChatGPTConnector());
+connectorRegistry.register(new GitHubCopilotConnector());
+connectorRegistry.register(new CursorConnector());
+connectorRegistry.register(new MoltbookConnector());
+connectorRegistry.register(new GenericConnector());
 
 export const pickupRoutes: FastifyPluginAsync = async (fastify) => {
   /**
