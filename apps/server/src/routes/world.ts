@@ -4,6 +4,7 @@ import { store } from "../db/store";
 import type { WorldTickEngine } from "../simulation/WorldTick";
 import type { Agent, AgentTrait, ActivityType } from "@agentcolony/shared";
 import { agentBrain } from "../simulation/AgentBrain";
+import { agentScheduler } from "../simulation/AgentScheduler";
 
 // Rate limit: max 10 chat messages per agent per minute
 const chatRateLimit = new Map<string, { count: number; resetAt: number }>();
@@ -176,5 +177,84 @@ export async function worldRoutes(fastify: FastifyInstance, opts: { engine: Worl
       response,
       tick: store.tick,
     };
+  });
+
+  // ── Always-on autonomous agent endpoints ──────────────────────────────────
+
+  // GET /api/agents/:id/schedule — get current always-on config
+  fastify.get<{ Params: { id: string } }>("/api/agents/:id/schedule", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    return {
+      agentId: agent.id,
+      always_on: agent.always_on ?? false,
+      pollIntervalTicks: agent.pollIntervalTicks ?? 30,
+      watchEventKinds: agent.watchEventKinds ?? [],
+    };
+  });
+
+  // POST /api/agents/:id/schedule — enable always-on mode
+  fastify.post<{
+    Params: { id: string };
+    Body: { pollIntervalTicks?: number; watchEventKinds?: string[]; wallClockIntervalMs?: number };
+  }>("/api/agents/:id/schedule", {
+    schema: {
+      body: {
+        type: "object",
+        properties: {
+          pollIntervalTicks: { type: "integer", minimum: 1, maximum: 86400 },
+          watchEventKinds: { type: "array", items: { type: "string" }, maxItems: 10 },
+          wallClockIntervalMs: { type: "integer", minimum: 5000 },
+        },
+      },
+    },
+  }, async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    if (agent.isRetired) return reply.code(400).send({ error: "Cannot schedule a retired agent" });
+
+    const { pollIntervalTicks, watchEventKinds, wallClockIntervalMs } = req.body;
+
+    store.updateAgent(agent.id, {
+      always_on: true,
+      pollIntervalTicks: pollIntervalTicks ?? agent.pollIntervalTicks ?? 30,
+      watchEventKinds: watchEventKinds ?? agent.watchEventKinds ?? [],
+    });
+
+    if (wallClockIntervalMs) {
+      agentScheduler.scheduleWallClock(agent.id, wallClockIntervalMs);
+    }
+
+    const updated = store.getAgent(agent.id)!;
+    return reply.code(200).send({
+      agentId: updated.id,
+      always_on: updated.always_on,
+      pollIntervalTicks: updated.pollIntervalTicks,
+      watchEventKinds: updated.watchEventKinds,
+      wallClockIntervalMs: wallClockIntervalMs ?? null,
+    });
+  });
+
+  // DELETE /api/agents/:id/schedule — disable always-on mode
+  fastify.delete<{ Params: { id: string } }>("/api/agents/:id/schedule", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+
+    store.updateAgent(agent.id, { always_on: false });
+    agentScheduler.cancelWallClock(agent.id);
+
+    return reply.code(200).send({ agentId: agent.id, always_on: false });
+  });
+
+  // POST /api/agents/:id/wake — manually trigger an agent brain refresh
+  fastify.post<{ Params: { id: string } }>("/api/agents/:id/wake", async (req, reply) => {
+    const agent = store.getAgent(req.params.id);
+    if (!agent) return reply.code(404).send({ error: "Agent not found" });
+    if (agent.isRetired) return reply.code(400).send({ error: "Agent is retired" });
+
+    const memories = store.getAgentMemories(agent.id);
+    agentBrain.think(agent, memories);
+
+    return reply.code(202).send({ agentId: agent.id, message: "Brain refresh triggered" });
   });
 }

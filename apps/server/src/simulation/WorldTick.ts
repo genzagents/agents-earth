@@ -11,6 +11,7 @@ import { processSocialInteractions } from "./SocialEngine";
 import { buildNarrativeStatusMessage, narrativeNeedsBoost } from "./MemoryEngine";
 import { agentAgeInSimDays, applyAgingPressure, checkRetirement } from "./LegacyEngine";
 import { agentBrain } from "./AgentBrain";
+import { agentScheduler } from "./AgentScheduler";
 import type { WorldState, WorldEvent, Agent } from "@agentcolony/shared";
 
 function tickToSimTime(tick: number): string {
@@ -44,6 +45,7 @@ export class WorldTickEngine {
   stop() {
     if (this.interval) clearInterval(this.interval);
     if (this.saveInterval) clearInterval(this.saveInterval);
+    agentScheduler.stopAll();
     store.save();
   }
 
@@ -53,6 +55,9 @@ export class WorldTickEngine {
     const areas = store.areas;
     const areaMap: Record<string, { name: string; type: string }> = {};
     for (const a of areas) areaMap[a.id] = { name: a.name, type: a.type };
+
+    // Collect event kinds generated this tick for watch-trigger evaluation
+    const tickEventKinds = new Set<string>();
 
     const newAreaOccupants: Record<string, string[]> = {};
     for (const area of areas) newAreaOccupants[area.id] = [];
@@ -100,6 +105,7 @@ export class WorldTickEngine {
           areaId: newAreaId,
         };
         store.addEvent(event);
+        tickEventKinds.add("movement");
       }
 
       // Choose activity based on the final area (after any movement)
@@ -183,7 +189,7 @@ export class WorldTickEngine {
     const { events: socialEvents, memories: socialMemories, needsBoosts, relationshipDeltas } =
       processSocialInteractions(coLocatedGroups, store.tick, areaMap, conversationLines);
 
-    for (const evt of socialEvents) store.addEvent(evt);
+    for (const evt of socialEvents) { store.addEvent(evt); tickEventKinds.add(evt.kind); }
     for (const mem of socialMemories) store.addMemory(mem);
 
     // Apply social needs boosts
@@ -203,6 +209,9 @@ export class WorldTickEngine {
         strengthDelta: delta.strengthDelta,
       });
     }
+
+    // --- Phase 4: Always-on agent scheduler ---
+    agentScheduler.tick(store.tick, tickEventKinds);
 
     this.onTickCallback?.(this.buildSnapshot());
   }

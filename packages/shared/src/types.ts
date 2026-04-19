@@ -1,5 +1,14 @@
 // AgentColony — Core Shared Types
 
+export type AgentPlatform =
+  | "openclaw"
+  | "chatgpt"
+  | "copilot"
+  | "cursor"
+  | "moltbook"
+  | "local"
+  | string; // extensible for future connectors
+
 export type AgentTrait =
   | "curious"
   | "creative"
@@ -86,6 +95,11 @@ export interface Agent {
   createdAt: number; // sim tick
   isRetired?: boolean;
   legacyNote?: string;
+  platform?: AgentPlatform;
+  // Always-on autonomous agent config
+  always_on?: boolean;
+  pollIntervalTicks?: number;  // fire brain every N ticks (default 30 ≈ 60s at 2s/tick)
+  watchEventKinds?: string[];  // wake on these WorldEvent kinds
 }
 
 export interface Memory {
