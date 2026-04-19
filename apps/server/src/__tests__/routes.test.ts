@@ -327,3 +327,65 @@ describe("POST /api/agents", () => {
     await app.close();
   });
 });
+
+describe("GET /api/agents/:id/export", () => {
+  test("returns a ZIP archive for a known agent", async () => {
+    const app = await buildApp();
+    const agents = store.agents;
+    assert.ok(agents.length > 0, "store must have at least one agent");
+    const agentId = agents[0].id;
+    const res = await app.inject({ method: "GET", url: `/api/agents/${agentId}/export` });
+    assert.equal(res.statusCode, 200);
+    assert.ok(
+      res.headers["content-type"]?.includes("application/zip"),
+      `expected application/zip, got ${res.headers["content-type"]}`
+    );
+    assert.ok(
+      res.headers["content-disposition"]?.includes("agent_export_"),
+      "content-disposition should include agent_export_"
+    );
+    // ZIP magic bytes: PK\x03\x04
+    const buf = res.rawPayload;
+    assert.equal(buf[0], 0x50);
+    assert.equal(buf[1], 0x4b);
+    await app.close();
+  });
+
+  test("returns 404 for unknown agent", async () => {
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/api/agents/nonexistent-id-xyz/export" });
+    assert.equal(res.statusCode, 404);
+    await app.close();
+  });
+});
+
+describe("POST /api/agents/:id/import", () => {
+  test("returns 422 when body is not a valid ZIP", async () => {
+    const app = await buildApp();
+    const agents = store.agents;
+    assert.ok(agents.length > 0, "store must have at least one agent");
+    const agentId = agents[0].id;
+    const res = await app.inject({
+      method: "POST",
+      url: `/api/agents/${agentId}/import`,
+      payload: Buffer.from("this is not a zip file"),
+      headers: { "content-type": "application/zip" },
+    });
+    assert.equal(res.statusCode, 422);
+    const body = res.json();
+    assert.ok(typeof body.error === "string");
+    await app.close();
+  });
+
+  test("returns 404 for unknown agent", async () => {
+    const app = await buildApp();
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/agents/nonexistent-id-xyz/import",
+      payload: Buffer.from("data"),
+      headers: { "content-type": "application/zip" },
+    });
+    assert.equal(res.statusCode, 404);
+    await app.close();
+  });
+});
