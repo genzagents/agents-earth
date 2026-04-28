@@ -32,13 +32,14 @@ const MOOD_COLORS: Record<string, number> = {
   critical: 0xef4444,
 };
 
-// London district background regions
-const LONDON_DISTRICTS = [
-  { name: "Hyde Park", color: 0x166534, points: [80, 200, 340, 200, 340, 430, 80, 430] },
-  { name: "Bloomsbury", color: 0x1e3a5f, points: [355, 120, 510, 120, 510, 295, 355, 295] },
-  { name: "Shoreditch", color: 0x4a1d96, points: [565, 90, 770, 90, 770, 275, 565, 275] },
-  { name: "South Bank", color: 0x0f4c75, points: [415, 290, 575, 290, 575, 440, 415, 440] },
+// London district background regions — defined as fractions of canvas size
+const LONDON_DISTRICT_FRACS = [
+  { name: "Hyde Park",   color: 0x166534, fx: [0.04, 0.25, 0.04, 0.42, 0.42, 0.25, 0.42, 0.42] },
+  { name: "Bloomsbury", color: 0x1e3a5f, fx: [0.3,  0.12, 0.3,  0.55, 0.58, 0.12, 0.58, 0.55] },
+  { name: "Shoreditch", color: 0x4a1d96, fx: [0.6,  0.08, 0.6,  0.5,  0.88, 0.08, 0.88, 0.5 ] },
+  { name: "South Bank", color: 0x0f4c75, fx: [0.22, 0.58, 0.22, 0.92, 0.72, 0.58, 0.72, 0.92] },
 ];
+
 
 // Speech bubble display state
 interface SpeechBubble {
@@ -81,6 +82,8 @@ class GraphicsPool {
 function calcAgentPosition(
   world: WorldState,
   agentId: string,
+  scaleX = 1,
+  scaleY = 1,
 ): { x: number; y: number } | null {
   const agent = world.agents.find(a => a.id === agentId);
   if (!agent) return null;
@@ -93,8 +96,8 @@ function calcAgentPosition(
   const angle = total > 1 ? (idx / total) * Math.PI * 2 : 0;
   const spread = total > 1 ? 22 : 0;
   return {
-    x: area.position.x + Math.cos(angle) * spread,
-    y: area.position.y + Math.sin(angle) * spread,
+    x: area.position.x * scaleX + Math.cos(angle) * spread,
+    y: area.position.y * scaleY + Math.sin(angle) * spread,
   };
 }
 
@@ -242,17 +245,22 @@ export function WorldCanvas() {
     // Redraw areas — clear all children first (removes both pooled Graphics AND Text labels)
     areasLayer.removeChildren();
     areaPoolRef.current.releaseAll(areasLayer);
+    // Scale area positions: server coords are designed for 800×500 logical canvas
+    const scaleX = app.screen.width / 800;
+    const scaleY = app.screen.height / 500;
     for (const area of world.areas) {
       const color = AREA_COLORS[area.type] ?? 0x334155;
-      const radius = 38 + Math.sqrt(area.capacity) * 3;
+      const radius = 30 + Math.sqrt(area.capacity) * 2.2;
       const occupantCount = area.currentOccupants.length;
+      const ax = area.position.x * scaleX;
+      const ay = area.position.y * scaleY;
 
       const g = areaPoolRef.current.acquire();
       g.circle(0, 0, radius);
       g.fill({ color, alpha: occupantCount > 0 ? 0.55 : 0.3 });
       g.stroke({ color, width: occupantCount > 0 ? 2.5 : 1.5, alpha: 0.9 });
-      g.x = area.position.x;
-      g.y = area.position.y;
+      g.x = ax;
+      g.y = ay;
       areasLayer.addChild(g);
 
       // Area label
@@ -261,8 +269,8 @@ export function WorldCanvas() {
         text: `${icon} ${area.name}`,
         style: new TextStyle({ fontSize: 10, fill: 0xd1d5db, fontFamily: "system-ui, sans-serif" }),
       });
-      label.x = area.position.x - label.width / 2;
-      label.y = area.position.y + radius + 5;
+      label.x = ax - label.width / 2;
+      label.y = ay + radius + 5;
       areasLayer.addChild(label);
 
       if (occupantCount > 0) {
@@ -270,15 +278,15 @@ export function WorldCanvas() {
           text: `${occupantCount}`,
           style: new TextStyle({ fontSize: 9, fill: 0xfbbf24, fontFamily: "monospace" }),
         });
-        badge.x = area.position.x + radius - 6;
-        badge.y = area.position.y - radius - 2;
+        badge.x = ax + radius - 6;
+        badge.y = ay - radius - 2;
         areasLayer.addChild(badge);
       }
     }
 
     // Sync agent tween targets
     for (const agent of world.agents) {
-      const newPos = calcAgentPosition(world, agent.id);
+      const newPos = calcAgentPosition(world, agent.id, scaleX, scaleY);
       if (!newPos) continue;
 
       const existing = agentTweensRef.current.get(agent.id);
@@ -324,7 +332,10 @@ export function WorldCanvas() {
         </div>
       )}
       {world && speechBubbles.map(bubble => {
-        const pos = calcAgentPosition(world, bubble.agentId);
+        const app = appRef.current;
+        const sx = app ? app.screen.width / 800 : 1;
+        const sy = app ? app.screen.height / 500 : 1;
+        const pos = calcAgentPosition(world, bubble.agentId, sx, sy);
         const agent = world.agents.find(a => a.id === bubble.agentId);
         if (!pos || !agent) return null;
         return (
@@ -344,9 +355,32 @@ export function WorldCanvas() {
 
 // Draw static background: district zones + street grid
 function drawBackground(layer: Container, width: number, height: number) {
-  // Street grid
+  // City base fill
+  const base = new Graphics();
+  base.rect(0, 0, width, height);
+  base.fill({ color: 0x0d1117 });
+  layer.addChild(base);
+
+  // Major roads (horizontal + vertical arterials)
+  const roads = new Graphics();
+  const roadColor = 0x1e3a5f;
+
+  // Horizontal roads
+  for (const y of [height * 0.18, height * 0.38, height * 0.55, height * 0.72, height * 0.88]) {
+    roads.moveTo(0, y);
+    roads.lineTo(width, y);
+  }
+  // Vertical roads
+  for (const x of [width * 0.15, width * 0.32, width * 0.5, width * 0.68, width * 0.82]) {
+    roads.moveTo(x, 0);
+    roads.lineTo(x, height);
+  }
+  roads.stroke({ color: roadColor, width: 1.5, alpha: 0.6 });
+  layer.addChild(roads);
+
+  // Fine street grid
   const grid = new Graphics();
-  const gridSize = 40;
+  const gridSize = 30;
   for (let x = 0; x <= width; x += gridSize) {
     grid.moveTo(x, 0);
     grid.lineTo(x, height);
@@ -355,18 +389,47 @@ function drawBackground(layer: Container, width: number, height: number) {
     grid.moveTo(0, y);
     grid.lineTo(width, y);
   }
-  grid.stroke({ color: 0x1e293b, width: 0.5, alpha: 0.6 });
+  grid.stroke({ color: 0x162032, width: 0.4, alpha: 0.5 });
   layer.addChild(grid);
 
-  // District polygons
-  for (const district of LONDON_DISTRICTS) {
+  // Thames river
+  const thames = new Graphics();
+  thames.moveTo(0, height * 0.65);
+  thames.bezierCurveTo(
+    width * 0.2,  height * 0.58,
+    width * 0.45, height * 0.72,
+    width * 0.7,  height * 0.62,
+  );
+  thames.bezierCurveTo(
+    width * 0.82, height * 0.57,
+    width * 0.92, height * 0.68,
+    width,        height * 0.63,
+  );
+  thames.stroke({ color: 0x0f3460, width: 14, alpha: 0.55 });
+  // River label
+  const riverLabel = new Text({
+    text: "RIVER THAMES",
+    style: new TextStyle({ fontSize: 8, fill: 0x2563eb, fontFamily: "system-ui", letterSpacing: 3 }),
+  });
+  riverLabel.x = width * 0.35;
+  riverLabel.y = height * 0.67;
+  riverLabel.alpha = 0.45;
+  layer.addChild(thames);
+  layer.addChild(riverLabel);
+
+  // Borough zones (subtle coloured regions) — scaled to canvas
+  for (const district of LONDON_DISTRICT_FRACS) {
+    // Convert [fx0,fy0, fx1,fy1, ...] fractions to pixel points
+    const pts: number[] = [];
+    for (let i = 0; i < district.fx.length; i++) {
+      pts.push(i % 2 === 0 ? district.fx[i] * width : district.fx[i] * height);
+    }
     const g = new Graphics();
-    g.poly(district.points);
-    g.fill({ color: district.color, alpha: 0.07 });
-    g.stroke({ color: district.color, width: 1, alpha: 0.18 });
+    g.poly(pts);
+    g.fill({ color: district.color, alpha: 0.06 });
+    g.stroke({ color: district.color, width: 1, alpha: 0.2 });
     layer.addChild(g);
 
-    // District label (very subtle)
     const label = new Text({
       text: district.name.toUpperCase(),
       style: new TextStyle({
@@ -376,8 +439,7 @@ function drawBackground(layer: Container, width: number, height: number) {
         letterSpacing: 2,
       }),
     });
-    label.alpha = 0.3;
-    const pts = district.points;
+    label.alpha = 0.35;
     label.x = pts[0] + 6;
     label.y = pts[1] + 6;
     layer.addChild(label);

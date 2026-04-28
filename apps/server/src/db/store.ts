@@ -170,14 +170,15 @@ interface WorldData {
 
 function createInitialData(): WorldData {
   const areas: Area[] = [
-    { id: uuidv4(), name: "Hyde Park", type: "park", position: { x: 200, y: 300 }, capacity: 20, currentOccupants: [], ambiance: "peaceful" },
-    { id: uuidv4(), name: "British Library", type: "library", position: { x: 450, y: 180 }, capacity: 15, currentOccupants: [], ambiance: "quiet" },
-    { id: uuidv4(), name: "Borough Market", type: "market", position: { x: 520, y: 380 }, capacity: 30, currentOccupants: [], ambiance: "buzzing" },
-    { id: uuidv4(), name: "Shoreditch Studio", type: "studio", position: { x: 620, y: 200 }, capacity: 8, currentOccupants: [], ambiance: "creative" },
-    { id: uuidv4(), name: "Bloomsbury Cafe", type: "cafe", position: { x: 410, y: 250 }, capacity: 12, currentOccupants: [], ambiance: "warm" },
-    { id: uuidv4(), name: "Tate Modern", type: "museum", position: { x: 480, y: 350 }, capacity: 25, currentOccupants: [], ambiance: "inspiring" },
-    { id: uuidv4(), name: "Hackney Quarter", type: "home", position: { x: 680, y: 160 }, capacity: 50, currentOccupants: [], ambiance: "domestic" },
-    { id: uuidv4(), name: "Southbank Plaza", type: "plaza", position: { x: 460, y: 320 }, capacity: 40, currentOccupants: [], ambiance: "lively" },
+    // Positions spread across an 800×500 logical canvas (no overlapping)
+    { id: uuidv4(), name: "Hyde Park",        type: "park",    position: { x: 130, y: 280 }, capacity: 20, currentOccupants: [], ambiance: "peaceful" },
+    { id: uuidv4(), name: "British Library",  type: "library", position: { x: 340, y: 130 }, capacity: 15, currentOccupants: [], ambiance: "quiet" },
+    { id: uuidv4(), name: "Bloomsbury Cafe",  type: "cafe",    position: { x: 310, y: 280 }, capacity: 12, currentOccupants: [], ambiance: "warm" },
+    { id: uuidv4(), name: "Shoreditch Studio",type: "studio",  position: { x: 560, y: 130 }, capacity: 8,  currentOccupants: [], ambiance: "creative" },
+    { id: uuidv4(), name: "Hackney Quarter",  type: "home",    position: { x: 660, y: 260 }, capacity: 50, currentOccupants: [], ambiance: "domestic" },
+    { id: uuidv4(), name: "Tate Modern",      type: "museum",  position: { x: 200, y: 430 }, capacity: 25, currentOccupants: [], ambiance: "inspiring" },
+    { id: uuidv4(), name: "Southbank Plaza",  type: "plaza",   position: { x: 430, y: 410 }, capacity: 40, currentOccupants: [], ambiance: "lively" },
+    { id: uuidv4(), name: "Borough Market",   type: "market",  position: { x: 630, y: 420 }, capacity: 30, currentOccupants: [], ambiance: "buzzing" },
   ];
 
   const seedAgents: Omit<Agent, "id" | "relationships" | "createdAt">[] = [
