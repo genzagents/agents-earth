@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { WorldState, Agent } from "@agentcolony/shared";
+import type { WorldState } from "@agentcolony/shared";
 import { useWorldStore } from "../store/worldStore";
 
 // Real London lat/lng for each area — mapped to actual locations
