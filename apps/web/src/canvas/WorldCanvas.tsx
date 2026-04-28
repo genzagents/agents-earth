@@ -114,7 +114,7 @@ export function WorldCanvas() {
   // Animation state
   const agentTweensRef = useRef<Map<string, AgentTween>>(new Map());
 
-  const { world, selectAgent, selectedAgentId } = useWorldStore();
+  const { world, selectAgent, selectedAgentId, connected } = useWorldStore();
   const [speechBubbles, setSpeechBubbles] = useState<SpeechBubble[]>([]);
   const lastWorldRef = useRef<WorldState | null>(null);
   const worldRef = useRef<WorldState | null>(null);
@@ -317,6 +317,12 @@ export function WorldCanvas() {
   return (
     <div className="w-full h-full bg-slate-900 rounded-lg overflow-hidden relative">
       <div ref={canvasRef} className="w-full h-full" />
+      {!world && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/80">
+          <div className="text-3xl animate-pulse">🌍</div>
+          <p className="text-slate-300 text-sm">{connected ? "Loading world…" : "Connecting to colony…"}</p>
+        </div>
+      )}
       {world && speechBubbles.map(bubble => {
         const pos = calcAgentPosition(world, bubble.agentId);
         const agent = world.agents.find(a => a.id === bubble.agentId);
