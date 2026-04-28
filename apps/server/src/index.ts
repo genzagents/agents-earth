@@ -38,8 +38,14 @@ async function main() {
   // Create Fastify instance
   const fastify = Fastify({ logger: { level: "info" } });
 
+  // Allow all origins in production (container behind nginx reverse proxy),
+  // or a specific CORS_ORIGIN if set.
+  const corsOrigin = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(",").map(s => s.trim())
+    : true; // allow all
+
   await fastify.register(cors, {
-    origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+    origin: corsOrigin,
     credentials: true,
   });
 
@@ -54,16 +60,20 @@ async function main() {
     decorateReply: false,
   });
 
-  // Initialise all schemas in Supabase (idempotent)
+  // Initialise all schemas in Supabase (idempotent) — failures are non-fatal
   try {
-    await initAuthSchema();
-    await initBridgeSchema();
-    await initBillingSchema();
+    await Promise.race([
+      (async () => {
+        await initAuthSchema();
+        await initBridgeSchema();
+        await initBillingSchema();
+      })(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("DB init timeout")), 5000)),
+    ]);
     fastify.log.info("Schemas initialised");
   } catch (err) {
-    fastify.log.warn({ err }, "Schema init failed — some routes may not work");
+    fastify.log.warn({ err }, "Schema init failed — running without DB (simulation-only mode)");
   }
-
 
   // Create simulation engine
   const engine = new WorldTickEngine();
@@ -95,7 +105,7 @@ async function main() {
     fastify.server,
     {
       cors: {
-        origin: process.env.CORS_ORIGIN || "http://localhost:5173",
+        origin: corsOrigin,
         credentials: true,
       },
     }
