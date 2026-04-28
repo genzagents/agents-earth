@@ -11,7 +11,9 @@
   },
   "dependencies": {
     "@agentcolony/shared": "*",
+    "@types/leaflet": "^1.9.21",
     "@types/react-router-dom": "^5.3.3",
+    "leaflet": "^1.9.4",
     "pixi.js": "^8.1.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",

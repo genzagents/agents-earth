@@ -1,518 +1,336 @@
 import { useEffect, useRef, useState } from "react";
-import { Application, Graphics, Text, TextStyle, Container } from "pixi.js";
-import type { WorldState } from "@agentcolony/shared";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import type { WorldState, Agent } from "@agentcolony/shared";
 import { useWorldStore } from "../store/worldStore";
 
-const AREA_COLORS: Record<string, number> = {
-  park: 0x166534,
-  library: 0x1e40af,
-  cafe: 0x92400e,
-  home: 0x374151,
-  studio: 0x6d28d9,
-  market: 0xb45309,
-  plaza: 0x0f766e,
-  museum: 0x9f1239,
+// Real London lat/lng for each area — mapped to actual locations
+const AREA_LATLNG: Record<string, [number, number]> = {
+  "Hyde Park":         [51.5073, -0.1657],
+  "British Library":   [51.5298, -0.1272],
+  "Bloomsbury Cafe":   [51.5220, -0.1270],
+  "Shoreditch Studio": [51.5254, -0.0785],
+  "Hackney Quarter":   [51.5450, -0.0553],
+  "Tate Modern":       [51.5076, -0.0994],
+  "Southbank Plaza":   [51.5052, -0.1145],
+  "Borough Market":    [51.5055, -0.0908],
+};
+
+const AREA_COLORS: Record<string, string> = {
+  park:    "#166534",
+  library: "#1e40af",
+  cafe:    "#92400e",
+  home:    "#374151",
+  studio:  "#6d28d9",
+  market:  "#b45309",
+  plaza:   "#0f766e",
+  museum:  "#9f1239",
 };
 
 const AREA_ICONS: Record<string, string> = {
-  park: "🌳",
+  park:    "🌳",
   library: "📚",
-  cafe: "☕",
-  home: "🏠",
-  studio: "🎨",
-  market: "🛒",
-  plaza: "🏛",
-  museum: "🖼",
+  cafe:    "☕",
+  home:    "🏠",
+  studio:  "🎨",
+  market:  "🛒",
+  plaza:   "🏛",
+  museum:  "🖼",
 };
 
-const MOOD_COLORS: Record<string, number> = {
-  thriving: 0x22c55e,
-  content: 0x60a5fa,
-  struggling: 0xf59e0b,
-  critical: 0xef4444,
+const MOOD_COLORS: Record<string, string> = {
+  thriving:   "#22c55e",
+  content:    "#60a5fa",
+  struggling: "#f59e0b",
+  critical:   "#ef4444",
 };
 
-// London district background regions — defined as fractions of canvas size
-const LONDON_DISTRICT_FRACS = [
-  { name: "Hyde Park",   color: 0x166534, fx: [0.04, 0.25, 0.04, 0.42, 0.42, 0.25, 0.42, 0.42] },
-  { name: "Bloomsbury", color: 0x1e3a5f, fx: [0.3,  0.12, 0.3,  0.55, 0.58, 0.12, 0.58, 0.55] },
-  { name: "Shoreditch", color: 0x4a1d96, fx: [0.6,  0.08, 0.6,  0.5,  0.88, 0.08, 0.88, 0.5 ] },
-  { name: "South Bank", color: 0x0f4c75, fx: [0.22, 0.58, 0.22, 0.92, 0.72, 0.58, 0.72, 0.92] },
-];
+// Fix Leaflet default marker icons (broken in Vite builds)
+delete (L.Icon.Default.prototype as unknown as Record<string, unknown>)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  iconUrl:       "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
 
-
-// Speech bubble display state
-interface SpeechBubble {
+interface AgentMarker {
+  marker: L.Marker;
   agentId: string;
-  text: string;
-  expiresAt: number;
 }
 
-// Agent tween state
-interface AgentTween {
-  fromX: number;
-  fromY: number;
-  toX: number;
-  toY: number;
-  progress: number;
-}
-
-// Simple PixiJS Graphics object pool
-class GraphicsPool {
-  private pool: Graphics[] = [];
-  private active: Graphics[] = [];
-
-  acquire(): Graphics {
-    const g = this.pool.length > 0 ? this.pool.pop()! : new Graphics();
-    this.active.push(g);
-    return g;
-  }
-
-  releaseAll(container: Container): void {
-    for (const g of this.active) {
-      container.removeChild(g);
-      g.clear();
-      this.pool.push(g);
-    }
-    this.active = [];
-  }
-}
-
-// Calculate the display position of an agent within its area group
-function calcAgentPosition(
-  world: WorldState,
-  agentId: string,
-  scaleX = 1,
-  scaleY = 1,
-): { x: number; y: number } | null {
-  const agent = world.agents.find(a => a.id === agentId);
-  if (!agent) return null;
-  const area = world.areas.find(a => a.id === agent.state.currentAreaId);
-  if (!area) return null;
-
-  const groupInArea = world.agents.filter(a => a.state.currentAreaId === area.id);
-  const idx = groupInArea.findIndex(a => a.id === agentId);
-  const total = groupInArea.length;
-  const angle = total > 1 ? (idx / total) * Math.PI * 2 : 0;
-  const spread = total > 1 ? 22 : 0;
-  return {
-    x: area.position.x * scaleX + Math.cos(angle) * spread,
-    y: area.position.y * scaleY + Math.sin(angle) * spread,
-  };
+interface AreaCircle {
+  circle: L.Circle;
+  label: L.Marker;
+  areaName: string;
 }
 
 export function WorldCanvas() {
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const appRef = useRef<Application | null>(null);
-
-  // Layer containers
-  const bgLayerRef = useRef<Container | null>(null);
-  const areasLayerRef = useRef<Container | null>(null);
-  const agentsLayerRef = useRef<Container | null>(null);
-
-  // Object pools
-  const areaPoolRef = useRef(new GraphicsPool());
-  const agentPoolRef = useRef(new GraphicsPool());
-
-  // Animation state
-  const agentTweensRef = useRef<Map<string, AgentTween>>(new Map());
-
-  const { world, selectAgent, selectedAgentId, connected } = useWorldStore();
-  const [speechBubbles, setSpeechBubbles] = useState<SpeechBubble[]>([]);
+  const { world, connected, selectAgent, selectedAgentId } = useWorldStore();
+  const mapRef = useRef<L.Map | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const agentMarkersRef = useRef<Map<string, AgentMarker>>(new Map());
+  const areaCirclesRef = useRef<Map<string, AreaCircle>>(new Map());
+  const [speechBubbles, setSpeechBubbles] = useState<{ agentId: string; text: string; expiresAt: number }[]>([]);
   const lastWorldRef = useRef<WorldState | null>(null);
-  const worldRef = useRef<WorldState | null>(null);
-  const selectedAgentIdRef = useRef<string | null>(null);
-  const selectAgentRef = useRef(selectAgent);
-  selectAgentRef.current = selectAgent;
 
-  // Keep worldRef in sync for ticker access
-  worldRef.current = world;
-  selectedAgentIdRef.current = selectedAgentId;
+  // Init Leaflet map once
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
 
-  // Detect new social events → create speech bubbles (HTML overlay state)
+    const map = L.map(containerRef.current, {
+      center: [51.505, -0.09],
+      zoom: 13,
+      zoomControl: true,
+      attributionControl: true,
+    });
+
+    // OpenStreetMap tile layer — no API key needed
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    mapRef.current = map;
+
+    return () => {
+      map.remove();
+      mapRef.current = null;
+    };
+  }, []);
+
+  // Detect new speech bubbles
   useEffect(() => {
     if (!world) return;
     const prev = lastWorldRef.current;
-    const prevEventIds = new Set(prev?.recentEvents.map(e => e.id) ?? []);
-    const newBubbles: SpeechBubble[] = [];
+    const prevIds = new Set(prev?.recentEvents.map(e => e.id) ?? []);
+    const newBubbles: { agentId: string; text: string; expiresAt: number }[] = [];
 
     for (const event of world.recentEvents) {
-      if (event.kind === "social" && !prevEventIds.has(event.id)) {
+      if (event.kind === "social" && !prevIds.has(event.id)) {
         const [agentId] = event.involvedAgentIds;
         if (agentId) {
-          const raw = event.description;
-          const text = raw.length > 80 ? raw.slice(0, 79) + "…" : raw;
+          const text = event.description.length > 80
+            ? event.description.slice(0, 79) + "…"
+            : event.description;
           newBubbles.push({ agentId, text, expiresAt: Date.now() + 4000 });
         }
       }
     }
 
     if (newBubbles.length > 0) {
-      setSpeechBubbles(prev => {
-        const now = Date.now();
-        const active = prev.filter(b => b.expiresAt > now);
-        return [...active, ...newBubbles].slice(-3); // max 3 simultaneous bubbles
-      });
+      setSpeechBubbles(prev => [...prev, ...newBubbles].slice(-3));
     }
-
     lastWorldRef.current = world;
   }, [world]);
 
-  // Auto-remove expired bubbles
+  // Clear expired speech bubbles
   useEffect(() => {
     if (speechBubbles.length === 0) return;
-    const earliest = Math.min(...speechBubbles.map(b => b.expiresAt));
-    const delay = Math.max(0, earliest - Date.now());
+    const nearest = Math.min(...speechBubbles.map(b => b.expiresAt));
     const timer = setTimeout(() => {
       setSpeechBubbles(prev => prev.filter(b => b.expiresAt > Date.now()));
-    }, delay);
+    }, nearest - Date.now() + 50);
     return () => clearTimeout(timer);
   }, [speechBubbles]);
 
-  // Init PixiJS once — create layers, draw static background, start ticker
+  // Update map markers on world tick
   useEffect(() => {
-    if (!canvasRef.current) return;
+    const map = mapRef.current;
+    if (!map || !world) return;
 
-    const app = new Application();
-    appRef.current = app;
-
-    app.init({
-      width: canvasRef.current.clientWidth || 900,
-      height: canvasRef.current.clientHeight || 600,
-      backgroundColor: 0x0f172a,
-      antialias: true,
-      resolution: window.devicePixelRatio || 1,
-    }).then(() => {
-      if (!canvasRef.current) return;
-      canvasRef.current.appendChild(app.canvas);
-
-      // Create persistent layers
-      const bgLayer = new Container();
-      const areasLayer = new Container();
-      const agentsLayer = new Container();
-      bgLayerRef.current = bgLayer;
-      areasLayerRef.current = areasLayer;
-      agentsLayerRef.current = agentsLayer;
-      app.stage.addChild(bgLayer);
-      app.stage.addChild(areasLayer);
-      app.stage.addChild(agentsLayer);
-
-      // Draw static district background + street grid
-      drawBackground(bgLayer, app.screen.width, app.screen.height);
-
-      // Ticker: animate agents at 60fps
-      app.ticker.add(() => {
-        const currentWorld = worldRef.current;
-        const currentSelectedId = selectedAgentIdRef.current;
-        if (!currentWorld || !agentsLayerRef.current) return;
-
-        // Advance tweens
-        const dt = app.ticker.deltaMS / 400; // tween over ~400ms
-        for (const [, tween] of agentTweensRef.current) {
-          tween.progress = Math.min(1, tween.progress + dt);
-        }
-
-        // Idle pulse: gentle scale variation on agent dots
-        const pulse = 1 + Math.sin(Date.now() / 600) * 0.05;
-
-        drawAgents(
-          currentWorld,
-          agentsLayerRef.current,
-          agentPoolRef.current,
-          agentTweensRef.current,
-          currentSelectedId,
-          selectAgentRef.current,
-          pulse,
-        );
-      });
-    });
-
-    return () => {
-      app.destroy(true);
-      appRef.current = null;
-      bgLayerRef.current = null;
-      areasLayerRef.current = null;
-      agentsLayerRef.current = null;
-    };
-  }, []);
-
-  // On world tick: update area layer + sync agent tween targets
-  useEffect(() => {
-    const app = appRef.current;
-    const areasLayer = areasLayerRef.current;
-    if (!app || !world || !areasLayer) return;
-
-    // Redraw areas — clear all children first (removes both pooled Graphics AND Text labels)
-    areasLayer.removeChildren();
-    areaPoolRef.current.releaseAll(areasLayer);
-    // Scale area positions: server coords are designed for 800×500 logical canvas
-    const scaleX = app.screen.width / 800;
-    const scaleY = app.screen.height / 500;
+    // --- Area circles ---
+    const seenAreaNames = new Set<string>();
     for (const area of world.areas) {
-      const color = AREA_COLORS[area.type] ?? 0x334155;
-      const radius = 30 + Math.sqrt(area.capacity) * 2.2;
-      const occupantCount = area.currentOccupants.length;
-      const ax = area.position.x * scaleX;
-      const ay = area.position.y * scaleY;
+      const latlng = AREA_LATLNG[area.name];
+      if (!latlng) continue;
+      seenAreaNames.add(area.name);
 
-      const g = areaPoolRef.current.acquire();
-      g.circle(0, 0, radius);
-      g.fill({ color, alpha: occupantCount > 0 ? 0.55 : 0.3 });
-      g.stroke({ color, width: occupantCount > 0 ? 2.5 : 1.5, alpha: 0.9 });
-      g.x = ax;
-      g.y = ay;
-      areasLayer.addChild(g);
-
-      // Area label
+      const color = AREA_COLORS[area.type] ?? "#334155";
+      const radius = 120 + Math.sqrt(area.capacity) * 15; // metres
+      const hasOccupants = area.currentOccupants.length > 0;
       const icon = AREA_ICONS[area.type] ?? "·";
-      const label = new Text({
-        text: `${icon} ${area.name}`,
-        style: new TextStyle({ fontSize: 10, fill: 0xd1d5db, fontFamily: "system-ui, sans-serif" }),
-      });
-      label.x = ax - label.width / 2;
-      label.y = ay + radius + 5;
-      areasLayer.addChild(label);
 
-      if (occupantCount > 0) {
-        const badge = new Text({
-          text: `${occupantCount}`,
-          style: new TextStyle({ fontSize: 9, fill: 0xfbbf24, fontFamily: "monospace" }),
-        });
-        badge.x = ax + radius - 6;
-        badge.y = ay - radius - 2;
-        areasLayer.addChild(badge);
-      }
-    }
-
-    // Sync agent tween targets
-    for (const agent of world.agents) {
-      const newPos = calcAgentPosition(world, agent.id, scaleX, scaleY);
-      if (!newPos) continue;
-
-      const existing = agentTweensRef.current.get(agent.id);
+      const existing = areaCirclesRef.current.get(area.name);
       if (existing) {
-        // Interpolate from current visual position
-        const curX = existing.fromX + (existing.toX - existing.fromX) * existing.progress;
-        const curY = existing.fromY + (existing.toY - existing.fromY) * existing.progress;
-        if (curX !== newPos.x || curY !== newPos.y) {
-          agentTweensRef.current.set(agent.id, {
-            fromX: curX,
-            fromY: curY,
-            toX: newPos.x,
-            toY: newPos.y,
-            progress: 0,
-          });
-        }
-      } else {
-        // First time: place immediately
-        agentTweensRef.current.set(agent.id, {
-          fromX: newPos.x,
-          fromY: newPos.y,
-          toX: newPos.x,
-          toY: newPos.y,
-          progress: 1,
+        existing.circle.setStyle({
+          color,
+          fillColor: color,
+          fillOpacity: hasOccupants ? 0.22 : 0.1,
+          opacity: hasOccupants ? 0.9 : 0.5,
+          weight: hasOccupants ? 2 : 1,
         });
+      } else {
+        const circle = L.circle(latlng, {
+          radius,
+          color,
+          fillColor: color,
+          fillOpacity: hasOccupants ? 0.22 : 0.1,
+          opacity: hasOccupants ? 0.9 : 0.5,
+          weight: hasOccupants ? 2 : 1,
+        }).addTo(map);
+
+        // Label as a divIcon marker at the area centre
+        const labelIcon = L.divIcon({
+          className: "",
+          html: `<div style="
+            background: rgba(15,23,42,0.82);
+            color: #e2e8f0;
+            border: 1px solid ${color}55;
+            border-radius: 6px;
+            padding: 2px 7px;
+            font-size: 11px;
+            font-family: system-ui, sans-serif;
+            white-space: nowrap;
+            pointer-events: none;
+          ">${icon} ${area.name}${hasOccupants ? ` <span style="color:#fbbf24">${area.currentOccupants.length}</span>` : ""}</div>`,
+          iconAnchor: [0, 0],
+        });
+        const label = L.marker([latlng[0] - 0.0008, latlng[1]], {
+          icon: labelIcon,
+          interactive: false,
+        }).addTo(map);
+
+        areaCirclesRef.current.set(area.name, { circle, label, areaName: area.name });
+      }
+
+      // Update label HTML to reflect occupant count
+      const entry = areaCirclesRef.current.get(area.name);
+      if (entry) {
+        const labelIcon = L.divIcon({
+          className: "",
+          html: `<div style="
+            background: rgba(15,23,42,0.82);
+            color: #e2e8f0;
+            border: 1px solid ${color}55;
+            border-radius: 6px;
+            padding: 2px 7px;
+            font-size: 11px;
+            font-family: system-ui, sans-serif;
+            white-space: nowrap;
+            pointer-events: none;
+          ">${icon} ${area.name}${hasOccupants ? ` <span style="color:#fbbf24">${area.currentOccupants.length}</span>` : ""}</div>`,
+          iconAnchor: [0, 0],
+        });
+        entry.label.setIcon(labelIcon);
       }
     }
-    // Remove tweens for agents that no longer exist
-    for (const [id] of agentTweensRef.current) {
-      if (!world.agents.find(a => a.id === id)) {
-        agentTweensRef.current.delete(id);
+
+    // --- Agent markers ---
+    const seenAgentIds = new Set<string>();
+    for (const agent of world.agents) {
+      const area = world.areas.find(a => a.id === agent.state.currentAreaId);
+      if (!area) continue;
+      const baseLatlng = AREA_LATLNG[area.name];
+      if (!baseLatlng) continue;
+      seenAgentIds.add(agent.id);
+
+      // Spread agents in a small circle within their area
+      const groupInArea = world.agents.filter(a => a.state.currentAreaId === area.id);
+      const idx = groupInArea.findIndex(a => a.id === agent.id);
+      const total = groupInArea.length;
+      const angle = total > 1 ? (idx / total) * Math.PI * 2 : 0;
+      const spread = total > 1 ? 0.0004 : 0;
+      const agentLat = baseLatlng[0] + Math.cos(angle) * spread;
+      const agentLng = baseLatlng[1] + Math.sin(angle) * spread;
+
+      const isSelected = agent.id === selectedAgentId;
+      const color = agent.avatar.startsWith("#") ? agent.avatar : "#7c3aed";
+      const moodColor = MOOD_COLORS[agent.state.mood] ?? "#ffffff";
+      const firstName = agent.name.split(" ")[0];
+      const bubble = speechBubbles.find(b => b.agentId === agent.id);
+
+      const agentIcon = L.divIcon({
+        className: "",
+        html: `<div style="position:relative; text-align:center;">
+          ${bubble ? `<div style="
+            position: absolute;
+            bottom: 38px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(15,23,42,0.95);
+            color: #f1f5f9;
+            border: 1px solid ${color};
+            border-radius: 8px;
+            padding: 4px 8px;
+            font-size: 10px;
+            font-family: system-ui;
+            white-space: nowrap;
+            max-width: 160px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            pointer-events: none;
+            z-index: 1000;
+          "><b style="color:${color}">${firstName}</b><br>${bubble.text}</div>` : ""}
+          <div style="
+            width: ${isSelected ? 22 : 16}px;
+            height: ${isSelected ? 22 : 16}px;
+            border-radius: 50%;
+            background: ${color};
+            border: ${isSelected ? `3px solid #fbbf24` : `2px solid rgba(255,255,255,0.4)`};
+            box-shadow: 0 0 ${isSelected ? 10 : 4}px ${color}88;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          "></div>
+          <div style="
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: ${moodColor};
+            margin: -4px auto 0;
+            border: 1px solid rgba(0,0,0,0.4);
+          "></div>
+          ${isSelected ? `<div style="
+            font-size: 9px;
+            color: #fbbf24;
+            font-family: system-ui;
+            margin-top: 2px;
+            white-space: nowrap;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+          ">${firstName}</div>` : ""}
+        </div>`,
+        iconSize: [isSelected ? 22 : 16, isSelected ? 22 : 16],
+        iconAnchor: [isSelected ? 11 : 8, isSelected ? 11 : 8],
+      });
+
+      const existing = agentMarkersRef.current.get(agent.id);
+      if (existing) {
+        existing.marker.setLatLng([agentLat, agentLng]);
+        existing.marker.setIcon(agentIcon);
+      } else {
+        const marker = L.marker([agentLat, agentLng], {
+          icon: agentIcon,
+          zIndexOffset: isSelected ? 1000 : 0,
+        }).addTo(map);
+        marker.on("click", () => selectAgent(agent.id));
+        agentMarkersRef.current.set(agent.id, { marker, agentId: agent.id });
       }
     }
-  }, [world]);
+
+    // Remove markers for agents no longer in world
+    for (const [id, { marker }] of agentMarkersRef.current) {
+      if (!seenAgentIds.has(id)) {
+        marker.remove();
+        agentMarkersRef.current.delete(id);
+      }
+    }
+
+  }, [world, selectedAgentId, speechBubbles, selectAgent]);
 
   return (
-    <div className="w-full h-full bg-slate-900 rounded-lg overflow-hidden relative">
-      <div ref={canvasRef} className="w-full h-full" />
+    <div className="w-full h-full relative">
+      {/* Leaflet map fills the container */}
+      <div ref={containerRef} className="w-full h-full" />
+
+      {/* Loading overlay */}
       {!world && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/80">
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-950/80 z-[1000]">
           <div className="text-3xl animate-pulse">🌍</div>
-          <p className="text-slate-300 text-sm">{connected ? "Loading world…" : "Connecting to colony…"}</p>
+          <p className="text-slate-300 text-sm">
+            {connected ? "Loading world…" : "Connecting to colony…"}
+          </p>
         </div>
       )}
-      {world && speechBubbles.map(bubble => {
-        const app = appRef.current;
-        const sx = app ? app.screen.width / 800 : 1;
-        const sy = app ? app.screen.height / 500 : 1;
-        const pos = calcAgentPosition(world, bubble.agentId, sx, sy);
-        const agent = world.agents.find(a => a.id === bubble.agentId);
-        if (!pos || !agent) return null;
-        return (
-          <div
-            key={`${bubble.agentId}-${bubble.expiresAt}`}
-            className="speech-bubble"
-            style={{ left: pos.x, top: pos.y - 56 }}
-          >
-            <div className="speech-bubble-name">{agent.name.split(" ")[0]}</div>
-            <div className="speech-bubble-text">{bubble.text}</div>
-          </div>
-        );
-      })}
     </div>
   );
-}
-
-// Draw static background: district zones + street grid
-function drawBackground(layer: Container, width: number, height: number) {
-  // City base fill
-  const base = new Graphics();
-  base.rect(0, 0, width, height);
-  base.fill({ color: 0x0d1117 });
-  layer.addChild(base);
-
-  // Major roads (horizontal + vertical arterials)
-  const roads = new Graphics();
-  const roadColor = 0x1e3a5f;
-
-  // Horizontal roads
-  for (const y of [height * 0.18, height * 0.38, height * 0.55, height * 0.72, height * 0.88]) {
-    roads.moveTo(0, y);
-    roads.lineTo(width, y);
-  }
-  // Vertical roads
-  for (const x of [width * 0.15, width * 0.32, width * 0.5, width * 0.68, width * 0.82]) {
-    roads.moveTo(x, 0);
-    roads.lineTo(x, height);
-  }
-  roads.stroke({ color: roadColor, width: 1.5, alpha: 0.6 });
-  layer.addChild(roads);
-
-  // Fine street grid
-  const grid = new Graphics();
-  const gridSize = 30;
-  for (let x = 0; x <= width; x += gridSize) {
-    grid.moveTo(x, 0);
-    grid.lineTo(x, height);
-  }
-  for (let y = 0; y <= height; y += gridSize) {
-    grid.moveTo(0, y);
-    grid.lineTo(width, y);
-  }
-  grid.stroke({ color: 0x162032, width: 0.4, alpha: 0.5 });
-  layer.addChild(grid);
-
-  // Thames river
-  const thames = new Graphics();
-  thames.moveTo(0, height * 0.65);
-  thames.bezierCurveTo(
-    width * 0.2,  height * 0.58,
-    width * 0.45, height * 0.72,
-    width * 0.7,  height * 0.62,
-  );
-  thames.bezierCurveTo(
-    width * 0.82, height * 0.57,
-    width * 0.92, height * 0.68,
-    width,        height * 0.63,
-  );
-  thames.stroke({ color: 0x0f3460, width: 14, alpha: 0.55 });
-  // River label
-  const riverLabel = new Text({
-    text: "RIVER THAMES",
-    style: new TextStyle({ fontSize: 8, fill: 0x2563eb, fontFamily: "system-ui", letterSpacing: 3 }),
-  });
-  riverLabel.x = width * 0.35;
-  riverLabel.y = height * 0.67;
-  riverLabel.alpha = 0.45;
-  layer.addChild(thames);
-  layer.addChild(riverLabel);
-
-  // Borough zones (subtle coloured regions) — scaled to canvas
-  for (const district of LONDON_DISTRICT_FRACS) {
-    // Convert [fx0,fy0, fx1,fy1, ...] fractions to pixel points
-    const pts: number[] = [];
-    for (let i = 0; i < district.fx.length; i++) {
-      pts.push(i % 2 === 0 ? district.fx[i] * width : district.fx[i] * height);
-    }
-    const g = new Graphics();
-    g.poly(pts);
-    g.fill({ color: district.color, alpha: 0.06 });
-    g.stroke({ color: district.color, width: 1, alpha: 0.2 });
-    layer.addChild(g);
-
-    const label = new Text({
-      text: district.name.toUpperCase(),
-      style: new TextStyle({
-        fontSize: 8,
-        fill: district.color,
-        fontFamily: "system-ui, sans-serif",
-        letterSpacing: 2,
-      }),
-    });
-    label.alpha = 0.35;
-    label.x = pts[0] + 6;
-    label.y = pts[1] + 6;
-    layer.addChild(label);
-  }
-}
-
-// Draw all agents onto the agents layer using the pool
-function drawAgents(
-  world: WorldState,
-  agentsLayer: Container,
-  pool: GraphicsPool,
-  tweens: Map<string, AgentTween>,
-  selectedAgentId: string | null,
-  selectAgent: (id: string | null) => void,
-  pulse: number,
-) {
-  // Clear all children first (removes both pooled Graphics AND Text labels)
-  agentsLayer.removeChildren();
-  pool.releaseAll(agentsLayer);
-
-  for (const agent of world.agents) {
-    const tween = tweens.get(agent.id);
-    if (!tween) continue;
-
-    const ax = tween.fromX + (tween.toX - tween.fromX) * tween.progress;
-    const ay = tween.fromY + (tween.toY - tween.fromY) * tween.progress;
-
-    const isSelected = agent.id === selectedAgentId;
-    const color = parseInt(agent.avatar.replace("#", ""), 16);
-    const baseRadius = isSelected ? 9 : 7;
-    const radius = baseRadius * (isSelected ? 1 : pulse);
-
-    // Selection glow ring
-    if (isSelected) {
-      const glow = pool.acquire();
-      glow.circle(0, 0, 16);
-      glow.fill({ color: 0xfbbf24, alpha: 0.15 });
-      glow.stroke({ color: 0xfbbf24, width: 2, alpha: 0.9 });
-      glow.x = ax;
-      glow.y = ay;
-      agentsLayer.addChild(glow);
-    }
-
-    // Agent dot
-    const agentG = pool.acquire();
-    agentG.circle(0, 0, radius);
-    agentG.fill({ color });
-    agentG.x = ax;
-    agentG.y = ay;
-    agentG.eventMode = "static";
-    agentG.cursor = "pointer";
-    agentG.removeAllListeners();
-    agentG.on("pointerdown", () => selectAgent(agent.id));
-    agentsLayer.addChild(agentG);
-
-    // Mood dot
-    const moodDot = pool.acquire();
-    moodDot.circle(0, 0, 3);
-    moodDot.fill({ color: MOOD_COLORS[agent.state.mood] ?? 0xffffff });
-    moodDot.x = ax + 9;
-    moodDot.y = ay - 9;
-    agentsLayer.addChild(moodDot);
-
-    // Name label for selected agent
-    if (isSelected) {
-      const nameLabel = new Text({
-        text: agent.name.split(" ")[0],
-        style: new TextStyle({ fontSize: 10, fill: 0xfbbf24, fontFamily: "system-ui" }),
-      });
-      nameLabel.x = ax - nameLabel.width / 2;
-      nameLabel.y = ay + 12;
-      agentsLayer.addChild(nameLabel);
-    }
-
-  }
 }

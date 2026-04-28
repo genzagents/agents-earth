@@ -12,7 +12,7 @@ export function App() {
       <HUD />
       <div className="flex flex-1 overflow-hidden">
         {/* World canvas — main view */}
-        <div className="flex-1 p-3">
+        <div className="flex-1 p-3 min-h-0">
           <WorldCanvas />
         </div>
 
