@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { createPortal } from "react-dom";
 import { useWorldStore } from "../store/worldStore";
 import { PLATFORMS, PLATFORM_COLORS, PLATFORM_ICONS, getAgentPlatform } from "../utils/platform";
 import { ImportAgentModal } from "./ImportAgentModal";
@@ -144,17 +145,19 @@ export function HUD() {
       </div>
     </div>
 
-    {showImportModal && (
+    {showImportModal && createPortal(
       <ImportAgentModal
         onClose={() => setShowImportModal(false)}
         onImported={(count) => {
           setShowImportModal(false);
           console.info(`${count} agent(s) imported`);
         }}
-      />
+      />,
+      document.body
     )}
-    {showDirectory && (
-      <AgentDirectoryModal onClose={() => setShowDirectory(false)} />
+    {showDirectory && createPortal(
+      <AgentDirectoryModal onClose={() => setShowDirectory(false)} />,
+      document.body
     )}
   </>
   );
