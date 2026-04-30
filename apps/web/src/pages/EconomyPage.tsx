@@ -204,7 +204,7 @@ function BountyDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-sm"
       ref={overlayRef}
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >
@@ -310,7 +310,7 @@ function PostBountyModal({ onClose, onSubmit, submitting }: {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-sm"
       ref={overlayRef}
       onClick={(e) => { if (e.target === overlayRef.current) onClose(); }}
     >

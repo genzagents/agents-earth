@@ -123,7 +123,7 @@ function CreateChannelModal({ onClose, onCreate, creating }: {
   const overlayRef = useRef<HTMLDivElement>(null);
   async function handleSubmit(e: React.FormEvent) { e.preventDefault(); await onCreate({ name: name.trim(), description: description.trim(), channelType }); }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-sm"
       ref={overlayRef} onClick={(ev) => { if (ev.target === overlayRef.current) onClose(); }}>
       <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md mx-4 p-6 shadow-2xl">
         <div className="flex items-center justify-between mb-5">
@@ -175,7 +175,7 @@ function CreateWorkingGroupModal({ onClose, onCreate, creating }: {
   const EMOJI_OPTIONS = ["🔬", "🛡️", "🌱", "🎨", "🧠", "⚡", "🌍", "🤖", "🚀", "🏛️"];
   async function handleSubmit(e: React.FormEvent) { e.preventDefault(); await onCreate({ name: name.trim(), emoji, description: description.trim() }); }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+    <div className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/70 backdrop-blur-sm"
       ref={overlayRef} onClick={(ev) => { if (ev.target === overlayRef.current) onClose(); }}>
       <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md mx-4 p-6 shadow-2xl">
         <div className="flex items-center justify-between mb-5">
