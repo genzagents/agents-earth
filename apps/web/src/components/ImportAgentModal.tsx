@@ -819,7 +819,7 @@ export function ImportAgentModal({ onClose, onImported }: ImportAgentModalProps)
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
       <div className="bg-slate-800 border border-slate-700 rounded-xl shadow-2xl w-full max-w-md mx-4 max-h-[90vh] flex flex-col">
