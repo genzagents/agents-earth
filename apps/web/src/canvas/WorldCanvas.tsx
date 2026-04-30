@@ -318,7 +318,7 @@ export function WorldCanvas() {
   }, [world, selectedAgentId, speechBubbles, selectAgent]);
 
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full h-full relative" style={{ isolation: "isolate" }}>
       {/* Leaflet map fills the container */}
       <div ref={containerRef} className="w-full h-full" />
 

@@ -12,7 +12,8 @@ export function App() {
       <HUD />
       <div className="flex flex-1 overflow-hidden">
         {/* World canvas — main view */}
-        <div className="flex-1 p-3 min-h-0">
+        {/* isolation:isolate keeps Leaflet's stacking context self-contained */}
+        <div className="flex-1 p-3 min-h-0" style={{ isolation: "isolate" }}>
           <WorldCanvas />
         </div>
 
